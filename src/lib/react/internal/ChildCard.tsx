@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import type { Paper } from '../types';
+import type { Paper } from '../../core/types';
 
 interface Props {
   paper: Paper;
@@ -8,6 +8,7 @@ interface Props {
 }
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
+
 export default function ChildCard({ paper, hue, onClick }: Props) {
   const childCount = paper.childIds.length;
   const background = hue !== null ? `hsl(${hue}, 44%, 95%)` : '#f7f7fc';

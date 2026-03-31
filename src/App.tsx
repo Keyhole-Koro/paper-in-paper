@@ -1,5 +1,5 @@
-import PaperApp from './components/PaperApp';
+import DemoApp from './demo/DemoApp';
 
 export default function App() {
-  return <PaperApp />;
+  return <DemoApp />;
 }

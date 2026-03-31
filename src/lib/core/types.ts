@@ -15,5 +15,4 @@ export interface NodeExpansion {
   primaryChildId: PaperId | null;
 }
 
-// For each paper, which of its children are open and which is primary
 export type ExpansionMap = Map<PaperId, NodeExpansion>;
