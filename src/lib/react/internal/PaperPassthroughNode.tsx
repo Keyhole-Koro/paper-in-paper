@@ -90,6 +90,13 @@ export default function PaperPassthroughNode({
         ...(dragSizeStyle ?? {}),
       }}
     >
+      {dragState.paperId === paperId && (
+        <div
+          className="paper-node__drag-ghost paper-node__drag-ghost--passthrough"
+          aria-hidden="true"
+          style={{ borderRadius: 14 }}
+        />
+      )}
       {dragState.parentId === paperId && (
         <div
           data-return-parent-id={paperId}

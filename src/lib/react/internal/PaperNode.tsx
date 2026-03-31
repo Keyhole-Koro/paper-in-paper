@@ -122,6 +122,7 @@ const PaperNode = memo(function PaperNode({
     isHeaderHovered,
     shouldShowTopStrip,
   });
+  const isDragging = dragState.paperId === paperId;
   if (dockedOpenChildIds.length === 1 && !openChildIds.some((id) => placementMap.has(id))) {
     return (
       <PaperPassthroughNode
@@ -189,6 +190,18 @@ const PaperNode = memo(function PaperNode({
         ...(dragSizeStyle ?? {}),
       }}
     >
+      {isDragging && (
+        <div
+          className="paper-node__drag-ghost"
+          aria-hidden="true"
+          style={{
+            borderRadius: isRoot ? 16 : 14,
+            background,
+            borderColor,
+            boxShadow: shadow === 'none' ? '0 18px 36px rgba(0,0,0,0.12)' : shadow,
+          }}
+        />
+      )}
       {dragState.parentId === paperId && (
         <div
           data-return-parent-id={paperId}
@@ -261,6 +274,7 @@ const PaperNode = memo(function PaperNode({
           allowHeaderInteractions={allowHeaderInteractions}
           allowContextInteractions={allowContextInteractions}
           depth={depth}
+          crumbs={crumbs}
           onOpenChild={(childId) => dispatch({ type: 'OPEN', parentId: paperId, childId })}
         />
       </div>

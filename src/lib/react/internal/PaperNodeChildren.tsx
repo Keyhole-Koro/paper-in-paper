@@ -23,6 +23,7 @@ interface Props {
   allowHeaderInteractions: boolean;
   allowContextInteractions: boolean;
   depth: number;
+  crumbs: PaperId[];
   onOpenChild: (childId: PaperId) => void;
 }
 
@@ -45,6 +46,7 @@ export default function PaperNodeChildren({
   allowHeaderInteractions,
   allowContextInteractions,
   depth,
+  crumbs,
   onOpenChild,
 }: Props) {
   return (
@@ -84,6 +86,12 @@ export default function PaperNodeChildren({
                 key={id}
                 paper={paper}
                 hue={hue}
+                parentId={paperId}
+                depth={depth + 1}
+                crumbs={[...crumbs, paperId]}
+                dragState={dragState}
+                onDragStateChange={onDragStateChange}
+                onRequestFloat={onRequestFloat}
                 onClick={() => onOpenChild(id)}
               />
             ))}

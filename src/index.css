@@ -64,6 +64,22 @@ body {
   overflow: visible;
 }
 
+.paper-node__drag-ghost {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid transparent;
+  opacity: 0.42;
+  transform: translateY(12px) scale(0.985);
+  filter: blur(10px);
+  z-index: -1;
+}
+
+.paper-node__drag-ghost--passthrough {
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: 0 20px 36px rgba(0, 0, 0, 0.12);
+}
+
 .paper-node:not(.paper-node--root) {
   cursor: grab;
 }
@@ -118,6 +134,17 @@ body {
   padding: 0 4px 6px;
   margin: -10px 0 4px;
   z-index: 3;
+}
+
+.child-card__drag-ghost {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1px solid transparent;
+  opacity: 0.4;
+  transform: translateY(10px) scale(0.985);
+  filter: blur(8px);
+  z-index: -1;
 }
 
 .paper-node--root {
