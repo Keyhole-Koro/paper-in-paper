@@ -49,7 +49,6 @@ body {
 .paper-floating-node {
   position: absolute;
   pointer-events: auto;
-  width: 320px;
 }
 
 /* =========================================================

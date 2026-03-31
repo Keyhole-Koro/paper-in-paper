@@ -11,6 +11,7 @@ export interface DragState {
   paperId: PaperId | null;
   parentId: PaperId | null;
   returnParentId: PaperId | null;
+  dragRect: { width: number; height: number } | null;
   point: { x: number; y: number } | null;
 }
 
@@ -18,6 +19,8 @@ export interface FloatingPlacement {
   mode: 'floating';
   x: number;
   y: number;
+  width: number;
+  height: number;
   parentId: PaperId;
   depth: number;
   crumbs: PaperId[];
@@ -49,6 +52,7 @@ export default function PaperCanvas({ paperMap, rootId }: Props) {
     paperId: null,
     parentId: null,
     returnParentId: null,
+    dragRect: null,
     point: null,
   });
   const [placementMap, setPlacementMap] = useState<PlacementMap>(new Map());
@@ -63,21 +67,27 @@ export default function PaperCanvas({ paperMap, rootId }: Props) {
     const canvasRect = canvasRef.current?.getBoundingClientRect();
     setPlacementMap((prev) => {
       const existing = prev.get(paperId);
-      let x: number, y: number;
+      let x: number, y: number, width: number, height: number;
       if (existing) {
         // 再ドラッグ：既存位置 + 今回のオフセット
         x = existing.x + info.offset.x;
         y = existing.y + info.offset.y;
+        width = existing.width;
+        height = existing.height;
       } else if (nodeStartRect && canvasRect) {
         // 初回フロート：ノードの元位置（canvas基準）+ ドラッグ量
         x = nodeStartRect.left - canvasRect.left + info.offset.x;
         y = nodeStartRect.top - canvasRect.top + info.offset.y;
+        width = nodeStartRect.width;
+        height = nodeStartRect.height;
       } else {
         x = info.offset.x;
         y = info.offset.y;
+        width = 320;
+        height = 160;
       }
       const next = new Map(prev);
-      next.set(paperId, { mode: 'floating', x, y, ...placementMeta });
+      next.set(paperId, { mode: 'floating', x, y, width, height, ...placementMeta });
       return next;
     });
   }, []);

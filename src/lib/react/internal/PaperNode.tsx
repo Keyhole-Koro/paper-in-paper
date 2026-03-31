@@ -149,6 +149,9 @@ const PaperNode = memo(function PaperNode({
       paperId,
       parentId,
       returnParentId: findReturnParentIdAtPoint(info.point, parentId),
+      dragRect: dragStartRectRef.current
+        ? { width: dragStartRectRef.current.width, height: dragStartRectRef.current.height }
+        : null,
       point: { x: info.point.x, y: info.point.y },
     });
   }, [onDragStateChange, paperId, parentId]);
@@ -159,6 +162,9 @@ const PaperNode = memo(function PaperNode({
       paperId,
       parentId,
       returnParentId: null,
+      dragRect: dragStartRectRef.current
+        ? { width: dragStartRectRef.current.width, height: dragStartRectRef.current.height }
+        : null,
       point: null,
     });
   }, [onDragStateChange, paperId, parentId]);
@@ -174,7 +180,7 @@ const PaperNode = memo(function PaperNode({
       onRequestFloat(paperId, info, { parentId, depth, crumbs, hue, isPrimary, nodeStartRect: dragStartRectRef.current });
     }
 
-    onDragStateChange({ paperId: null, parentId: null, returnParentId: null, point: null });
+    onDragStateChange({ paperId: null, parentId: null, returnParentId: null, dragRect: null, point: null });
   }, [dragState.paperId, dragState.returnParentId, paperId, parentId, depth, crumbs, hue, isPrimary, onRequestFloat, onDragStateChange]);
 
   // Keep each paperId mounted in exactly one PaperNode tree at a time.
@@ -184,6 +190,13 @@ const PaperNode = memo(function PaperNode({
     [openChildIds, placementMap],
   );
   const isReturnArmed = dragState.parentId === paperId && dragState.returnParentId === paperId;
+  const dragSizeStyle = dragState.paperId === paperId && dragState.dragRect
+    ? {
+        width: dragState.dragRect.width,
+        height: dragState.dragRect.height,
+        flex: '0 0 auto',
+      }
+    : null;
 
   if (dockedOpenChildIds.length === 1 && !openChildIds.some((id) => placementMap.has(id))) {
     const singleDockedChildId = dockedOpenChildIds[0];
@@ -204,11 +217,12 @@ const PaperNode = memo(function PaperNode({
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
         whileDrag={{
-          scale: 1.01,
+          scale: 1,
           zIndex: 20,
         }}
         style={{
           flex: isRoot ? 1 : isPrimary ? 2 : 1,
+          ...(dragSizeStyle ?? {}),
         }}
       >
         {dragState.parentId === paperId && (
@@ -298,7 +312,7 @@ const PaperNode = memo(function PaperNode({
       onDrag={handleDrag}
       onDragEnd={handleDragEnd}
       whileDrag={{
-        scale: 1.01,
+        scale: 1,
         zIndex: 20,
       }}
       transition={{ opacity: { duration: 0.22 }, layout: lt }}
@@ -309,6 +323,7 @@ const PaperNode = memo(function PaperNode({
         borderRadius: isRoot ? 16 : 14,
         boxShadow: shadow,
         zIndex: nodeZIndex,
+        ...(dragSizeStyle ?? {}),
       }}
     >
       {dragState.parentId === paperId && (

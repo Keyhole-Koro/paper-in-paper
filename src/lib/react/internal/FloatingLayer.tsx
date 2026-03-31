@@ -38,7 +38,13 @@ function FloatingNode({
   onDragEnd,
 }: FloatingNodeProps) {
   const handleDragStart = useCallback(() => {
-    onDragStateChange({ paperId, parentId: placement.parentId, returnParentId: null, point: null });
+    onDragStateChange({
+      paperId,
+      parentId: placement.parentId,
+      returnParentId: null,
+      dragRect: { width: placement.width, height: placement.height },
+      point: null,
+    });
   }, [onDragStateChange, paperId, placement.parentId]);
 
   const handleDrag = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
@@ -46,12 +52,13 @@ function FloatingNode({
       paperId,
       parentId: placement.parentId,
       returnParentId: findReturnParentIdAtPoint(info.point, placement.parentId),
+      dragRect: { width: placement.width, height: placement.height },
       point: { x: info.point.x, y: info.point.y },
     });
-  }, [onDragStateChange, paperId, placement.parentId]);
+  }, [onDragStateChange, paperId, placement.height, placement.parentId, placement.width]);
 
   const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    onDragStateChange({ paperId: null, parentId: null, returnParentId: null, point: null });
+    onDragStateChange({ paperId: null, parentId: null, returnParentId: null, dragRect: null, point: null });
     onDragEnd(paperId, info, placement);
   }, [onDragEnd, onDragStateChange, paperId, placement]);
 
@@ -60,7 +67,13 @@ function FloatingNode({
   return (
     <motion.div
       className="paper-floating-node"
-      style={{ x: placement.x, y: placement.y, zIndex: isDragging ? 100 : 10 }}
+      style={{
+        x: placement.x,
+        y: placement.y,
+        width: placement.width,
+        height: placement.height,
+        zIndex: isDragging ? 100 : 10,
+      }}
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
@@ -71,7 +84,7 @@ function FloatingNode({
       onDragStart={handleDragStart}
       onDrag={handleDrag}
       onDragEnd={handleDragEnd}
-      whileDrag={{ scale: 1.01, zIndex: 100 }}
+      whileDrag={{ scale: 1, zIndex: 100 }}
     >
       <PaperNode
         paperId={paperId}
