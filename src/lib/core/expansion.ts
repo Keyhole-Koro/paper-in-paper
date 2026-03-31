@@ -3,7 +3,8 @@ import type { ExpansionMap, NodeExpansion, PaperId, PaperMap } from './types';
 export type ExpansionAction =
   | { type: 'OPEN'; parentId: PaperId; childId: PaperId }
   | { type: 'CLOSE'; paperId: PaperId; parentId: PaperId }
-  | { type: 'SET_PRIMARY'; parentId: PaperId; childId: PaperId };
+  | { type: 'SET_PRIMARY'; parentId: PaperId; childId: PaperId }
+  | { type: 'RESTORE_FLOAT_CHILD'; parentId: PaperId; childId: PaperId; isPrimary: boolean };
 
 export function openNode(
   expansionMap: ExpansionMap,
@@ -57,6 +58,25 @@ export function setPrimaryNode(
   return next;
 }
 
+export function restoreFloatingChild(
+  expansionMap: ExpansionMap,
+  parentId: PaperId,
+  childId: PaperId,
+  isPrimary: boolean,
+): ExpansionMap {
+  const next = new Map(expansionMap);
+  const current = next.get(parentId) ?? emptyExpansion();
+  const openChildIds = current.openChildIds.includes(childId)
+    ? current.openChildIds
+    : [...current.openChildIds, childId];
+  const primaryChildId = isPrimary
+    ? childId
+    : current.primaryChildId ?? childId;
+
+  next.set(parentId, { openChildIds, primaryChildId });
+  return next;
+}
+
 export function expansionReducer(
   expansionMap: ExpansionMap,
   paperMap: PaperMap,
@@ -69,6 +89,8 @@ export function expansionReducer(
       return closeNode(expansionMap, paperMap, action.parentId, action.paperId);
     case 'SET_PRIMARY':
       return setPrimaryNode(expansionMap, action.parentId, action.childId);
+    case 'RESTORE_FLOAT_CHILD':
+      return restoreFloatingChild(expansionMap, action.parentId, action.childId, action.isPrimary);
     default:
       return expansionMap;
   }

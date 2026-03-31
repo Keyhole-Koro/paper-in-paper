@@ -20,14 +20,36 @@ body {
 }
 
 /* =========================================================
-   Universe
+   Canvas & Universe
    ========================================================= */
+
+.paper-canvas {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
 
 .paper-universe {
   height: 100%;
   display: flex;
   padding: 20px;
   overflow: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.paper-floating-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  overflow: visible;
+}
+
+.paper-floating-node {
+  position: absolute;
+  pointer-events: auto;
+  width: 320px;
 }
 
 /* =========================================================

@@ -1,16 +1,18 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { PanInfo } from 'framer-motion';
 import type { PaperId, PaperMap } from '../../core/types';
 import { useStore } from './store';
-import type { DragState, PlacementMap } from '../PaperCanvas';
+import type { DragState, FloatMeta, PlacementMap } from '../PaperCanvas';
 import ChildCard from './ChildCard';
 import PaperHeader from './PaperHeader';
 import PaperTopStrip from './PaperTopStrip';
+import { findReturnParentIdAtPoint } from './returnTarget';
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
 const BRANCH_HUES = [210, 155, 35, 280, 10, 180, 320, 60];
 const EMPTY_IDS: PaperId[] = [];
+const FLOAT_DRAG_THRESHOLD = 24;
 
 // rootId is passed directly to avoid scanning the whole Map on every call
 function getBranchHue(paperMap: PaperMap, paperId: PaperId, rootId: PaperId): number | null {
@@ -47,7 +49,7 @@ interface Props {
   dragState: DragState;
   onDragStateChange: (state: DragState) => void;
   placementMap: PlacementMap;
-  onPlacementMapChange: (updater: PlacementMap | ((prev: PlacementMap) => PlacementMap)) => void;
+  onRequestFloat?: (paperId: PaperId, info: PanInfo, meta: FloatMeta) => void;
 }
 
 const PaperNode = memo(function PaperNode({
@@ -62,12 +64,12 @@ const PaperNode = memo(function PaperNode({
   dragState,
   onDragStateChange,
   placementMap,
-  onPlacementMapChange,
+  onRequestFloat,
 }: Props) {
   const { state, dispatch } = useStore();
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
-  const [isReturnArmed, setIsReturnArmed] = useState(false);
-  const returnZoneRef = useRef<HTMLDivElement | null>(null);
+  const nodeElementRef = useRef<HTMLDivElement | null>(null);
+  const dragStartRectRef = useRef<DOMRect | null>(null);
   const paper = state.paperMap.get(paperId)!;
   const expansion = state.expansionMap.get(paperId);
   const openChildIds = expansion?.openChildIds ?? EMPTY_IDS;
@@ -77,15 +79,12 @@ const PaperNode = memo(function PaperNode({
     () => paper.childIds.filter((id) => !openChildIds.includes(id)),
     [paper.childIds, openChildIds],
   );
-  const placement = placementMap.get(paperId);
-  const draggedPosition = placement?.mode === 'floating' ? placement : { x: 0, y: 0 };
 
   // Stable reference for [...crumbs, paperId] — doubles as activePath for context clicks
   const childCrumbs = useMemo(() => [...crumbs, paperId], [crumbs, paperId]);
 
   const childHue = useCallback((childId: PaperId): number | null => {
     if (isRoot) {
-      // paperId IS the rootId here, no need to scan the whole Map
       return getBranchHue(state.paperMap, childId, paperId);
     }
     return hue;
@@ -120,7 +119,6 @@ const PaperNode = memo(function PaperNode({
       return;
     }
 
-    // childCrumbs = [...crumbs, paperId] == activePath
     const contextIndex = childCrumbs.indexOf(contextId);
     const activeChildId = contextIndex === -1 ? null : childCrumbs[contextIndex + 1] ?? null;
 
@@ -148,82 +146,56 @@ const PaperNode = memo(function PaperNode({
     onDragStateChange({
       paperId,
       parentId,
+      returnParentId: findReturnParentIdAtPoint(info.point, parentId),
       point: { x: info.point.x, y: info.point.y },
     });
   }, [onDragStateChange, paperId, parentId]);
 
   const handleDragStart = useCallback(() => {
-    setIsReturnArmed(false);
+    dragStartRectRef.current = nodeElementRef.current?.getBoundingClientRect() ?? null;
     onDragStateChange({
       paperId,
       parentId,
+      returnParentId: null,
       point: null,
     });
   }, [onDragStateChange, paperId, parentId]);
 
   const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const dropTargets = document.elementsFromPoint(info.point.x, info.point.y);
-    const hitReturnZone = dropTargets.some((element) => {
-      if (!(element instanceof HTMLElement)) {
-        return false;
-      }
+    const returnParentId = dragState.paperId === paperId
+      ? dragState.returnParentId ?? findReturnParentIdAtPoint(info.point, parentId)
+      : findReturnParentIdAtPoint(info.point, parentId);
+    const dragDistance = Math.hypot(info.offset.x, info.offset.y);
 
-      return (
-        element.classList.contains('paper-node__return-zone') &&
-        element.dataset.parentId === (parentId ?? '')
-      );
-    });
-
-    if (hitReturnZone && parentId !== null) {
-      onPlacementMapChange((prev) => {
-        const next = new Map(prev);
-        next.delete(paperId);
-        return next;
-      });
-    } else {
-      onPlacementMapChange((prev) => {
-        const next = new Map(prev);
-        next.set(paperId, {
-          mode: 'floating',
-          x: draggedPosition.x + info.offset.x,
-          y: draggedPosition.y + info.offset.y,
-        });
-        return next;
-      });
+    // Dropping over the rendered parent keeps the node docked instead of promoting it to floating.
+    if (returnParentId !== parentId && parentId !== null && onRequestFloat && dragDistance >= FLOAT_DRAG_THRESHOLD) {
+      onRequestFloat(paperId, info, { parentId, depth, crumbs, hue, isPrimary, nodeStartRect: dragStartRectRef.current });
     }
 
-    setIsReturnArmed(false);
-    onDragStateChange({ paperId: null, parentId: null, point: null });
-  }, [dispatch, draggedPosition.x, draggedPosition.y, onDragStateChange, onPlacementMapChange, paperId, parentId]);
+    onDragStateChange({ paperId: null, parentId: null, returnParentId: null, point: null });
+  }, [dragState.paperId, dragState.returnParentId, paperId, parentId, depth, crumbs, hue, isPrimary, onRequestFloat, onDragStateChange]);
 
-  useEffect(() => {
-    if (dragState.parentId !== paperId || dragState.point === null) {
-      setIsReturnArmed(false);
-      return;
-    }
+  // Keep each paperId mounted in exactly one PaperNode tree at a time.
+  // Duplicate instances would share the same layoutId and can "teleport" on unrelated relayouts.
+  const dockedOpenChildIds = useMemo(
+    () => openChildIds.filter((id) => !placementMap.has(id)),
+    [openChildIds, placementMap],
+  );
+  const isReturnArmed = dragState.parentId === paperId && dragState.returnParentId === paperId;
 
-    const zone = returnZoneRef.current;
-    if (!zone) {
-      setIsReturnArmed(false);
-      return;
-    }
-
-    const rect = zone.getBoundingClientRect();
-    const { x, y } = dragState.point;
-    setIsReturnArmed(x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
-  }, [dragState, paperId]);
-
-  if (openChildIds.length === 1 && singleChildId !== null) {
+  if (dockedOpenChildIds.length === 1 && !openChildIds.some((id) => placementMap.has(id))) {
+    const singleDockedChildId = dockedOpenChildIds[0];
     return (
       <motion.div
-        layoutId={isRoot ? undefined : paperId}
+        ref={nodeElementRef}
+        layoutId={!isRoot ? paperId : undefined}
         layout
         initial={isRoot ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={isRoot ? undefined : { opacity: 0 }}
         transition={{ opacity: { duration: 0.22 }, layout: lt }}
         className="paper-node paper-node--passthrough"
-        drag={!isRoot}
+        drag={!isRoot && !!onRequestFloat}
         dragMomentum={false}
         dragElastic={0.08}
         onDragStart={handleDragStart}
@@ -235,14 +207,11 @@ const PaperNode = memo(function PaperNode({
         }}
         style={{
           flex: isRoot ? 1 : isPrimary ? 2 : 1,
-          x: draggedPosition.x,
-          y: draggedPosition.y,
         }}
       >
         {dragState.parentId === paperId && (
           <div
-            ref={returnZoneRef}
-            data-parent-id={paperId}
+            data-return-parent-id={paperId}
             className={`paper-node__return-zone ${isReturnArmed ? 'paper-node__return-zone--active' : ''}`}
           >
             Drop to return to parent
@@ -258,18 +227,18 @@ const PaperNode = memo(function PaperNode({
           />
         )}
         <PaperNode
-          paperId={singleChildId}
+          paperId={singleDockedChildId}
           parentId={paperId}
           isPrimary={true}
           depth={depth + 1}
           crumbs={childCrumbs}
-          hue={childHue(singleChildId)}
+          hue={childHue(singleDockedChildId)}
           selectedContextId={selectedContextId}
           onSelectContext={onSelectContext}
           dragState={dragState}
           onDragStateChange={onDragStateChange}
           placementMap={placementMap}
-          onPlacementMapChange={onPlacementMapChange}
+          onRequestFloat={onRequestFloat}
         />
       </motion.div>
     );
@@ -308,7 +277,8 @@ const PaperNode = memo(function PaperNode({
 
   return (
     <motion.div
-      layoutId={isRoot ? undefined : paperId}
+      ref={nodeElementRef}
+      layoutId={!isRoot ? paperId : undefined}
       layout
       className={[
         'paper-node',
@@ -318,7 +288,7 @@ const PaperNode = memo(function PaperNode({
       initial={isRoot ? false : { opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
-      drag={!isRoot}
+      drag={!isRoot && !!onRequestFloat}
       dragMomentum={false}
       dragElastic={0.08}
       onDragStart={handleDragStart}
@@ -336,14 +306,11 @@ const PaperNode = memo(function PaperNode({
         borderRadius: isRoot ? 16 : 14,
         boxShadow: shadow,
         zIndex: nodeZIndex,
-        x: draggedPosition.x,
-        y: draggedPosition.y,
       }}
     >
       {dragState.parentId === paperId && (
         <div
-          ref={returnZoneRef}
-          data-parent-id={paperId}
+          data-return-parent-id={paperId}
           className={`paper-node__return-zone ${isReturnArmed ? 'paper-node__return-zone--active' : ''}`}
         >
           Drop to return to parent
@@ -391,10 +358,10 @@ const PaperNode = memo(function PaperNode({
             </motion.div>
           )}
         </AnimatePresence>
-        {openChildIds.length > 0 && (
+        {dockedOpenChildIds.length > 0 && (
           <div className="paper-node__open-children">
             <AnimatePresence mode="popLayout" initial={false}>
-              {openChildIds.map((childId) => (
+              {dockedOpenChildIds.map((childId) => (
                 <PaperNode
                   key={childId}
                   paperId={childId}
@@ -408,7 +375,7 @@ const PaperNode = memo(function PaperNode({
                   dragState={dragState}
                   onDragStateChange={onDragStateChange}
                   placementMap={placementMap}
-                  onPlacementMapChange={onPlacementMapChange}
+                  onRequestFloat={onRequestFloat}
                 />
               ))}
             </AnimatePresence>
