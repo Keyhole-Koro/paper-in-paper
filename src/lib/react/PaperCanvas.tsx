@@ -44,6 +44,7 @@ interface Props {
 export default function PaperCanvas({ paperMap, rootId }: Props) {
   const resolvedRootId = rootId ?? findRootId(paperMap);
   const [selectedContextId, setSelectedContextId] = useState<PaperId | null>(null);
+  const [floatingSelectedContextId, setFloatingSelectedContextId] = useState<PaperId | null>(null);
   const [dragState, setDragState] = useState<DragState>({
     paperId: null,
     parentId: null,
@@ -104,8 +105,8 @@ export default function PaperCanvas({ paperMap, rootId }: Props) {
           <FloatingLayer
             placementMap={placementMap}
             dragState={dragState}
-            selectedContextId={selectedContextId}
-            onSelectContext={setSelectedContextId}
+            selectedContextId={floatingSelectedContextId}
+            onSelectContext={setFloatingSelectedContextId}
             onDragStateChange={setDragState}
             onPlacementMapChange={setPlacementMap}
           />

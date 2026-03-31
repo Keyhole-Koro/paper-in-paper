@@ -9,6 +9,7 @@ interface BreadcrumbProps {
   selectedContextId: PaperId | null;
   onSelectContext?: (paperId: PaperId | null) => void;
   hue: number | null;
+  allowCrumbInteractions: boolean;
 }
 
 const Breadcrumb = memo(function Breadcrumb({
@@ -19,6 +20,7 @@ const Breadcrumb = memo(function Breadcrumb({
   selectedContextId,
   onSelectContext,
   hue,
+  allowCrumbInteractions,
 }: BreadcrumbProps) {
   const ancestorColor = hue !== null ? `hsl(${hue}, 40%, 50%)` : '#9999b8';
   const currentColor = hue !== null ? `hsl(${hue}, 60%, 28%)` : '#111118';
@@ -30,13 +32,13 @@ const Breadcrumb = memo(function Breadcrumb({
           key={id}
           className={`paper-node__breadcrumb-ancestor ${selectedContextId === id ? 'paper-node__breadcrumb-ancestor--selected' : ''}`}
           style={{ color: ancestorColor }}
-          onClick={(event) => {
+          onClick={allowCrumbInteractions ? (event) => {
             event.stopPropagation();
             onCrumbClick?.(index);
-          }}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(event) => event.key === 'Enter' && onCrumbClick?.(index)}
+          } : undefined}
+          role={allowCrumbInteractions ? 'button' : undefined}
+          tabIndex={allowCrumbInteractions ? 0 : undefined}
+          onKeyDown={allowCrumbInteractions ? (event) => event.key === 'Enter' && onCrumbClick?.(index) : undefined}
           onMouseEnter={() => onSelectContext?.(id)}
           onFocus={() => onSelectContext?.(id)}
         >
@@ -71,6 +73,7 @@ interface PaperHeaderProps {
   onSelectContext: (paperId: PaperId | null) => void;
   onHoverChange: (hovered: boolean) => void;
   onMouseLeaveDownward: (event: React.MouseEvent<HTMLElement>) => void;
+  allowCrumbInteractions?: boolean;
 }
 
 export default memo(function PaperHeader({
@@ -88,6 +91,7 @@ export default memo(function PaperHeader({
   onSelectContext,
   onHoverChange,
   onMouseLeaveDownward,
+  allowCrumbInteractions = true,
 }: PaperHeaderProps) {
   const bodyColor = hue !== null ? `hsl(${hue}, 25%, 42%)` : '#55556a';
   const headerBorderColor = hue !== null
@@ -134,6 +138,7 @@ export default memo(function PaperHeader({
         selectedContextId={selectedContextId}
         onSelectContext={onSelectContext}
         hue={hue}
+        allowCrumbInteractions={allowCrumbInteractions}
       />
       {isHovered && <div className="paper-node__body" style={{ color: bodyColor }}>{paper.description}</div>}
     </button>

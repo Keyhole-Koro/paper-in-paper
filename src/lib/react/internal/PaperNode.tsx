@@ -50,6 +50,7 @@ interface Props {
   onDragStateChange: (state: DragState) => void;
   placementMap: PlacementMap;
   onRequestFloat?: (paperId: PaperId, info: PanInfo, meta: FloatMeta) => void;
+  allowCrumbInteractions?: boolean;
 }
 
 const PaperNode = memo(function PaperNode({
@@ -65,6 +66,7 @@ const PaperNode = memo(function PaperNode({
   onDragStateChange,
   placementMap,
   onRequestFloat,
+  allowCrumbInteractions = true,
 }: Props) {
   const { state, dispatch } = useStore();
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
@@ -239,6 +241,7 @@ const PaperNode = memo(function PaperNode({
           onDragStateChange={onDragStateChange}
           placementMap={placementMap}
           onRequestFloat={onRequestFloat}
+          allowCrumbInteractions={allowCrumbInteractions}
         />
       </motion.div>
     );
@@ -340,6 +343,7 @@ const PaperNode = memo(function PaperNode({
         onSelectContext={onSelectContext}
         onHoverChange={setIsHeaderHovered}
         onMouseLeaveDownward={handleHeaderMouseLeave}
+        allowCrumbInteractions={allowCrumbInteractions}
       />
 
       <div className="paper-node__content">
@@ -376,6 +380,7 @@ const PaperNode = memo(function PaperNode({
                   onDragStateChange={onDragStateChange}
                   placementMap={placementMap}
                   onRequestFloat={onRequestFloat}
+                  allowCrumbInteractions={allowCrumbInteractions}
                 />
               ))}
             </AnimatePresence>

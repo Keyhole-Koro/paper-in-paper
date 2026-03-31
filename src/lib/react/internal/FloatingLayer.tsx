@@ -86,6 +86,7 @@ function FloatingNode({
         onDragStateChange={onDragStateChange}
         placementMap={placementMap}
         onRequestFloat={undefined}
+        allowCrumbInteractions={false}
       />
     </motion.div>
   );
