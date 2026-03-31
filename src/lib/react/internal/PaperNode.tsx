@@ -83,7 +83,7 @@ const Breadcrumb = memo(function Breadcrumb({
   );
 });
 
-const ContextStrip = memo(function ContextStrip({
+const ContextSiblings = memo(function ContextSiblings({
   paperMap,
   contextId,
   currentPathIds,
@@ -102,7 +102,7 @@ const ContextStrip = memo(function ContextStrip({
   }
 
   return (
-    <div className="paper-node__context-strip">
+    <div className="paper-node__sibling-strip">
       {context.childIds.map((childId) => {
         const child = paperMap.get(childId)!;
         const hue = getHue(childId);
@@ -123,7 +123,7 @@ const ContextStrip = memo(function ContextStrip({
           <button
             key={childId}
             type="button"
-            className="paper-node__context-chip"
+            className={`paper-node__context-chip ${isActive ? 'paper-node__context-chip--active' : 'paper-node__context-chip--inactive'}`}
             style={{ color, background, borderColor }}
             onClick={(event) => {
               event.stopPropagation();
@@ -192,6 +192,7 @@ const PaperNode = memo(function PaperNode({
     () => singleChildId !== null ? [...childCrumbs, singleChildId] : childCrumbs,
     [childCrumbs, singleChildId],
   );
+  const shouldShowTopStrip = isRoot || selectedContextId === paperId;
 
   const handleHeaderClick = useCallback(() => {
     if (isRoot) return;
@@ -250,8 +251,8 @@ const PaperNode = memo(function PaperNode({
         className="paper-node paper-node--passthrough"
         style={{ flex: isRoot ? 1 : isPrimary ? 2 : 1 }}
       >
-        {selectedContextId === paperId && (
-          <ContextStrip
+        {shouldShowTopStrip && (
+          <ContextSiblings
             paperMap={state.paperMap}
             contextId={paperId}
             currentPathIds={passthroughContextPathIds}
@@ -328,6 +329,15 @@ const PaperNode = memo(function PaperNode({
         boxShadow: shadow,
       }}
     >
+      {shouldShowTopStrip && (
+        <ContextSiblings
+          paperMap={state.paperMap}
+          contextId={paperId}
+          currentPathIds={childCrumbs}
+          getHue={childHue}
+          onChildClick={onContextChildClick}
+        />
+      )}
       {isRoot ? (
         <div
           className="paper-node__header paper-node__header--root"
@@ -385,15 +395,6 @@ const PaperNode = memo(function PaperNode({
             </motion.div>
           )}
         </AnimatePresence>
-        {selectedContextId === paperId && (
-          <ContextStrip
-            paperMap={state.paperMap}
-            contextId={paperId}
-            currentPathIds={childCrumbs}
-            getHue={childHue}
-            onChildClick={onContextChildClick}
-          />
-        )}
         {openChildIds.length > 0 && (
           <div className="paper-node__open-children">
             <AnimatePresence mode="popLayout" initial={false}>
@@ -427,7 +428,6 @@ const PaperNode = memo(function PaperNode({
             </AnimatePresence>
           </div>
         )}
-
         {paper.childIds.length === 0 && (
           <div className="paper-node__leaf" style={hue !== null ? { color: `hsl(${hue}, 30%, 60%)` } : {}}>— leaf —</div>
         )}
