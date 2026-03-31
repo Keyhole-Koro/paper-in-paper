@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer } from 'react';
+import React, { createContext, useContext, useMemo, useReducer } from 'react';
 import { expansionReducer, type ExpansionAction } from '../../core/expansion';
 import type { ExpansionMap, PaperMap } from '../../core/types';
 
@@ -26,8 +26,13 @@ export function StoreProvider({
     new Map(),
   );
 
+  const value = useMemo(
+    () => ({ state: { paperMap, expansionMap }, dispatch }),
+    [paperMap, expansionMap, dispatch],
+  );
+
   return (
-    <StoreContext.Provider value={{ state: { paperMap, expansionMap }, dispatch }}>
+    <StoreContext.Provider value={value}>
       {children}
     </StoreContext.Provider>
   );

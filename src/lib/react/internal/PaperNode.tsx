@@ -1,13 +1,16 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { memo, useCallback, useMemo, useState } from 'react';
 import type { PaperId, PaperMap } from '../../core/types';
 import { useStore } from './store';
 import ChildCard from './ChildCard';
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
 const BRANCH_HUES = [210, 155, 35, 280, 10, 180, 320, 60];
+const EMPTY_IDS: PaperId[] = [];
 
-function getBranchHue(paperMap: PaperMap, paperId: PaperId): number | null {
-  const root = [...paperMap.values()].find((paper) => paper.parentId === null);
+// rootId is passed directly to avoid scanning the whole Map on every call
+function getBranchHue(paperMap: PaperMap, paperId: PaperId, rootId: PaperId): number | null {
+  const root = paperMap.get(rootId);
   if (!root) return null;
 
   const directChildIndex = root.childIds.indexOf(paperId);
@@ -27,7 +30,7 @@ function getBranchHue(paperMap: PaperMap, paperId: PaperId): number | null {
   return null;
 }
 
-function Breadcrumb({
+const Breadcrumb = memo(function Breadcrumb({
   paperMap,
   crumbs,
   paperId,
@@ -41,7 +44,7 @@ function Breadcrumb({
   paperId: PaperId;
   onCrumbClick?: (idx: number) => void;
   selectedContextId: PaperId | null;
-  onSelectContext?: (paperId: PaperId) => void;
+  onSelectContext?: (paperId: PaperId | null) => void;
   hue: number | null;
 }) {
   const ancestorColor = hue !== null ? `hsl(${hue}, 40%, 50%)` : '#9999b8';
@@ -78,9 +81,9 @@ function Breadcrumb({
       </span>
     </div>
   );
-}
+});
 
-function ContextStrip({
+const ContextStrip = memo(function ContextStrip({
   paperMap,
   contextId,
   currentPathIds,
@@ -137,7 +140,7 @@ function ContextStrip({
       })}
     </div>
   );
-}
+});
 
 interface Props {
   paperId: PaperId;
@@ -147,7 +150,7 @@ interface Props {
   crumbs: PaperId[];
   hue: number | null;
   selectedContextId: PaperId | null;
-  onSelectContext: (paperId: PaperId) => void;
+  onSelectContext: (paperId: PaperId | null) => void;
 }
 
 function isDescendantOf(paperMap: PaperMap, paperId: PaperId, ancestorId: PaperId): boolean {
@@ -161,7 +164,7 @@ function isDescendantOf(paperMap: PaperMap, paperId: PaperId, ancestorId: PaperI
   return false;
 }
 
-export default function PaperNode({
+const PaperNode = memo(function PaperNode({
   paperId,
   parentId,
   isPrimary,
@@ -172,28 +175,95 @@ export default function PaperNode({
   onSelectContext,
 }: Props) {
   const { state, dispatch } = useStore();
+  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const paper = state.paperMap.get(paperId)!;
   const expansion = state.expansionMap.get(paperId);
-  const openChildIds = expansion?.openChildIds ?? [];
+  const openChildIds = expansion?.openChildIds ?? EMPTY_IDS;
   const primaryChildId = expansion?.primaryChildId ?? null;
-  const closedChildIds = paper.childIds.filter((id) => !openChildIds.includes(id));
   const isRoot = parentId === null;
 
-  function childHue(childId: PaperId): number | null {
+  // Use Set for O(1) lookup instead of O(n) Array.includes
+  const openChildIdsSet = useMemo(() => new Set(openChildIds), [openChildIds]);
+  const closedChildIds = useMemo(
+    () => paper.childIds.filter((id) => !openChildIdsSet.has(id)),
+    [paper.childIds, openChildIdsSet],
+  );
+
+  // Stable reference for [...crumbs, paperId] — doubles as activePath for context clicks
+  const childCrumbs = useMemo(() => [...crumbs, paperId], [crumbs, paperId]);
+
+  const childHue = useCallback((childId: PaperId): number | null => {
     if (isRoot) {
-      return getBranchHue(state.paperMap, childId);
+      // paperId IS the rootId here, no need to scan the whole Map
+      return getBranchHue(state.paperMap, childId, paperId);
     }
     return hue;
-  }
+  }, [isRoot, state.paperMap, paperId, hue]);
 
-  if (openChildIds.length === 1) {
-    const [singleChildId] = openChildIds;
-    const closedSiblings = paper.childIds.filter((id) => id !== singleChildId);
-    const shouldHideDefaultStrip =
+  // Passthrough-specific values — computed unconditionally to satisfy Rules of Hooks
+  const singleChildId = openChildIds.length === 1 ? openChildIds[0] : null;
+  const passthroughContextPathIds = useMemo(
+    () => singleChildId !== null ? [...childCrumbs, singleChildId] : childCrumbs,
+    [childCrumbs, singleChildId],
+  );
+  const closedSiblings = useMemo(
+    () => singleChildId !== null ? paper.childIds.filter((id) => id !== singleChildId) : EMPTY_IDS,
+    [paper.childIds, singleChildId],
+  );
+  const shouldHideDefaultStrip = useMemo(
+    () => singleChildId !== null &&
       selectedContextId !== null &&
       selectedContextId !== paperId &&
-      isDescendantOf(state.paperMap, selectedContextId, singleChildId);
+      isDescendantOf(state.paperMap, selectedContextId, singleChildId),
+    [singleChildId, selectedContextId, paperId, state.paperMap],
+  );
 
+  const handleHeaderClick = useCallback(() => {
+    if (isRoot) return;
+    if (isPrimary) {
+      dispatch({ type: 'CLOSE', paperId, parentId: parentId! });
+      return;
+    }
+    dispatch({ type: 'SET_PRIMARY', parentId: parentId!, childId: paperId });
+  }, [isRoot, isPrimary, dispatch, paperId, parentId]);
+
+  const handleCrumbClick = useCallback((idx: number) => {
+    const toClose = idx + 1 < crumbs.length ? crumbs[idx + 1] : paperId;
+    const fromParent = crumbs[idx];
+    dispatch({ type: 'CLOSE', paperId: toClose, parentId: fromParent });
+  }, [crumbs, paperId, dispatch]);
+
+  const handleContextChildClick = useCallback((contextId: PaperId, childId: PaperId) => {
+    if (contextId === paperId) {
+      dispatch({ type: 'OPEN', parentId: paperId, childId });
+      return;
+    }
+
+    // childCrumbs = [...crumbs, paperId] == activePath
+    const contextIndex = childCrumbs.indexOf(contextId);
+    const activeChildId = contextIndex === -1 ? null : childCrumbs[contextIndex + 1] ?? null;
+
+    if (activeChildId === childId) {
+      dispatch({ type: 'SET_PRIMARY', parentId: contextId, childId });
+      return;
+    }
+
+    dispatch({ type: 'OPEN', parentId: contextId, childId });
+  }, [paperId, dispatch, childCrumbs]);
+
+  const onContextChildClick = useCallback(
+    (childId: PaperId) => handleContextChildClick(paperId, childId),
+    [handleContextChildClick, paperId],
+  );
+
+  const handleHeaderMouseLeave = useCallback((event: React.MouseEvent<HTMLElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (event.clientY >= bounds.bottom - 1) {
+      onSelectContext(null);
+    }
+  }, [onSelectContext]);
+
+  if (openChildIds.length === 1 && singleChildId !== null) {
     return (
       <motion.div
         layoutId={isRoot ? undefined : paperId}
@@ -209,9 +279,9 @@ export default function PaperNode({
           <ContextStrip
             paperMap={state.paperMap}
             contextId={paperId}
-            currentPathIds={[...crumbs, paperId, singleChildId]}
+            currentPathIds={passthroughContextPathIds}
             getHue={childHue}
-            onChildClick={(childId) => handleContextChildClick(paperId, childId)}
+            onChildClick={onContextChildClick}
           />
         ) : !shouldHideDefaultStrip && closedSiblings.length > 0 && (
           <div className="paper-node__sibling-strip">
@@ -232,50 +302,13 @@ export default function PaperNode({
           parentId={paperId}
           isPrimary={true}
           depth={depth + 1}
-          crumbs={[...crumbs, paperId]}
+          crumbs={childCrumbs}
           hue={childHue(singleChildId)}
           selectedContextId={selectedContextId}
           onSelectContext={onSelectContext}
         />
       </motion.div>
     );
-  }
-
-  function handleHeaderClick() {
-    if (isRoot) {
-      return;
-    }
-
-    if (isPrimary) {
-      dispatch({ type: 'CLOSE', paperId, parentId: parentId! });
-      return;
-    }
-
-    dispatch({ type: 'SET_PRIMARY', parentId: parentId!, childId: paperId });
-  }
-
-  function handleCrumbClick(idx: number) {
-    const toClose = idx + 1 < crumbs.length ? crumbs[idx + 1] : paperId;
-    const fromParent = crumbs[idx];
-    dispatch({ type: 'CLOSE', paperId: toClose, parentId: fromParent });
-  }
-
-  function handleContextChildClick(contextId: PaperId, childId: PaperId) {
-    if (contextId === paperId) {
-      dispatch({ type: 'OPEN', parentId: paperId, childId });
-      return;
-    }
-
-    const activePath = [...crumbs, paperId];
-    const contextIndex = activePath.indexOf(contextId);
-    const activeChildId = contextIndex === -1 ? null : activePath[contextIndex + 1] ?? null;
-
-    if (activeChildId === childId) {
-      dispatch({ type: 'SET_PRIMARY', parentId: contextId, childId });
-      return;
-    }
-
-    dispatch({ type: 'OPEN', parentId: contextId, childId });
   }
 
   const background = isRoot
@@ -305,9 +338,12 @@ export default function PaperNode({
         : 'none';
 
   const bodyColor = hue !== null ? `hsl(${hue}, 25%, 42%)` : '#55556a';
+  const contentColor = hue !== null ? `hsl(${hue}, 20%, 32%)` : '#2b2b36';
   const headerBorderColor = hue !== null
     ? `hsl(${hue}, 30%, ${isPrimary ? 82 : 85}%)`
     : 'rgba(0,0,0,0.07)';
+  const shouldCollapseContent = openChildIds.length > 0;
+  const shouldShowContent = isPrimary && Boolean(paper.content) && (!shouldCollapseContent || isHeaderHovered);
 
   return (
     <motion.div
@@ -331,9 +367,18 @@ export default function PaperNode({
       }}
     >
       {isRoot ? (
-        <div className="paper-node__header paper-node__header--root">
+        <div
+          className="paper-node__header paper-node__header--root"
+          onMouseEnter={() => setIsHeaderHovered(true)}
+          onMouseLeave={(event) => {
+            setIsHeaderHovered(false);
+            handleHeaderMouseLeave(event);
+          }}
+        >
           <div className="paper-node__title" style={{ color: '#e8e8f4' }}>{paper.title}</div>
-          <div className="paper-node__body" style={{ color: 'rgba(255,255,255,0.45)' }}>{paper.body}</div>
+          {isHeaderHovered && (
+            <div className="paper-node__body" style={{ color: 'rgba(255,255,255,0.45)' }}>{paper.description}</div>
+          )}
         </div>
       ) : (
         <button
@@ -341,6 +386,13 @@ export default function PaperNode({
           style={{ borderBottomColor: headerBorderColor }}
           onClick={handleHeaderClick}
           title={isPrimary ? 'Close' : 'Make primary'}
+          onMouseEnter={() => setIsHeaderHovered(true)}
+          onMouseLeave={(event) => {
+            setIsHeaderHovered(false);
+            handleHeaderMouseLeave(event);
+          }}
+          onFocus={() => setIsHeaderHovered(true)}
+          onBlur={() => setIsHeaderHovered(false)}
         >
           <Breadcrumb
             paperMap={state.paperMap}
@@ -351,18 +403,33 @@ export default function PaperNode({
             onSelectContext={onSelectContext}
             hue={hue}
           />
-          {isPrimary && <div className="paper-node__body" style={{ color: bodyColor }}>{paper.body}</div>}
+          {isHeaderHovered && <div className="paper-node__body" style={{ color: bodyColor }}>{paper.description}</div>}
         </button>
       )}
 
       <div className="paper-node__content">
+        <AnimatePresence initial={false}>
+          {shouldShowContent && (
+            <motion.div
+              key="content"
+              className="paper-node__content-copy"
+              style={{ color: contentColor }}
+              initial={{ opacity: 0, y: -2 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -2 }}
+              transition={{ duration: 0.12, ease: [0.4, 0, 0.2, 1] }}
+            >
+              {paper.content}
+            </motion.div>
+          )}
+        </AnimatePresence>
         {selectedContextId === paperId && (
           <ContextStrip
             paperMap={state.paperMap}
             contextId={paperId}
-            currentPathIds={[...crumbs, paperId]}
+            currentPathIds={childCrumbs}
             getHue={childHue}
-            onChildClick={(childId) => handleContextChildClick(paperId, childId)}
+            onChildClick={onContextChildClick}
           />
         )}
         {openChildIds.length > 0 && (
@@ -375,7 +442,7 @@ export default function PaperNode({
                   parentId={paperId}
                   isPrimary={childId === primaryChildId}
                   depth={depth + 1}
-                  crumbs={[]}
+                  crumbs={EMPTY_IDS}
                   hue={childHue(childId)}
                   selectedContextId={selectedContextId}
                   onSelectContext={onSelectContext}
@@ -406,4 +473,6 @@ export default function PaperNode({
       </div>
     </motion.div>
   );
-}
+});
+
+export default PaperNode;

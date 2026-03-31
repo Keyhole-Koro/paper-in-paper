@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { memo } from 'react';
 import type { Paper } from '../../core/types';
 
 interface Props {
@@ -9,7 +10,7 @@ interface Props {
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
 
-export default function ChildCard({ paper, hue, onClick }: Props) {
+export default memo(function ChildCard({ paper, hue, onClick }: Props) {
   const childCount = paper.childIds.length;
   const background = hue !== null ? `hsl(${hue}, 44%, 95%)` : '#f7f7fc';
   const borderColor = hue !== null ? `hsl(${hue}, 34%, 82%)` : '#e4e4ef';
@@ -53,11 +54,11 @@ export default function ChildCard({ paper, hue, onClick }: Props) {
       </motion.div>
       <div className="child-card__preview">
         <div className="child-card__preview-title" style={{ color: titleColor }}>{paper.title}</div>
-        {paper.body && <div className="child-card__body" style={{ color: bodyColor }}>{paper.body}</div>}
+        {paper.description && <div className="child-card__body" style={{ color: bodyColor }}>{paper.description}</div>}
         <div className="child-card__hint" style={{ color: hintColor }}>
           {childCount > 0 ? `${childCount} inside →` : 'Open paper →'}
         </div>
       </div>
     </motion.button>
   );
-}
+});

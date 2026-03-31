@@ -3,7 +3,8 @@ export type PaperId = string;
 export interface Paper {
   id: PaperId;
   title: string;
-  body: string;
+  description: string;
+  content: string;
   childIds: PaperId[];
   parentId: PaperId | null;
 }

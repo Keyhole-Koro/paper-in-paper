@@ -5,5 +5,8 @@ export function buildPaperMap(papers: Paper[]): PaperMap {
 }
 
 export function findRootId(paperMap: PaperMap): PaperId | null {
-  return [...paperMap.values()].find((paper) => paper.parentId === null)?.id ?? null;
+  for (const paper of paperMap.values()) {
+    if (paper.parentId === null) return paper.id;
+  }
+  return null;
 }

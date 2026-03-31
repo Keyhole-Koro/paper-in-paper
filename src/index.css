@@ -259,6 +259,12 @@ body {
   min-height: 0;
 }
 
+.paper-node__content-copy {
+  font-size: 13px;
+  line-height: 1.6;
+  padding-bottom: 2px;
+}
+
 /* Open children: side-by-side row */
 .paper-node__open-children {
   flex: 1;
