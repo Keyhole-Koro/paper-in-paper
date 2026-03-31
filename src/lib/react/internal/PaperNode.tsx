@@ -1,8 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { PanInfo } from 'framer-motion';
 import type { PaperId, PaperMap } from '../../core/types';
 import { useStore } from './store';
+import type { DragState, PlacementMap } from '../PaperCanvas';
 import ChildCard from './ChildCard';
+import PaperHeader from './PaperHeader';
+import PaperTopStrip from './PaperTopStrip';
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
 const BRANCH_HUES = [210, 155, 35, 280, 10, 180, 320, 60];
@@ -30,117 +34,6 @@ function getBranchHue(paperMap: PaperMap, paperId: PaperId, rootId: PaperId): nu
   return null;
 }
 
-const Breadcrumb = memo(function Breadcrumb({
-  paperMap,
-  crumbs,
-  paperId,
-  onCrumbClick,
-  selectedContextId,
-  onSelectContext,
-  hue,
-}: {
-  paperMap: PaperMap;
-  crumbs: PaperId[];
-  paperId: PaperId;
-  onCrumbClick?: (idx: number) => void;
-  selectedContextId: PaperId | null;
-  onSelectContext?: (paperId: PaperId | null) => void;
-  hue: number | null;
-}) {
-  const ancestorColor = hue !== null ? `hsl(${hue}, 40%, 50%)` : '#9999b8';
-  const currentColor = hue !== null ? `hsl(${hue}, 60%, 28%)` : '#111118';
-
-  return (
-    <div className="paper-node__breadcrumb">
-      {crumbs.map((id, index) => (
-        <span
-          key={id}
-          className={`paper-node__breadcrumb-ancestor ${selectedContextId === id ? 'paper-node__breadcrumb-ancestor--selected' : ''}`}
-          style={{ color: ancestorColor }}
-          onClick={(event) => {
-            event.stopPropagation();
-            onCrumbClick?.(index);
-          }}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(event) => event.key === 'Enter' && onCrumbClick?.(index)}
-          onMouseEnter={() => onSelectContext?.(id)}
-          onFocus={() => onSelectContext?.(id)}
-        >
-          {paperMap.get(id)!.title}
-          <span className="paper-node__breadcrumb-sep" style={{ color: ancestorColor, opacity: 0.5 }}> / </span>
-        </span>
-      ))}
-      <span
-        className={`paper-node__breadcrumb-current ${selectedContextId === paperId ? 'paper-node__breadcrumb-current--selected' : ''}`}
-        style={{ color: currentColor }}
-        onMouseEnter={() => onSelectContext?.(paperId)}
-        onFocus={() => onSelectContext?.(paperId)}
-      >
-        {paperMap.get(paperId)!.title}
-      </span>
-    </div>
-  );
-});
-
-const ContextSiblings = memo(function ContextSiblings({
-  paperMap,
-  contextId,
-  currentPathIds,
-  getHue,
-  onChildClick,
-}: {
-  paperMap: PaperMap;
-  contextId: PaperId;
-  currentPathIds: PaperId[];
-  getHue: (paperId: PaperId) => number | null;
-  onChildClick: (childId: PaperId) => void;
-}) {
-  const context = paperMap.get(contextId);
-  if (!context || context.childIds.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="paper-node__sibling-strip">
-      {context.childIds.map((childId) => {
-        const child = paperMap.get(childId)!;
-        const hue = getHue(childId);
-        const isActive = currentPathIds.includes(childId);
-        const color = hue !== null ? `hsl(${hue}, 56%, ${isActive ? 26 : 34}%)` : isActive ? '#111118' : '#44445d';
-        const background = hue !== null
-          ? `hsla(${hue}, 56%, ${isActive ? 56 : 52}%, ${isActive ? 0.18 : 0.1})`
-          : isActive
-            ? 'rgba(17,17,24,0.08)'
-            : 'rgba(17,17,24,0.05)';
-        const borderColor = hue !== null
-          ? `hsla(${hue}, 50%, 42%, ${isActive ? 0.36 : 0.22})`
-          : isActive
-            ? 'rgba(17,17,24,0.2)'
-            : 'rgba(17,17,24,0.1)';
-
-        return (
-          <button
-            key={childId}
-            type="button"
-            className={`paper-node__context-chip ${isActive ? 'paper-node__context-chip--active' : 'paper-node__context-chip--inactive'}`}
-            style={{ color, background, borderColor }}
-            onClick={(event) => {
-              event.stopPropagation();
-              onChildClick(childId);
-            }}
-            title={child.title}
-          >
-            <span className="paper-node__context-chip-title">{child.title}</span>
-            {child.childIds.length > 0 && (
-              <span className="paper-node__context-chip-count">{child.childIds.length}</span>
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-});
 
 interface Props {
   paperId: PaperId;
@@ -151,6 +44,10 @@ interface Props {
   hue: number | null;
   selectedContextId: PaperId | null;
   onSelectContext: (paperId: PaperId | null) => void;
+  dragState: DragState;
+  onDragStateChange: (state: DragState) => void;
+  placementMap: PlacementMap;
+  onPlacementMapChange: (updater: PlacementMap | ((prev: PlacementMap) => PlacementMap)) => void;
 }
 
 const PaperNode = memo(function PaperNode({
@@ -162,9 +59,15 @@ const PaperNode = memo(function PaperNode({
   hue,
   selectedContextId,
   onSelectContext,
+  dragState,
+  onDragStateChange,
+  placementMap,
+  onPlacementMapChange,
 }: Props) {
   const { state, dispatch } = useStore();
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
+  const [isReturnArmed, setIsReturnArmed] = useState(false);
+  const returnZoneRef = useRef<HTMLDivElement | null>(null);
   const paper = state.paperMap.get(paperId)!;
   const expansion = state.expansionMap.get(paperId);
   const openChildIds = expansion?.openChildIds ?? EMPTY_IDS;
@@ -174,6 +77,8 @@ const PaperNode = memo(function PaperNode({
     () => paper.childIds.filter((id) => !openChildIds.includes(id)),
     [paper.childIds, openChildIds],
   );
+  const placement = placementMap.get(paperId);
+  const draggedPosition = placement?.mode === 'floating' ? placement : { x: 0, y: 0 };
 
   // Stable reference for [...crumbs, paperId] — doubles as activePath for context clicks
   const childCrumbs = useMemo(() => [...crumbs, paperId], [crumbs, paperId]);
@@ -239,6 +144,75 @@ const PaperNode = memo(function PaperNode({
     }
   }, [onSelectContext]);
 
+  const handleDrag = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    onDragStateChange({
+      paperId,
+      parentId,
+      point: { x: info.point.x, y: info.point.y },
+    });
+  }, [onDragStateChange, paperId, parentId]);
+
+  const handleDragStart = useCallback(() => {
+    setIsReturnArmed(false);
+    onDragStateChange({
+      paperId,
+      parentId,
+      point: null,
+    });
+  }, [onDragStateChange, paperId, parentId]);
+
+  const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    const dropTargets = document.elementsFromPoint(info.point.x, info.point.y);
+    const hitReturnZone = dropTargets.some((element) => {
+      if (!(element instanceof HTMLElement)) {
+        return false;
+      }
+
+      return (
+        element.classList.contains('paper-node__return-zone') &&
+        element.dataset.parentId === (parentId ?? '')
+      );
+    });
+
+    if (hitReturnZone && parentId !== null) {
+      onPlacementMapChange((prev) => {
+        const next = new Map(prev);
+        next.delete(paperId);
+        return next;
+      });
+    } else {
+      onPlacementMapChange((prev) => {
+        const next = new Map(prev);
+        next.set(paperId, {
+          mode: 'floating',
+          x: draggedPosition.x + info.offset.x,
+          y: draggedPosition.y + info.offset.y,
+        });
+        return next;
+      });
+    }
+
+    setIsReturnArmed(false);
+    onDragStateChange({ paperId: null, parentId: null, point: null });
+  }, [dispatch, draggedPosition.x, draggedPosition.y, onDragStateChange, onPlacementMapChange, paperId, parentId]);
+
+  useEffect(() => {
+    if (dragState.parentId !== paperId || dragState.point === null) {
+      setIsReturnArmed(false);
+      return;
+    }
+
+    const zone = returnZoneRef.current;
+    if (!zone) {
+      setIsReturnArmed(false);
+      return;
+    }
+
+    const rect = zone.getBoundingClientRect();
+    const { x, y } = dragState.point;
+    setIsReturnArmed(x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+  }, [dragState, paperId]);
+
   if (openChildIds.length === 1 && singleChildId !== null) {
     return (
       <motion.div
@@ -249,10 +223,33 @@ const PaperNode = memo(function PaperNode({
         exit={isRoot ? undefined : { opacity: 0 }}
         transition={{ opacity: { duration: 0.22 }, layout: lt }}
         className="paper-node paper-node--passthrough"
-        style={{ flex: isRoot ? 1 : isPrimary ? 2 : 1 }}
+        drag={!isRoot}
+        dragMomentum={false}
+        dragElastic={0.08}
+        onDragStart={handleDragStart}
+        onDrag={handleDrag}
+        onDragEnd={handleDragEnd}
+        whileDrag={{
+          scale: 1.01,
+          zIndex: 20,
+        }}
+        style={{
+          flex: isRoot ? 1 : isPrimary ? 2 : 1,
+          x: draggedPosition.x,
+          y: draggedPosition.y,
+        }}
       >
+        {dragState.parentId === paperId && (
+          <div
+            ref={returnZoneRef}
+            data-parent-id={paperId}
+            className={`paper-node__return-zone ${isReturnArmed ? 'paper-node__return-zone--active' : ''}`}
+          >
+            Drop to return to parent
+          </div>
+        )}
         {shouldShowTopStrip && (
-          <ContextSiblings
+          <PaperTopStrip
             paperMap={state.paperMap}
             contextId={paperId}
             currentPathIds={passthroughContextPathIds}
@@ -269,6 +266,10 @@ const PaperNode = memo(function PaperNode({
           hue={childHue(singleChildId)}
           selectedContextId={selectedContextId}
           onSelectContext={onSelectContext}
+          dragState={dragState}
+          onDragStateChange={onDragStateChange}
+          placementMap={placementMap}
+          onPlacementMapChange={onPlacementMapChange}
         />
       </motion.div>
     );
@@ -300,13 +301,10 @@ const PaperNode = memo(function PaperNode({
         ? `0 4px 24px rgba(0,0,0,${Math.min(0.25, 0.1 + depth * 0.05)})`
         : 'none';
 
-  const bodyColor = hue !== null ? `hsl(${hue}, 25%, 42%)` : '#55556a';
   const contentColor = hue !== null ? `hsl(${hue}, 20%, 32%)` : '#2b2b36';
-  const headerBorderColor = hue !== null
-    ? `hsl(${hue}, 30%, ${isPrimary ? 82 : 85}%)`
-    : 'rgba(0,0,0,0.07)';
   const shouldCollapseContent = openChildIds.length > 0;
   const shouldShowContent = isPrimary && Boolean(paper.content) && (!shouldCollapseContent || isHeaderHovered);
+  const nodeZIndex = isRoot ? 1 : shouldShowTopStrip ? 3 : isPrimary ? 2 : 1;
 
   return (
     <motion.div
@@ -320,6 +318,16 @@ const PaperNode = memo(function PaperNode({
       initial={isRoot ? false : { opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
+      drag={!isRoot}
+      dragMomentum={false}
+      dragElastic={0.08}
+      onDragStart={handleDragStart}
+      onDrag={handleDrag}
+      onDragEnd={handleDragEnd}
+      whileDrag={{
+        scale: 1.01,
+        zIndex: 20,
+      }}
       transition={{ opacity: { duration: 0.22 }, layout: lt }}
       style={{
         flex: isRoot ? 1 : isPrimary ? 2 : 1,
@@ -327,10 +335,22 @@ const PaperNode = memo(function PaperNode({
         border: `1px solid ${borderColor}`,
         borderRadius: isRoot ? 16 : 14,
         boxShadow: shadow,
+        zIndex: nodeZIndex,
+        x: draggedPosition.x,
+        y: draggedPosition.y,
       }}
     >
+      {dragState.parentId === paperId && (
+        <div
+          ref={returnZoneRef}
+          data-parent-id={paperId}
+          className={`paper-node__return-zone ${isReturnArmed ? 'paper-node__return-zone--active' : ''}`}
+        >
+          Drop to return to parent
+        </div>
+      )}
       {shouldShowTopStrip && (
-        <ContextSiblings
+        <PaperTopStrip
           paperMap={state.paperMap}
           contextId={paperId}
           currentPathIds={childCrumbs}
@@ -338,46 +358,22 @@ const PaperNode = memo(function PaperNode({
           onChildClick={onContextChildClick}
         />
       )}
-      {isRoot ? (
-        <div
-          className="paper-node__header paper-node__header--root"
-          onMouseEnter={() => setIsHeaderHovered(true)}
-          onMouseLeave={(event) => {
-            setIsHeaderHovered(false);
-            handleHeaderMouseLeave(event);
-          }}
-        >
-          <div className="paper-node__title" style={{ color: '#1d1d27' }}>{paper.title}</div>
-          {isHeaderHovered && (
-            <div className="paper-node__body" style={{ color: 'rgba(29,29,39,0.56)' }}>{paper.description}</div>
-          )}
-        </div>
-      ) : (
-        <button
-          className={`paper-node__header ${isPrimary ? 'paper-node__header--primary' : 'paper-node__header--secondary'}`}
-          style={{ borderBottomColor: headerBorderColor }}
-          onClick={handleHeaderClick}
-          title={isPrimary ? 'Close' : 'Make primary'}
-          onMouseEnter={() => setIsHeaderHovered(true)}
-          onMouseLeave={(event) => {
-            setIsHeaderHovered(false);
-            handleHeaderMouseLeave(event);
-          }}
-          onFocus={() => setIsHeaderHovered(true)}
-          onBlur={() => setIsHeaderHovered(false)}
-        >
-          <Breadcrumb
-            paperMap={state.paperMap}
-            crumbs={crumbs}
-            paperId={paperId}
-            onCrumbClick={handleCrumbClick}
-            selectedContextId={selectedContextId}
-            onSelectContext={onSelectContext}
-            hue={hue}
-          />
-          {isHeaderHovered && <div className="paper-node__body" style={{ color: bodyColor }}>{paper.description}</div>}
-        </button>
-      )}
+      <PaperHeader
+        paper={paper}
+        paperMap={state.paperMap}
+        paperId={paperId}
+        crumbs={crumbs}
+        hue={hue}
+        isRoot={isRoot}
+        isPrimary={isPrimary}
+        isHovered={isHeaderHovered}
+        selectedContextId={selectedContextId}
+        onHeaderClick={handleHeaderClick}
+        onCrumbClick={handleCrumbClick}
+        onSelectContext={onSelectContext}
+        onHoverChange={setIsHeaderHovered}
+        onMouseLeaveDownward={handleHeaderMouseLeave}
+      />
 
       <div className="paper-node__content">
         <AnimatePresence initial={false}>
@@ -409,6 +405,10 @@ const PaperNode = memo(function PaperNode({
                   hue={childHue(childId)}
                   selectedContextId={selectedContextId}
                   onSelectContext={onSelectContext}
+                  dragState={dragState}
+                  onDragStateChange={onDragStateChange}
+                  placementMap={placementMap}
+                  onPlacementMapChange={onPlacementMapChange}
                 />
               ))}
             </AnimatePresence>
@@ -425,8 +425,7 @@ const PaperNode = memo(function PaperNode({
                   onClick={() => dispatch({ type: 'OPEN', parentId: paperId, childId })}
                 />
               ))}
-            </AnimatePresence>
-          </div>
+            </AnimatePresence>          </div>
         )}
         {paper.childIds.length === 0 && (
           <div className="paper-node__leaf" style={hue !== null ? { color: `hsl(${hue}, 30%, 60%)` } : {}}>— leaf —</div>
