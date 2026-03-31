@@ -26,6 +26,7 @@ interface Props {
     handleDrag: (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => void;
     handleDragEnd: (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => void;
   };
+  isDragCompact: boolean;
   dragSizeStyle: React.CSSProperties | null;
   isReturnArmed: boolean;
   selectedContextId: PaperId | null;
@@ -55,6 +56,7 @@ export default function PaperPassthroughNode({
   NodeComponent,
   nodeElementRef,
   dragHandlers,
+  isDragCompact,
   dragSizeStyle,
   isReturnArmed,
   selectedContextId,
@@ -77,7 +79,7 @@ export default function PaperPassthroughNode({
       animate={{ opacity: 1 }}
       exit={isRoot ? undefined : { opacity: 0 }}
       transition={{ opacity: { duration: 0.22 }, layout: lt }}
-      className="paper-node paper-node--passthrough"
+      className={`paper-node paper-node--passthrough ${isDragCompact ? 'paper-node--dragging' : ''}`}
       drag={!isRoot && !!onRequestFloat}
       dragMomentum={false}
       dragElastic={0.08}

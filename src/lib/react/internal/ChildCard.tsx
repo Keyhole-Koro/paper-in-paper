@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion';
-import { memo, useCallback, useRef } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import type { PanInfo } from 'framer-motion';
 import type { Paper, PaperId } from '../../core/types';
 import type { DragState, FloatMeta } from '../PaperCanvas';
 import { findReturnParentIdAtPoint } from './returnTarget';
+import { getScaledRect } from './paperNodeHelpers';
 
 interface Props {
   paper: Paper;
@@ -19,6 +20,7 @@ interface Props {
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
 const FLOAT_DRAG_THRESHOLD = 24;
+const CHILD_CARD_DRAG_SCALE = { width: 0.9, height: 0.9 } as const;
 
 export default memo(function ChildCard({
   paper,
@@ -35,6 +37,7 @@ export default memo(function ChildCard({
   const cardRef = useRef<HTMLButtonElement | null>(null);
   const dragStartRectRef = useRef<DOMRect | null>(null);
   const suppressClickRef = useRef(false);
+  const [isDragCompact, setIsDragCompact] = useState(false);
   const background = hue !== null ? `hsl(${hue}, 44%, 95%)` : '#f7f7fc';
   const borderColor = hue !== null ? `hsl(${hue}, 34%, 82%)` : '#e4e4ef';
   const titleColor = hue !== null ? `hsl(${hue}, 56%, 24%)` : '#111118';
@@ -48,7 +51,9 @@ export default memo(function ChildCard({
   const isDragging = dragState.paperId === paper.id;
 
   const handleDragStart = useCallback(() => {
-    dragStartRectRef.current = cardRef.current?.getBoundingClientRect() ?? null;
+    const originalRect = cardRef.current?.getBoundingClientRect() ?? null;
+    dragStartRectRef.current = originalRect ? getScaledRect(originalRect, CHILD_CARD_DRAG_SCALE) : null;
+    setIsDragCompact(true);
     onDragStateChange({
       paperId: paper.id,
       parentId,
@@ -88,6 +93,7 @@ export default memo(function ChildCard({
       }, 0);
     }
 
+    setIsDragCompact(false);
     onDragStateChange({ paperId: null, parentId: null, returnParentId: null, point: null });
   }, [dragState.paperId, dragState.returnParentId, onDragStateChange, onRequestFloat, paper.id, parentId, depth, crumbs, hue]);
 
@@ -95,7 +101,7 @@ export default memo(function ChildCard({
     <motion.button
       ref={cardRef}
       layoutId={paper.id}
-      className="child-card child-card--compact"
+      className={`child-card child-card--compact ${isDragCompact ? 'child-card--dragging' : ''}`}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}

@@ -78,6 +78,7 @@ const PaperNode = memo(function PaperNode({
   const {
     nodeElementRef,
     isReturnArmed,
+    isDragCompact,
     dragSizeStyle,
     handleDragStart,
     handleDrag,
@@ -140,6 +141,7 @@ const PaperNode = memo(function PaperNode({
         NodeComponent={PaperNode}
         nodeElementRef={nodeElementRef}
         dragHandlers={{ handleDragStart, handleDrag, handleDragEnd }}
+        isDragCompact={isDragCompact}
         dragSizeStyle={dragSizeStyle}
         isReturnArmed={isReturnArmed}
         selectedContextId={selectedContextId}
@@ -165,6 +167,7 @@ const PaperNode = memo(function PaperNode({
         'paper-node',
         isRoot ? 'paper-node--root' : '',
         isPrimary ? 'paper-node--primary' : 'paper-node--secondary',
+        isDragCompact ? 'paper-node--dragging' : '',
       ].join(' ')}
       initial={isRoot ? false : { opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}

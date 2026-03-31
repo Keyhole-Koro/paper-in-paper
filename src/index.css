@@ -51,6 +51,11 @@ body {
   pointer-events: auto;
 }
 
+.paper-floating-node > .paper-node {
+  width: 100%;
+  height: 100%;
+}
+
 /* =========================================================
    PaperNode — recursive paper container
    ========================================================= */
@@ -159,6 +164,18 @@ body {
   padding: 14px;
 }
 
+.paper-node--dragging.paper-node--primary {
+  padding: 15px;
+}
+
+.paper-node--dragging.paper-node--secondary {
+  padding: 11px;
+}
+
+.paper-node--dragging.paper-node--passthrough {
+  gap: 6px;
+}
+
 /* =========================================================
    PaperNode header
    ========================================================= */
@@ -173,6 +190,12 @@ body {
   margin-bottom: 14px;
   width: 100%;
   flex-shrink: 0;
+}
+
+.paper-node--dragging .paper-node__header {
+  gap: 4px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
 }
 
 .paper-node__header--root {
@@ -349,10 +372,19 @@ body {
   min-height: 0;
 }
 
+.paper-node--dragging .paper-node__content {
+  gap: 8px;
+}
+
 .paper-node__content-copy {
   font-size: 13px;
   line-height: 1.6;
   padding-bottom: 2px;
+}
+
+.paper-node--dragging .paper-node__content-copy {
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 /* Open children: side-by-side row */
@@ -399,6 +431,33 @@ body {
   overflow: visible;
   opacity: 0.72;
   transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+
+.child-card--dragging {
+  padding: 7px 10px;
+  min-width: 110px;
+  max-width: 148px;
+}
+
+.child-card--dragging .child-card__row {
+  gap: 6px;
+}
+
+.child-card--dragging .child-card__title {
+  font-size: 12px;
+}
+
+.child-card--dragging .child-card__preview {
+  margin-top: 6px;
+}
+
+.child-card--dragging .child-card__preview-title {
+  font-size: 12px;
+}
+
+.child-card--dragging .child-card__body,
+.child-card--dragging .child-card__hint {
+  font-size: 11px;
 }
 
 .child-card:hover {

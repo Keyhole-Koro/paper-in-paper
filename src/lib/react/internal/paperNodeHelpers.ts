@@ -104,3 +104,15 @@ export function getDragSizeStyle(
     flex: '0 0 auto',
   };
 }
+
+export function getScaledRect(
+  rect: DOMRect,
+  scale: { width: number; height: number },
+): DOMRect {
+  const width = rect.width * scale.width;
+  const height = rect.height * scale.height;
+  const left = rect.left + (rect.width - width) / 2;
+  const top = rect.top + (rect.height - height) / 2;
+
+  return new DOMRect(left, top, width, height);
+}

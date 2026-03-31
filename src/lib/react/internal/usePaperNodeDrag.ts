@@ -4,9 +4,10 @@ import type { PanInfo } from 'framer-motion';
 import type { PaperId } from '../../core/types';
 import type { DragState, FloatMeta } from '../PaperCanvas';
 import { findReturnParentIdAtPoint } from './returnTarget';
-import { getDragSizeStyle } from './paperNodeHelpers';
+import { getDragSizeStyle, getScaledRect } from './paperNodeHelpers';
 
 const FLOAT_DRAG_THRESHOLD = 24;
+const PAPER_NODE_DRAG_SCALE = { width: 0.9, height: 0.92 } as const;
 
 interface Params {
   paperId: PaperId;
@@ -23,6 +24,7 @@ interface Params {
 interface Result {
   nodeElementRef: React.RefObject<HTMLDivElement | null>;
   isReturnArmed: boolean;
+  isDragCompact: boolean;
   dragSizeStyle: CSSProperties | null;
   handleDragStart: () => void;
   handleDrag: (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => void;
@@ -43,6 +45,7 @@ export function usePaperNodeDrag({
   const nodeElementRef = useRef<HTMLDivElement | null>(null);
   const dragStartRectRef = useRef<DOMRect | null>(null);
   const [dragRect, setDragRect] = useState<{ width: number; height: number } | null>(null);
+  const [isDragCompact, setIsDragCompact] = useState(false);
 
   const handleDrag = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     onDragStateChange({
@@ -54,7 +57,9 @@ export function usePaperNodeDrag({
   }, [onDragStateChange, paperId, parentId]);
 
   const handleDragStart = useCallback(() => {
-    dragStartRectRef.current = nodeElementRef.current?.getBoundingClientRect() ?? null;
+    const originalRect = nodeElementRef.current?.getBoundingClientRect() ?? null;
+    dragStartRectRef.current = originalRect ? getScaledRect(originalRect, PAPER_NODE_DRAG_SCALE) : null;
+    setIsDragCompact(true);
     setDragRect(dragStartRectRef.current
       ? { width: dragStartRectRef.current.width, height: dragStartRectRef.current.height }
       : null);
@@ -83,6 +88,7 @@ export function usePaperNodeDrag({
       });
     }
 
+    setIsDragCompact(false);
     setDragRect(null);
     onDragStateChange({ paperId: null, parentId: null, returnParentId: null, point: null });
   }, [dragState.paperId, dragState.returnParentId, paperId, parentId, depth, crumbs, hue, isPrimary, onRequestFloat, onDragStateChange]);
@@ -90,6 +96,7 @@ export function usePaperNodeDrag({
   return {
     nodeElementRef,
     isReturnArmed: dragState.parentId === paperId && dragState.returnParentId === paperId,
+    isDragCompact,
     dragSizeStyle: getDragSizeStyle(dragState.paperId === paperId ? dragRect : null),
     handleDragStart,
     handleDrag,
