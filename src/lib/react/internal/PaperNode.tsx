@@ -153,17 +153,6 @@ interface Props {
   onSelectContext: (paperId: PaperId | null) => void;
 }
 
-function isDescendantOf(paperMap: PaperMap, paperId: PaperId, ancestorId: PaperId): boolean {
-  let current = paperMap.get(paperId)?.parentId ?? null;
-  while (current !== null) {
-    if (current === ancestorId) {
-      return true;
-    }
-    current = paperMap.get(current)?.parentId ?? null;
-  }
-  return false;
-}
-
 const PaperNode = memo(function PaperNode({
   paperId,
   parentId,
@@ -181,12 +170,9 @@ const PaperNode = memo(function PaperNode({
   const openChildIds = expansion?.openChildIds ?? EMPTY_IDS;
   const primaryChildId = expansion?.primaryChildId ?? null;
   const isRoot = parentId === null;
-
-  // Use Set for O(1) lookup instead of O(n) Array.includes
-  const openChildIdsSet = useMemo(() => new Set(openChildIds), [openChildIds]);
   const closedChildIds = useMemo(
-    () => paper.childIds.filter((id) => !openChildIdsSet.has(id)),
-    [paper.childIds, openChildIdsSet],
+    () => paper.childIds.filter((id) => !openChildIds.includes(id)),
+    [paper.childIds, openChildIds],
   );
 
   // Stable reference for [...crumbs, paperId] — doubles as activePath for context clicks
@@ -205,17 +191,6 @@ const PaperNode = memo(function PaperNode({
   const passthroughContextPathIds = useMemo(
     () => singleChildId !== null ? [...childCrumbs, singleChildId] : childCrumbs,
     [childCrumbs, singleChildId],
-  );
-  const closedSiblings = useMemo(
-    () => singleChildId !== null ? paper.childIds.filter((id) => id !== singleChildId) : EMPTY_IDS,
-    [paper.childIds, singleChildId],
-  );
-  const shouldHideDefaultStrip = useMemo(
-    () => singleChildId !== null &&
-      selectedContextId !== null &&
-      selectedContextId !== paperId &&
-      isDescendantOf(state.paperMap, selectedContextId, singleChildId),
-    [singleChildId, selectedContextId, paperId, state.paperMap],
   );
 
   const handleHeaderClick = useCallback(() => {
@@ -275,7 +250,7 @@ const PaperNode = memo(function PaperNode({
         className="paper-node paper-node--passthrough"
         style={{ flex: isRoot ? 1 : isPrimary ? 2 : 1 }}
       >
-        {selectedContextId === paperId ? (
+        {selectedContextId === paperId && (
           <ContextStrip
             paperMap={state.paperMap}
             contextId={paperId}
@@ -283,19 +258,6 @@ const PaperNode = memo(function PaperNode({
             getHue={childHue}
             onChildClick={onContextChildClick}
           />
-        ) : !shouldHideDefaultStrip && closedSiblings.length > 0 && (
-          <div className="paper-node__sibling-strip">
-            <AnimatePresence mode="popLayout" initial={false}>
-              {closedSiblings.map((childId) => (
-                <ChildCard
-                  key={childId}
-                  paper={state.paperMap.get(childId)!}
-                  hue={childHue(childId)}
-                  onClick={() => dispatch({ type: 'OPEN', parentId: paperId, childId })}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
         )}
         <PaperNode
           paperId={singleChildId}
@@ -375,9 +337,9 @@ const PaperNode = memo(function PaperNode({
             handleHeaderMouseLeave(event);
           }}
         >
-          <div className="paper-node__title" style={{ color: '#e8e8f4' }}>{paper.title}</div>
+          <div className="paper-node__title" style={{ color: '#1d1d27' }}>{paper.title}</div>
           {isHeaderHovered && (
-            <div className="paper-node__body" style={{ color: 'rgba(255,255,255,0.45)' }}>{paper.description}</div>
+            <div className="paper-node__body" style={{ color: 'rgba(29,29,39,0.56)' }}>{paper.description}</div>
           )}
         </div>
       ) : (
@@ -451,9 +413,8 @@ const PaperNode = memo(function PaperNode({
             </AnimatePresence>
           </div>
         )}
-
         {closedChildIds.length > 0 && (
-          <div className={`paper-node__closed-children ${openChildIds.length > 0 ? 'paper-node__closed-children--strip' : ''}`}>
+          <div className="paper-node__closed-children">
             <AnimatePresence mode="popLayout" initial={false}>
               {closedChildIds.map((childId) => (
                 <ChildCard

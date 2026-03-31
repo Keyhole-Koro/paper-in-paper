@@ -148,7 +148,7 @@ body {
 }
 
 .paper-node__breadcrumb-ancestor {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: #9999b8;
   white-space: nowrap;
@@ -179,7 +179,7 @@ body {
 }
 
 .paper-node__breadcrumb-current {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: #111118;
@@ -187,7 +187,7 @@ body {
 }
 
 .paper-node__header--secondary .paper-node__breadcrumb-current {
-  font-size: 13px;
+  font-size: 14px;
   color: #333344;
 }
 
@@ -274,24 +274,11 @@ body {
   min-height: 0;
 }
 
-/* Closed children: card grid at the bottom */
 .paper-node__closed-children {
-  flex: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-content: flex-start;
-  overflow: visible;
-}
-
-/* When open children exist, closed cards are a compact strip */
-.paper-node__closed-children--strip {
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: visible;
-  max-height: 80px;
-  padding-bottom: 4px;
 }
 
 .paper-node__leaf {
