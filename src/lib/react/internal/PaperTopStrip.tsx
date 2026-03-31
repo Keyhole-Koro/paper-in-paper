@@ -7,6 +7,7 @@ interface Props {
   currentPathIds: PaperId[];
   getHue: (paperId: PaperId) => number | null;
   onChildClick: (childId: PaperId) => void;
+  allowInteractions?: boolean;
 }
 
 export default memo(function PaperTopStrip({
@@ -15,6 +16,7 @@ export default memo(function PaperTopStrip({
   currentPathIds,
   getHue,
   onChildClick,
+  allowInteractions = true,
 }: Props) {
   const context = paperMap.get(contextId);
   if (!context || context.childIds.length === 0) {
@@ -45,11 +47,12 @@ export default memo(function PaperTopStrip({
             type="button"
             className={`paper-node__context-chip ${isActive ? 'paper-node__context-chip--active' : 'paper-node__context-chip--inactive'}`}
             style={{ color, background, borderColor }}
-            onClick={(event) => {
+            onClick={allowInteractions ? (event) => {
               event.stopPropagation();
               onChildClick(childId);
-            }}
+            } : undefined}
             title={child.title}
+            disabled={!allowInteractions}
           >
             <span className="paper-node__context-chip-title">{child.title}</span>
             {child.childIds.length > 0 && (

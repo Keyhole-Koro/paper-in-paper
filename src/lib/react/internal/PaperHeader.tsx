@@ -74,6 +74,7 @@ interface PaperHeaderProps {
   onHoverChange: (hovered: boolean) => void;
   onMouseLeaveDownward: (event: React.MouseEvent<HTMLElement>) => void;
   allowCrumbInteractions?: boolean;
+  allowHeaderInteractions?: boolean;
 }
 
 export default memo(function PaperHeader({
@@ -92,6 +93,7 @@ export default memo(function PaperHeader({
   onHoverChange,
   onMouseLeaveDownward,
   allowCrumbInteractions = true,
+  allowHeaderInteractions = true,
 }: PaperHeaderProps) {
   const bodyColor = hue !== null ? `hsl(${hue}, 25%, 42%)` : '#55556a';
   const headerBorderColor = hue !== null
@@ -112,6 +114,32 @@ export default memo(function PaperHeader({
         {isHovered && (
           <div className="paper-node__body" style={{ color: 'rgba(29,29,39,0.56)' }}>{paper.description}</div>
         )}
+      </div>
+    );
+  }
+
+  if (!allowHeaderInteractions) {
+    return (
+      <div
+        className={`paper-node__header ${isPrimary ? 'paper-node__header--primary' : 'paper-node__header--secondary'}`}
+        style={{ borderBottomColor: headerBorderColor }}
+        onMouseEnter={() => onHoverChange(true)}
+        onMouseLeave={(event) => {
+          onHoverChange(false);
+          onMouseLeaveDownward(event);
+        }}
+      >
+        <Breadcrumb
+          paperMap={paperMap}
+          crumbs={crumbs}
+          paperId={paperId}
+          onCrumbClick={onCrumbClick}
+          selectedContextId={selectedContextId}
+          onSelectContext={onSelectContext}
+          hue={hue}
+          allowCrumbInteractions={allowCrumbInteractions}
+        />
+        {isHovered && <div className="paper-node__body" style={{ color: bodyColor }}>{paper.description}</div>}
       </div>
     );
   }

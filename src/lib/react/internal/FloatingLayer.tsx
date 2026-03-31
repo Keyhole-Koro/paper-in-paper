@@ -4,7 +4,6 @@ import type { PanInfo } from 'framer-motion';
 import type { PaperId } from '../../core/types';
 import type { DragState, FloatingPlacement, PlacementMap } from '../PaperCanvas';
 import PaperNode from './PaperNode';
-import { useStore } from './store';
 import { findReturnParentIdAtPoint } from './returnTarget';
 
 interface Props {
@@ -42,7 +41,6 @@ function FloatingNode({
       paperId,
       parentId: placement.parentId,
       returnParentId: null,
-      dragRect: { width: placement.width, height: placement.height },
       point: null,
     });
   }, [onDragStateChange, paperId, placement.parentId]);
@@ -52,13 +50,12 @@ function FloatingNode({
       paperId,
       parentId: placement.parentId,
       returnParentId: findReturnParentIdAtPoint(info.point, placement.parentId),
-      dragRect: { width: placement.width, height: placement.height },
       point: { x: info.point.x, y: info.point.y },
     });
   }, [onDragStateChange, paperId, placement.height, placement.parentId, placement.width]);
 
   const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    onDragStateChange({ paperId: null, parentId: null, returnParentId: null, dragRect: null, point: null });
+    onDragStateChange({ paperId: null, parentId: null, returnParentId: null, point: null });
     onDragEnd(paperId, info, placement);
   }, [onDragEnd, onDragStateChange, paperId, placement]);
 
@@ -89,6 +86,7 @@ function FloatingNode({
       <PaperNode
         paperId={paperId}
         parentId={placement.parentId}
+        mode="floating-duplicate"
         isPrimary={placement.isPrimary}
         depth={placement.depth}
         crumbs={placement.crumbs}
@@ -100,6 +98,8 @@ function FloatingNode({
         placementMap={placementMap}
         onRequestFloat={undefined}
         allowCrumbInteractions={false}
+        allowHeaderInteractions={false}
+        allowContextInteractions={false}
       />
     </motion.div>
   );
@@ -113,19 +113,12 @@ export default function FloatingLayer({
   onDragStateChange,
   onPlacementMapChange,
 }: Props) {
-  const { dispatch } = useStore();
   const handleDragEnd = useCallback((paperId: PaperId, info: PanInfo, placement: FloatingPlacement) => {
     const returnParentId = dragState.paperId === paperId
       ? dragState.returnParentId ?? findReturnParentIdAtPoint(info.point, placement.parentId)
       : findReturnParentIdAtPoint(info.point, placement.parentId);
 
     if (returnParentId === placement.parentId) {
-      dispatch({
-        type: 'RESTORE_FLOAT_CHILD',
-        parentId: placement.parentId,
-        childId: paperId,
-        isPrimary: placement.isPrimary,
-      });
       onPlacementMapChange((prev) => {
         const next = new Map(prev);
         next.delete(paperId);
@@ -142,7 +135,7 @@ export default function FloatingLayer({
         return next;
       });
     }
-  }, [dispatch, dragState.paperId, dragState.returnParentId, onPlacementMapChange]);
+  }, [dragState.paperId, dragState.returnParentId, onPlacementMapChange]);
 
   return (
     <div className="paper-floating-layer">

@@ -11,7 +11,6 @@ export interface DragState {
   paperId: PaperId | null;
   parentId: PaperId | null;
   returnParentId: PaperId | null;
-  dragRect: { width: number; height: number } | null;
   point: { x: number; y: number } | null;
 }
 
@@ -52,7 +51,6 @@ export default function PaperCanvas({ paperMap, rootId }: Props) {
     paperId: null,
     parentId: null,
     returnParentId: null,
-    dragRect: null,
     point: null,
   });
   const [placementMap, setPlacementMap] = useState<PlacementMap>(new Map());
