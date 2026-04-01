@@ -1,73 +1,115 @@
-# React + TypeScript + Vite
+# @keyhole-koro/paper-in-paper
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React library for visualizing hierarchical paper trees with drag-and-drop and expandable nodes.
 
-Currently, two official plugins are available:
+## Installation
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install @keyhole-koro/paper-in-paper
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Basic Usage
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```tsx
+import { buildPaperMap, PaperCanvas } from '@keyhole-koro/paper-in-paper';
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+const papers = [
+  { id: 'root', title: 'Root', description: '', content: '', parentId: null, childIds: ['a', 'b'] },
+  { id: 'a',    title: 'A',    description: '', content: '', parentId: 'root', childIds: [] },
+  { id: 'b',    title: 'B',    description: '', content: '', parentId: 'root', childIds: [] },
+];
+
+const paperMap = buildPaperMap(papers);
+
+export default function App() {
+  return <PaperCanvas paperMap={paperMap} />;
+}
 ```
+
+## Data Structure
+
+### `Paper`
+
+Each node in the tree is a `Paper` object:
+
+```ts
+interface Paper {
+  id: PaperId;          // unique string identifier
+  title: string;
+  description: string;
+  content: string;
+  parentId: PaperId | null;  // null for the root node
+  childIds: PaperId[];
+}
+```
+
+The tree must have exactly one root node (`parentId: null`).
+
+### Building a `PaperMap`
+
+`PaperMap` is a `Map<PaperId, Paper>` used internally for O(1) lookups. Use `buildPaperMap` to create one from an array:
+
+```ts
+const paperMap = buildPaperMap(papers);
+```
+
+## API Reference
+
+### Components
+
+#### `PaperCanvas`
+
+Main canvas component that renders the paper tree.
+
+```tsx
+<PaperCanvas
+  paperMap={paperMap}   // required: Map<PaperId, Paper>
+  rootId="root"         // optional: explicit root node ID (auto-detected if omitted)
+/>
+```
+
+### Data Utilities
+
+#### `buildPaperMap(papers: Paper[]): PaperMap`
+
+Converts a `Paper[]` array into a `PaperMap`.
+
+#### `findRootId(paperMap: PaperMap): PaperId | null`
+
+Returns the ID of the root node (the node with `parentId: null`), or `null` if not found.
+
+### Expansion State
+
+For use cases where expansion state needs to be managed externally.
+
+#### Types
+
+```ts
+interface NodeExpansion {
+  openChildIds: PaperId[];      // currently expanded children
+  primaryChildId: PaperId | null; // the focused child
+}
+
+type ExpansionMap = Map<PaperId, NodeExpansion>;
+
+type ExpansionAction =
+  | { type: 'OPEN';        parentId: PaperId; childId: PaperId }
+  | { type: 'CLOSE';       parentId: PaperId; childId: PaperId }
+  | { type: 'SET_PRIMARY'; parentId: PaperId; childId: PaperId };
+```
+
+#### Functions
+
+```ts
+openNode(expansionMap, parentId, childId): ExpansionMap
+closeNode(expansionMap, paperMap, parentId, childId): ExpansionMap
+setPrimaryNode(expansionMap, parentId, childId): ExpansionMap
+expansionReducer(expansionMap, paperMap, action): ExpansionMap
+```
+
+## Peer Dependencies
+
+| Package | Version |
+|---|---|
+| `react` | >= 18 |
+| `framer-motion` | >= 11 |

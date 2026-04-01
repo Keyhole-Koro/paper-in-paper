@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback } from 'react';
 import type { PanInfo } from 'framer-motion';
 import type { PaperId } from '../../core/types';
-import type { DragState, FloatingPlacement, PlacementMap } from '../PaperCanvas';
+import type { DragState, FloatingPlacement, PlacementMap } from './internalTypes';
 import PaperNode from './PaperNode';
 import { findReturnParentIdAtPoint } from './returnTarget';
 

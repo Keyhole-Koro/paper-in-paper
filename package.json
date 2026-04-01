@@ -1,13 +1,36 @@
 {
-  "name": "vite-project",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@keyhole-koro/paper-in-paper",
+  "version": "0.1.0",
+  "private": false,
   "type": "module",
+  "description": "React library for hierarchical paper tree visualization with drag-and-drop",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -p tsconfig.lib.json && vite build",
+    "build:demo": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
+  },
+  "peerDependencies": {
+    "framer-motion": ">=11.0.0",
+    "react": ">=18.0.0"
   },
   "dependencies": {
     "framer-motion": "^12.38.0",

@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { PaperId, PaperMap } from '../../core/types';
-import type { PlacementMap } from '../PaperCanvas';
+import type { PlacementMap } from './internalTypes';
 
 const BRANCH_HUES = [210, 155, 35, 280, 10, 180, 320, 60];
 

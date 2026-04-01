@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { PanInfo } from 'framer-motion';
 import type { PaperId } from '../../core/types';
-import type { DragState, FloatMeta } from '../PaperCanvas';
+import type { DragState, FloatMeta } from './internalTypes';
 import { findReturnParentIdAtPoint } from './returnTarget';
 import { getDragSizeStyle, getScaledRect } from './paperNodeHelpers';
 

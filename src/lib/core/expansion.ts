@@ -2,7 +2,7 @@ import type { ExpansionMap, NodeExpansion, PaperId, PaperMap } from './types';
 
 export type ExpansionAction =
   | { type: 'OPEN'; parentId: PaperId; childId: PaperId }
-  | { type: 'CLOSE'; paperId: PaperId; parentId: PaperId }
+  | { type: 'CLOSE'; childId: PaperId; parentId: PaperId }
   | { type: 'SET_PRIMARY'; parentId: PaperId; childId: PaperId };
 
 export function openNode(
@@ -26,7 +26,7 @@ export function closeNode(
   expansionMap: ExpansionMap,
   paperMap: PaperMap,
   parentId: PaperId,
-  paperId: PaperId,
+  childId: PaperId,
 ): ExpansionMap {
   const next = new Map(expansionMap);
   const current = next.get(parentId);
@@ -35,12 +35,12 @@ export function closeNode(
     return expansionMap;
   }
 
-  const openChildIds = current.openChildIds.filter((id) => id !== paperId);
+  const openChildIds = current.openChildIds.filter((id) => id !== childId);
   const primaryChildId =
-    current.primaryChildId === paperId ? (openChildIds.at(-1) ?? null) : current.primaryChildId;
+    current.primaryChildId === childId ? (openChildIds.at(-1) ?? null) : current.primaryChildId;
 
   next.set(parentId, { openChildIds, primaryChildId });
-  clearSubtree(next, paperId, paperMap);
+  clearSubtree(next, childId, paperMap);
 
   return next;
 }
@@ -66,7 +66,7 @@ export function expansionReducer(
     case 'OPEN':
       return openNode(expansionMap, action.parentId, action.childId);
     case 'CLOSE':
-      return closeNode(expansionMap, paperMap, action.parentId, action.paperId);
+      return closeNode(expansionMap, paperMap, action.parentId, action.childId);
     case 'SET_PRIMARY':
       return setPrimaryNode(expansionMap, action.parentId, action.childId);
     default:

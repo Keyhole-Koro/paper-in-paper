@@ -26,7 +26,7 @@ export function usePaperNodeInteractions({
   const handleHeaderClick = useCallback(() => {
     if (isRoot) return;
     if (isPrimary) {
-      dispatch({ type: 'CLOSE', paperId, parentId: parentId! });
+      dispatch({ type: 'CLOSE', childId: paperId, parentId: parentId! });
       return;
     }
     dispatch({ type: 'SET_PRIMARY', parentId: parentId!, childId: paperId });
@@ -35,7 +35,7 @@ export function usePaperNodeInteractions({
   const handleCrumbClick = useCallback((idx: number) => {
     const toClose = idx + 1 < crumbs.length ? crumbs[idx + 1] : paperId;
     const fromParent = crumbs[idx];
-    dispatch({ type: 'CLOSE', paperId: toClose, parentId: fromParent });
+    dispatch({ type: 'CLOSE', childId: toClose, parentId: fromParent });
   }, [crumbs, paperId, dispatch]);
 
   const handleContextChildClick = useCallback((contextId: PaperId, childId: PaperId) => {
