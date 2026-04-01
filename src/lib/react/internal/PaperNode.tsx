@@ -27,6 +27,7 @@ const PaperNode = memo(function PaperNode({
   onDragStateChange,
   placementMap,
   onRequestFloat,
+  onCancelFloatPreview,
   onFocusFloating,
   allowCrumbInteractions = true,
   allowHeaderInteractions = true,
@@ -95,6 +96,7 @@ const PaperNode = memo(function PaperNode({
     dragState,
     onDragStateChange,
     onRequestFloat,
+    onCancelFloatPreview,
   });
   const dockedOpenChildIds = useMemo(
     () => getDockedOpenChildIds(openChildIds, placementMap),
@@ -157,6 +159,7 @@ const PaperNode = memo(function PaperNode({
         onDragStateChange={onDragStateChange}
         placementMap={placementMap}
         onRequestFloat={onRequestFloat}
+        onCancelFloatPreview={onCancelFloatPreview}
         onFocusFloating={onFocusFloating}
         allowCrumbInteractions={allowCrumbInteractions}
         allowHeaderInteractions={allowHeaderInteractions}
@@ -246,7 +249,10 @@ const PaperNode = memo(function PaperNode({
         allowHeaderInteractions={allowHeaderInteractions}
       />
 
-      <div className="paper-node__content">
+      <div
+        className="paper-node__content"
+        data-empty-insert-parent-id={dockedOpenChildIds.length === 0 ? paperId : undefined}
+      >
         <AnimatePresence initial={false}>
           {shouldShowContent && (
             <motion.div
@@ -278,6 +284,7 @@ const PaperNode = memo(function PaperNode({
           onDragStateChange={onDragStateChange}
           placementMap={placementMap}
           onRequestFloat={onRequestFloat}
+          onCancelFloatPreview={onCancelFloatPreview}
           onFocusFloating={onFocusFloating}
           allowCrumbInteractions={allowCrumbInteractions}
           allowHeaderInteractions={allowHeaderInteractions}

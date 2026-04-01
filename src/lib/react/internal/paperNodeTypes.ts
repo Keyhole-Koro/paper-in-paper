@@ -16,6 +16,7 @@ export interface PaperNodeProps {
   onDragStateChange: (state: DragState) => void;
   placementMap: PlacementMap;
   onRequestFloat?: (paperId: PaperId, info: PanInfo, meta: FloatMeta) => void;
+  onCancelFloatPreview?: (paperId: PaperId) => void;
   onFocusFloating?: (paperId: PaperId) => void;
   allowCrumbInteractions?: boolean;
   allowHeaderInteractions?: boolean;

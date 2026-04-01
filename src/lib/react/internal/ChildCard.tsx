@@ -17,6 +17,7 @@ interface Props {
   dragState: DragState;
   onDragStateChange: (state: DragState) => void;
   onRequestFloat?: (paperId: PaperId, info: PanInfo, meta: FloatMeta) => void;
+  onCancelFloatPreview?: (paperId: PaperId) => void;
   isFloating?: boolean;
 }
 
@@ -34,6 +35,7 @@ export default memo(function ChildCard({
   dragState,
   onDragStateChange,
   onRequestFloat,
+  onCancelFloatPreview,
   isFloating = false,
 }: Props) {
   const childCount = paper.childIds.length;
@@ -59,14 +61,32 @@ export default memo(function ChildCard({
     const originalRect = cardRef.current?.getBoundingClientRect() ?? null;
     dragStartRectRef.current = originalRect ? getScaledRect(originalRect, CHILD_CARD_DRAG_SCALE) : null;
     setIsDragCompact(true);
+    suppressClickRef.current = true;
     onDragStateChange({
       paperId: paper.id,
       parentId,
       insertTarget: null,
       point: null,
     });
+    if (onRequestFloat) {
+      onRequestFloat(paper.id, {
+        point: dragStartRectRef.current
+          ? { x: dragStartRectRef.current.left, y: dragStartRectRef.current.top }
+          : { x: 0, y: 0 },
+        delta: { x: 0, y: 0 },
+        offset: { x: 0, y: 0 },
+        velocity: { x: 0, y: 0 },
+      }, {
+        parentId,
+        depth,
+        crumbs,
+        hue,
+        isPrimary: false,
+        nodeStartRect: dragStartRectRef.current,
+      });
+    }
     debugLog('child-drag-start', { paperId: paper.id, parentId, depth });
-  }, [onDragStateChange, paper.id, parentId]);
+  }, [onDragStateChange, onRequestFloat, paper.id, parentId, depth, crumbs, hue]);
 
   const handleDrag = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     onDragStateChange({
@@ -75,12 +95,22 @@ export default memo(function ChildCard({
       insertTarget: null,
       point: { x: info.point.x, y: info.point.y },
     });
+    if (onRequestFloat) {
+      onRequestFloat(paper.id, info, {
+        parentId,
+        depth,
+        crumbs,
+        hue,
+        isPrimary: false,
+        nodeStartRect: dragStartRectRef.current,
+      });
+    }
     debugLog('child-drag-move', {
       paperId: paper.id,
       parentId,
       point: { x: info.point.x, y: info.point.y },
     });
-  }, [onDragStateChange, paper.id, parentId]);
+  }, [onDragStateChange, onRequestFloat, paper.id, parentId, depth, crumbs, hue]);
 
   const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const dragDistance = Math.hypot(info.offset.x, info.offset.y);
@@ -94,25 +124,17 @@ export default memo(function ChildCard({
       offset: { x: info.offset.x, y: info.offset.y },
     });
 
-    if (shouldFloat && onRequestFloat) {
-      suppressClickRef.current = true;
-      onRequestFloat(paper.id, info, {
-        parentId,
-        depth,
-        crumbs,
-        hue,
-        isPrimary: false,
-        nodeStartRect: dragStartRectRef.current,
-      });
-      window.setTimeout(() => {
-        suppressClickRef.current = false;
-      }, 0);
+    if (!shouldFloat) {
+      onCancelFloatPreview?.(paper.id);
     }
 
     setIsDragCompact(false);
     onDragStateChange({ paperId: null, parentId: null, insertTarget: null, point: null });
     cleanupStickyDrag();
-  }, [onDragStateChange, onRequestFloat, paper.id, parentId, depth, crumbs, hue, cleanupStickyDrag]);
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+  }, [onCancelFloatPreview, onDragStateChange, paper.id, parentId, cleanupStickyDrag]);
 
   return (
     <motion.button
@@ -146,6 +168,7 @@ export default memo(function ChildCard({
         background,
         borderColor,
         boxShadow: shadow,
+        opacity: isDragging && !isFloating ? 0 : undefined,
         ['--child-card-focus' as string]: focusColor,
         ['--child-card-preview-shadow' as string]: previewShadow,
         ['--child-card-preview-bg' as string]: previewBackground,

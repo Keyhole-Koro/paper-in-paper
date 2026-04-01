@@ -21,6 +21,7 @@ interface Params {
   dragState: DragState;
   onDragStateChange: (state: DragState) => void;
   onRequestFloat?: (paperId: PaperId, info: PanInfo, meta: FloatMeta) => void;
+  onCancelFloatPreview?: (paperId: PaperId) => void;
 }
 
 interface Result {
@@ -44,6 +45,7 @@ export function usePaperNodeDrag({
   dragState,
   onDragStateChange,
   onRequestFloat,
+  onCancelFloatPreview,
 }: Params): Result {
   const nodeElementRef = useRef<HTMLDivElement | null>(null);
   const dragStartRectRef = useRef<DOMRect | null>(null);
@@ -59,12 +61,22 @@ export function usePaperNodeDrag({
       insertTarget: null,
       point: { x: info.point.x, y: info.point.y },
     });
+    if (onRequestFloat && parentId !== null) {
+      onRequestFloat(paperId, info, {
+        parentId,
+        depth,
+        crumbs,
+        hue,
+        isPrimary,
+        nodeStartRect: dragStartRectRef.current,
+      });
+    }
     debugLog('dock-drag-move', {
       paperId,
       parentId,
       point: { x: info.point.x, y: info.point.y },
     });
-  }, [onDragStateChange, paperId, parentId]);
+  }, [onDragStateChange, onRequestFloat, paperId, parentId, depth, crumbs, hue, isPrimary]);
 
   const handleDragStart = useCallback(() => {
     const originalRect = nodeElementRef.current?.getBoundingClientRect() ?? null;
@@ -79,8 +91,25 @@ export function usePaperNodeDrag({
       insertTarget: null,
       point: null,
     });
+    if (onRequestFloat && parentId !== null) {
+      onRequestFloat(paperId, {
+        point: dragStartRectRef.current
+          ? { x: dragStartRectRef.current.left, y: dragStartRectRef.current.top }
+          : { x: 0, y: 0 },
+        delta: { x: 0, y: 0 },
+        offset: { x: 0, y: 0 },
+        velocity: { x: 0, y: 0 },
+      }, {
+        parentId,
+        depth,
+        crumbs,
+        hue,
+        isPrimary,
+        nodeStartRect: dragStartRectRef.current,
+      });
+    }
     debugLog('dock-drag-start', { paperId, parentId, depth, isPrimary });
-  }, [depth, isPrimary, onDragStateChange, paperId, parentId]);
+  }, [depth, isPrimary, onDragStateChange, onRequestFloat, paperId, parentId, crumbs, hue]);
 
   const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const dragDistance = Math.hypot(info.offset.x, info.offset.y);
@@ -103,13 +132,15 @@ export function usePaperNodeDrag({
         isPrimary,
         nodeStartRect: dragStartRectRef.current,
       });
+    } else {
+      onCancelFloatPreview?.(paperId);
     }
 
     setIsDragCompact(false);
     setDragRect(null);
     onDragStateChange({ paperId: null, parentId: null, insertTarget: null, point: null });
     cleanupStickyDrag();
-  }, [paperId, parentId, depth, crumbs, hue, isPrimary, onRequestFloat, onDragStateChange, cleanupStickyDrag]);
+  }, [paperId, parentId, depth, crumbs, hue, isPrimary, onRequestFloat, onCancelFloatPreview, onDragStateChange, cleanupStickyDrag]);
 
   return {
     nodeElementRef,

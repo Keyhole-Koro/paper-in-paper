@@ -154,8 +154,10 @@ export default function FloatingLayer({
     }
 
     return {
-      left: indicatorRect.left - layerRect.left - 4,
+      kind: indicatorRect.kind,
+      left: indicatorRect.left - layerRect.left - (indicatorRect.kind === 'gap' ? 4 : 0),
       top: indicatorRect.top - layerRect.top,
+      width: indicatorRect.width,
       height: indicatorRect.height,
     };
   }, [dragState.paperId, dragState.insertTarget, dragState.point]);
@@ -199,8 +201,13 @@ export default function FloatingLayer({
     <div className="paper-floating-layer" ref={layerRef}>
       {insertIndicatorStyle && (
         <div
-          className="paper-insert-indicator"
-          style={insertIndicatorStyle}
+          className={`paper-insert-indicator paper-insert-indicator--${insertIndicatorStyle.kind}`}
+          style={{
+            left: insertIndicatorStyle.left,
+            top: insertIndicatorStyle.top,
+            width: insertIndicatorStyle.kind === 'surface' ? insertIndicatorStyle.width : undefined,
+            height: insertIndicatorStyle.height,
+          }}
           aria-hidden="true"
         />
       )}

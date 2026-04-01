@@ -7,8 +7,10 @@ interface Point {
 }
 
 interface InsertIndicatorRect {
+  kind: 'gap' | 'surface';
   left: number;
   top: number;
+  width?: number;
   height: number;
 }
 
@@ -28,6 +30,7 @@ function distanceToVerticalGap(point: Point, x: number, rect: DOMRect): number {
 
 export function findInsertTargetAtPoint(point: Point): InsertTarget | null {
   const containers = document.querySelectorAll<HTMLElement>('[data-open-children-parent-id]');
+  const emptySurfaces = document.querySelectorAll<HTMLElement>('[data-empty-insert-parent-id]');
   let bestTarget: InsertTarget | null = null;
   let bestDistance = INSERT_SNAP_DISTANCE;
 
@@ -46,7 +49,7 @@ export function findInsertTargetAtPoint(point: Point): InsertTarget | null {
     const headDistance = distanceToVerticalGap(point, firstChild.getBoundingClientRect().left, containerRect);
     if (headDistance < bestDistance) {
       bestDistance = headDistance;
-      bestTarget = { parentId, insertBeforeId: firstChild.dataset.dockedPaperId ?? null };
+      bestTarget = { kind: 'gap', parentId, insertBeforeId: firstChild.dataset.dockedPaperId ?? null };
     }
 
     for (let idx = 0; idx < children.length - 1; idx += 1) {
@@ -57,14 +60,26 @@ export function findInsertTargetAtPoint(point: Point): InsertTarget | null {
       const distance = distanceToVerticalGap(point, gapX, containerRect);
       if (distance < bestDistance) {
         bestDistance = distance;
-        bestTarget = { parentId, insertBeforeId: next.dataset.dockedPaperId ?? null };
+        bestTarget = { kind: 'gap', parentId, insertBeforeId: next.dataset.dockedPaperId ?? null };
       }
     }
 
     const tailDistance = distanceToVerticalGap(point, lastChild.getBoundingClientRect().right, containerRect);
     if (tailDistance < bestDistance) {
       bestDistance = tailDistance;
-      bestTarget = { parentId, insertBeforeId: null };
+      bestTarget = { kind: 'gap', parentId, insertBeforeId: null };
+    }
+  }
+
+  for (const surface of emptySurfaces) {
+    const parentId = surface.dataset.emptyInsertParentId;
+    if (!parentId) continue;
+
+    const rect = surface.getBoundingClientRect();
+    const distance = distanceToRect(point, rect);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestTarget = { kind: 'surface', parentId, insertBeforeId: null };
     }
   }
 
@@ -72,6 +87,22 @@ export function findInsertTargetAtPoint(point: Point): InsertTarget | null {
 }
 
 export function findInsertIndicatorRect(target: InsertTarget): InsertIndicatorRect | null {
+  if (target.kind === 'surface') {
+    const surface = document.querySelector<HTMLElement>(`[data-empty-insert-parent-id="${target.parentId}"]`);
+    if (!surface) {
+      return null;
+    }
+
+    const rect = surface.getBoundingClientRect();
+    return {
+      kind: 'surface',
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+
   const container = document.querySelector<HTMLElement>(`[data-open-children-parent-id="${target.parentId}"]`);
   if (!container) {
     return null;
@@ -96,6 +127,7 @@ export function findInsertIndicatorRect(target: InsertTarget): InsertIndicatorRe
   }
 
   return {
+    kind: 'gap',
     left: x,
     top: containerRect.top,
     height: containerRect.height,

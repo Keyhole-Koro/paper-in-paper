@@ -124,11 +124,22 @@ body {
 
 .paper-insert-indicator {
   position: absolute;
+  pointer-events: none;
+}
+
+.paper-insert-indicator--gap {
   width: 8px;
   border-radius: 999px;
   background: rgba(100, 140, 255, 0.18);
   border: 2px solid rgba(100, 140, 255, 0.7);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+.paper-insert-indicator--surface {
+  border-radius: 12px;
+  background: rgba(100, 140, 255, 0.12);
+  border: 2px solid rgba(100, 140, 255, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65);
 }
 
 .paper-floating-node {

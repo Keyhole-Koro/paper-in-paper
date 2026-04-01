@@ -173,6 +173,17 @@ function PaperCanvasContent({ rootId }: ContentProps) {
     window.setTimeout(() => setFloatingHighlightId(null), 700);
   }, []);
 
+  const handleCancelFloatPreview = useCallback((paperId: PaperId) => {
+    setPlacementMap((prev) => {
+      if (!prev.has(paperId)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.delete(paperId);
+      return next;
+    });
+  }, []);
+
   const handleRequestFloat = useCallback((paperId: PaperId, info: PanInfo, meta: FloatMeta) => {
     const { nodeStartRect, ...placementMeta } = meta;
     const canvasRect = canvasRef.current?.getBoundingClientRect();
@@ -187,8 +198,13 @@ function PaperCanvasContent({ rootId }: ContentProps) {
       const existing = prev.get(paperId);
       let x: number, y: number, width: number, height: number;
       if (existing) {
-        x = existing.x + info.offset.x;
-        y = existing.y + info.offset.y;
+        if (nodeStartRect && canvasRect) {
+          x = nodeStartRect.left - canvasRect.left + info.offset.x;
+          y = nodeStartRect.top - canvasRect.top + info.offset.y;
+        } else {
+          x = existing.x + info.offset.x;
+          y = existing.y + info.offset.y;
+        }
         width = existing.width;
         height = existing.height;
       } else if (nodeStartRect && canvasRect) {
@@ -238,6 +254,7 @@ function PaperCanvasContent({ rootId }: ContentProps) {
           onDragStateChange={setDragState}
           placementMap={placementMap}
           onRequestFloat={handleRequestFloat}
+          onCancelFloatPreview={handleCancelFloatPreview}
           onFocusFloating={handleFocusFloating}
         />
       </div>

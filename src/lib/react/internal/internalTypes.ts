@@ -1,6 +1,7 @@
 import type { PaperId } from '../../core/types';
 
 export interface InsertTarget {
+  kind: 'gap' | 'surface';
   parentId: PaperId;
   insertBeforeId: PaperId | null;
 }

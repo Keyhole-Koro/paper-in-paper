@@ -19,6 +19,7 @@ interface Props {
   onDragStateChange: PaperNodeProps['onDragStateChange'];
   placementMap: PaperNodeProps['placementMap'];
   onRequestFloat: PaperNodeProps['onRequestFloat'];
+  onCancelFloatPreview?: PaperNodeProps['onCancelFloatPreview'];
   onFocusFloating: PaperNodeProps['onFocusFloating'];
   floatingChildren: Array<{ id: PaperId; paper: Paper; hue: number | null }>;
   allowCrumbInteractions: boolean;
@@ -45,6 +46,7 @@ export default function PaperNodeChildren({
   onDragStateChange,
   placementMap,
   onRequestFloat,
+  onCancelFloatPreview,
   onFocusFloating,
   allowCrumbInteractions,
   allowHeaderInteractions,
@@ -96,6 +98,7 @@ export default function PaperNodeChildren({
                 dragState={dragState}
                 onDragStateChange={onDragStateChange}
                 onRequestFloat={onRequestFloat}
+                onCancelFloatPreview={onCancelFloatPreview}
                 onClick={() => onOpenChild(id)}
               />
             ))}
@@ -116,6 +119,7 @@ export default function PaperNodeChildren({
                 dragState={dragState}
                 onDragStateChange={onDragStateChange}
                 onRequestFloat={onRequestFloat}
+                onCancelFloatPreview={onCancelFloatPreview}
                 isFloating={true}
                 onClick={() => onFocusFloating?.(id)}
               />
