@@ -21,15 +21,9 @@ export function StoreProvider({
   children: React.ReactNode;
   paperMap: PaperMap;
 }) {
-  const [expansionMap, dispatch] = useReducer(
-    (state: ExpansionMap, action: ExpansionAction) => expansionReducer(state, paperMap, action),
-    new Map(),
-  );
+  const [state, dispatch] = useReducer(expansionReducer, { paperMap, expansionMap: new Map() });
 
-  const value = useMemo(
-    () => ({ state: { paperMap, expansionMap }, dispatch }),
-    [paperMap, expansionMap, dispatch],
-  );
+  const value = useMemo(() => ({ state, dispatch }), [state, dispatch]);
 
   return (
     <StoreContext.Provider value={value}>

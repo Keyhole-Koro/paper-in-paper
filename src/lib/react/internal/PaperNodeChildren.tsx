@@ -56,7 +56,7 @@ export default function PaperNodeChildren({
   return (
     <>
       {dockedOpenChildIds.length > 0 && (
-        <div className="paper-node__open-children">
+        <div className="paper-node__open-children" data-open-children-parent-id={paperId}>
           <AnimatePresence mode="popLayout" initial={false}>
             {dockedOpenChildIds.map((childId) => (
               <NodeComponent

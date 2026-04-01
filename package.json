@@ -1,6 +1,6 @@
 {
   "name": "@keyhole-koro/paper-in-paper",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "description": "React library for hierarchical paper tree visualization with drag-and-drop",

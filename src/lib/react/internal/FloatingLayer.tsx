@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useCallback } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import type { PanInfo } from 'framer-motion';
 import type { PaperId } from '../../core/types';
 import type { DragState, FloatingPlacement, PlacementMap } from './internalTypes';
 import PaperNode from './PaperNode';
-import { findReturnParentIdAtPoint } from './returnTarget';
+import { findInsertIndicatorRect, findInsertTargetAtPoint } from './returnTarget';
+import { debugLog } from './debugLog';
 
 interface Props {
   placementMap: PlacementMap;
@@ -16,6 +17,7 @@ interface Props {
   onSelectContext: (paperId: PaperId | null) => void;
   onDragStateChange: (state: DragState) => void;
   onPlacementMapChange: (updater: PlacementMap | ((prev: PlacementMap) => PlacementMap)) => void;
+  onInsertDrop: (paperId: PaperId, parentId: PaperId, insertBeforeId: PaperId | null) => void;
 }
 
 interface FloatingNodeProps {
@@ -46,25 +48,33 @@ function FloatingNode({
   onDragEnd,
 }: FloatingNodeProps) {
   const handleDragStart = useCallback(() => {
+    debugLog('floating-drag-start', { paperId, parentId: placement.parentId });
     onDragStateChange({
       paperId,
       parentId: placement.parentId,
-      returnParentId: null,
+      insertTarget: null,
       point: null,
     });
   }, [onDragStateChange, paperId, placement.parentId]);
 
   const handleDrag = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    const insertTarget = findInsertTargetAtPoint(info.point);
     onDragStateChange({
       paperId,
       parentId: placement.parentId,
-      returnParentId: findReturnParentIdAtPoint(info.point, placement.parentId),
+      insertTarget,
       point: { x: info.point.x, y: info.point.y },
+    });
+    debugLog('floating-drag-move', {
+      paperId,
+      parentId: placement.parentId,
+      point: { x: info.point.x, y: info.point.y },
+      insertTarget,
     });
   }, [onDragStateChange, paperId, placement.height, placement.parentId, placement.width]);
 
   const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    onDragStateChange({ paperId: null, parentId: null, returnParentId: null, point: null });
+    onDragStateChange({ paperId: null, parentId: null, insertTarget: null, point: null });
     onDragEnd(paperId, info, placement);
   }, [onDragEnd, onDragStateChange, paperId, placement]);
 
@@ -129,33 +139,71 @@ export default function FloatingLayer({
   onSelectContext,
   onDragStateChange,
   onPlacementMapChange,
+  onInsertDrop,
 }: Props) {
-  const handleDragEnd = useCallback((paperId: PaperId, info: PanInfo, placement: FloatingPlacement) => {
-    const returnParentId = dragState.paperId === paperId
-      ? dragState.returnParentId ?? findReturnParentIdAtPoint(info.point, placement.parentId)
-      : findReturnParentIdAtPoint(info.point, placement.parentId);
-
-    if (returnParentId === placement.parentId) {
-      onPlacementMapChange((prev) => {
-        const next = new Map(prev);
-        next.delete(paperId);
-        return next;
-      });
-    } else {
-      onPlacementMapChange((prev) => {
-        const next = new Map(prev);
-        next.set(paperId, {
-          ...placement,
-          x: placement.x + info.offset.x,
-          y: placement.y + info.offset.y,
-        });
-        return next;
-      });
+  const layerRef = useRef<HTMLDivElement>(null);
+  const insertIndicatorStyle = useMemo(() => {
+    if (dragState.paperId === null || dragState.insertTarget === null) {
+      return null;
     }
-  }, [dragState.paperId, dragState.returnParentId, onPlacementMapChange]);
+
+    const indicatorRect = findInsertIndicatorRect(dragState.insertTarget);
+    const layerRect = layerRef.current?.getBoundingClientRect();
+    if (!indicatorRect || !layerRect) {
+      return null;
+    }
+
+    return {
+      left: indicatorRect.left - layerRect.left - 4,
+      top: indicatorRect.top - layerRect.top,
+      height: indicatorRect.height,
+    };
+  }, [dragState.paperId, dragState.insertTarget, dragState.point]);
+
+  const handleDragEnd = useCallback((paperId: PaperId, info: PanInfo, placement: FloatingPlacement) => {
+    const insertTarget = dragState.paperId === paperId ? dragState.insertTarget : null;
+    debugLog('floating-drag-end', {
+      paperId,
+      placementParentId: placement.parentId,
+      dragStatePaperId: dragState.paperId,
+      insertTarget,
+      offset: { x: info.offset.x, y: info.offset.y },
+    });
+    if (insertTarget) {
+      debugLog('floating-drop-insert', {
+        paperId,
+        parentId: insertTarget.parentId,
+        insertBeforeId: insertTarget.insertBeforeId,
+      });
+      onInsertDrop(paperId, insertTarget.parentId, insertTarget.insertBeforeId);
+      onPlacementMapChange((prev) => { const next = new Map(prev); next.delete(paperId); return next; });
+      return;
+    }
+
+    debugLog('floating-drop-stay-floating', {
+      paperId,
+      parentId: placement.parentId,
+    });
+    onPlacementMapChange((prev) => {
+      const next = new Map(prev);
+      next.set(paperId, {
+        ...placement,
+        x: placement.x + info.offset.x,
+        y: placement.y + info.offset.y,
+      });
+      return next;
+    });
+  }, [dragState.paperId, dragState.insertTarget, onPlacementMapChange, onInsertDrop]);
 
   return (
-    <div className="paper-floating-layer">
+    <div className="paper-floating-layer" ref={layerRef}>
+      {insertIndicatorStyle && (
+        <div
+          className="paper-insert-indicator"
+          style={insertIndicatorStyle}
+          aria-hidden="true"
+        />
+      )}
       <AnimatePresence>
         {[...placementMap.entries()].map(([paperId, placement]) => (
           <FloatingNode

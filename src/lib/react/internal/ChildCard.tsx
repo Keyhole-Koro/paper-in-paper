@@ -1,10 +1,11 @@
 import { motion } from 'framer-motion';
 import { memo, useCallback, useRef, useState } from 'react';
 import type { PanInfo } from 'framer-motion';
+import { useStickyDrag } from './useStickyDrag';
 import type { Paper, PaperId } from '../../core/types';
 import type { DragState, FloatMeta } from './internalTypes';
-import { findReturnParentIdAtPoint } from './returnTarget';
 import { getScaledRect } from './paperNodeHelpers';
+import { debugLog } from './debugLog';
 
 interface Props {
   paper: Paper;
@@ -40,6 +41,8 @@ export default memo(function ChildCard({
   const dragStartRectRef = useRef<DOMRect | null>(null);
   const suppressClickRef = useRef(false);
   const [isDragCompact, setIsDragCompact] = useState(false);
+  const isDraggable = !!onRequestFloat && !isFloating;
+  const { dragControls, stickyPointerDown, cleanupStickyDrag } = useStickyDrag(isDraggable);
   const background = hue !== null ? `hsl(${hue}, 44%, 95%)` : '#f7f7fc';
   const borderColor = hue !== null ? `hsl(${hue}, 34%, 82%)` : '#e4e4ef';
   const titleColor = hue !== null ? `hsl(${hue}, 56%, 24%)` : '#111118';
@@ -59,26 +62,37 @@ export default memo(function ChildCard({
     onDragStateChange({
       paperId: paper.id,
       parentId,
-      returnParentId: null,
+      insertTarget: null,
       point: null,
     });
+    debugLog('child-drag-start', { paperId: paper.id, parentId, depth });
   }, [onDragStateChange, paper.id, parentId]);
 
   const handleDrag = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     onDragStateChange({
       paperId: paper.id,
       parentId,
-      returnParentId: findReturnParentIdAtPoint(info.point, parentId),
+      insertTarget: null,
+      point: { x: info.point.x, y: info.point.y },
+    });
+    debugLog('child-drag-move', {
+      paperId: paper.id,
+      parentId,
       point: { x: info.point.x, y: info.point.y },
     });
   }, [onDragStateChange, paper.id, parentId]);
 
   const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const returnParentId = dragState.paperId === paper.id
-      ? dragState.returnParentId ?? findReturnParentIdAtPoint(info.point, parentId)
-      : findReturnParentIdAtPoint(info.point, parentId);
     const dragDistance = Math.hypot(info.offset.x, info.offset.y);
-    const shouldFloat = returnParentId !== parentId && dragDistance >= FLOAT_DRAG_THRESHOLD;
+    const shouldFloat = dragDistance >= FLOAT_DRAG_THRESHOLD;
+
+    debugLog('child-drag-end', {
+      paperId: paper.id,
+      parentId,
+      dragDistance,
+      shouldFloat,
+      offset: { x: info.offset.x, y: info.offset.y },
+    });
 
     if (shouldFloat && onRequestFloat) {
       suppressClickRef.current = true;
@@ -96,13 +110,14 @@ export default memo(function ChildCard({
     }
 
     setIsDragCompact(false);
-    onDragStateChange({ paperId: null, parentId: null, returnParentId: null, point: null });
-  }, [dragState.paperId, dragState.returnParentId, onDragStateChange, onRequestFloat, paper.id, parentId, depth, crumbs, hue]);
+    onDragStateChange({ paperId: null, parentId: null, insertTarget: null, point: null });
+    cleanupStickyDrag();
+  }, [onDragStateChange, onRequestFloat, paper.id, parentId, depth, crumbs, hue, cleanupStickyDrag]);
 
   return (
     <motion.button
       ref={cardRef}
-      layoutId={paper.id}
+      layoutId={isFloating ? undefined : paper.id}
       className={`child-card child-card--compact ${isDragCompact ? 'child-card--dragging' : ''} ${isFloating ? 'child-card--floating' : ''}`}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
@@ -113,9 +128,12 @@ export default memo(function ChildCard({
         }
         onClick();
       }}
-      drag={!!onRequestFloat}
+      drag={isDraggable}
+      dragListener={false}
+      dragControls={dragControls}
       dragMomentum={false}
       dragElastic={0.08}
+      onPointerDown={stickyPointerDown}
       onDragStart={handleDragStart}
       onDrag={handleDrag}
       onDragEnd={handleDragEnd}

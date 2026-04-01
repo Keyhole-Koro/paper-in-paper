@@ -122,6 +122,15 @@ body {
   overflow: visible;
 }
 
+.paper-insert-indicator {
+  position: absolute;
+  width: 8px;
+  border-radius: 999px;
+  background: rgba(100, 140, 255, 0.18);
+  border: 2px solid rgba(100, 140, 255, 0.7);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
 .paper-floating-node {
   position: absolute;
   pointer-events: auto;
@@ -191,33 +200,6 @@ body {
   gap: 8px;
   min-width: 0;
   min-height: 0;
-}
-
-.paper-node__return-zone {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  top: -14px;
-  padding: 6px 10px;
-  border: 1px dashed rgba(0, 0, 0, 0.14);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
-  color: rgba(29, 29, 39, 0.6);
-  font-size: 11px;
-  font-weight: 600;
-  text-align: center;
-  letter-spacing: 0.01em;
-  pointer-events: none;
-  z-index: 12;
-  transform: translateY(-4px);
-  transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.12s;
-}
-
-.paper-node__return-zone--active {
-  background: rgba(255, 244, 226, 0.98);
-  border-color: rgba(196, 127, 33, 0.42);
-  color: #8a5216;
-  transform: translateY(-8px);
 }
 
 .paper-node__sibling-strip {
@@ -350,6 +332,7 @@ body {
 }
 
 .paper-node__breadcrumb-ancestor {
+  display: inline-block;
   font-size: 12px;
   font-weight: 500;
   color: #9999b8;
@@ -359,11 +342,17 @@ body {
   max-width: 120px;
   cursor: pointer;
   border-radius: 3px;
-  transition: color 0.12s;
+  transform-origin: left center;
+  transition:
+    color 0.12s,
+    transform 0.12s ease,
+    font-weight 0.12s ease;
 }
 
 .paper-node__breadcrumb-ancestor:hover {
   color: #ccccee;
+  transform: scale(1.06);
+  font-weight: 600;
 }
 
 .paper-node__breadcrumb-ancestor--selected {
@@ -381,16 +370,26 @@ body {
 }
 
 .paper-node__breadcrumb-current {
+  display: inline-block;
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: #111118;
   line-height: 1.25;
+  transform-origin: left center;
+  transition:
+    transform 0.12s ease,
+    font-weight 0.12s ease;
 }
 
 .paper-node__header--secondary .paper-node__breadcrumb-current {
   font-size: 14px;
   color: #333344;
+}
+
+.paper-node__breadcrumb-current:hover {
+  transform: scale(1.04);
+  font-weight: 800;
 }
 
 .paper-node__breadcrumb-current--selected {

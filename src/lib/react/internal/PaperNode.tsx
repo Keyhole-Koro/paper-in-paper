@@ -78,9 +78,10 @@ const PaperNode = memo(function PaperNode({
   });
   const {
     nodeElementRef,
-    isReturnArmed,
     isDragCompact,
     dragSizeStyle,
+    dragControls,
+    stickyPointerDown,
     handleDragStart,
     handleDrag,
     handleDragEnd,
@@ -147,10 +148,9 @@ const PaperNode = memo(function PaperNode({
         onContextChildClick={onContextChildClick}
         NodeComponent={PaperNode}
         nodeElementRef={nodeElementRef}
-        dragHandlers={{ handleDragStart, handleDrag, handleDragEnd }}
+        dragHandlers={{ handleDragStart, handleDrag, handleDragEnd, dragControls, stickyPointerDown }}
         isDragCompact={isDragCompact}
         dragSizeStyle={dragSizeStyle}
-        isReturnArmed={isReturnArmed}
         selectedContextId={selectedContextId}
         onSelectContext={onSelectContext}
         dragState={dragState}
@@ -181,8 +181,11 @@ const PaperNode = memo(function PaperNode({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
       drag={!isRoot && !!onRequestFloat}
+      dragListener={false}
+      dragControls={dragControls}
       dragMomentum={false}
       dragElastic={0.08}
+      onPointerDown={stickyPointerDown}
       onDragStart={handleDragStart}
       onDrag={handleDrag}
       onDragEnd={handleDragEnd}
@@ -200,6 +203,7 @@ const PaperNode = memo(function PaperNode({
         zIndex: nodeZIndex,
         ...(dragSizeStyle ?? {}),
       }}
+      data-docked-paper-id={mode === 'docked' && !isRoot ? paperId : undefined}
     >
       {isDragging && (
         <div
@@ -212,14 +216,6 @@ const PaperNode = memo(function PaperNode({
             boxShadow: shadow === 'none' ? '0 18px 36px rgba(0,0,0,0.12)' : shadow,
           }}
         />
-      )}
-      {dragState.parentId === paperId && (
-        <div
-          data-return-parent-id={paperId}
-          className={`paper-node__return-zone ${isReturnArmed ? 'paper-node__return-zone--active' : ''}`}
-        >
-          Drop to return to parent
-        </div>
       )}
       {shouldShowTopStrip && (
         <PaperTopStrip

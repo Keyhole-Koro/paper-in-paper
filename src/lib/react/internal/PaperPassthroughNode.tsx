@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import type { ComponentType } from 'react';
-import type { PanInfo } from 'framer-motion';
+import type { DragControls, PanInfo } from 'framer-motion';
 import PaperTopStrip from './PaperTopStrip';
 import type { PaperId, PaperMap } from '../../core/types';
 import type { PaperNodeProps } from './paperNodeTypes';
@@ -25,10 +25,11 @@ interface Props {
     handleDragStart: () => void;
     handleDrag: (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => void;
     handleDragEnd: (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => void;
+    dragControls: DragControls;
+    stickyPointerDown: (e: React.PointerEvent) => void;
   };
   isDragCompact: boolean;
   dragSizeStyle: React.CSSProperties | null;
-  isReturnArmed: boolean;
   selectedContextId: PaperId | null;
   onSelectContext: (paperId: PaperId | null) => void;
   dragState: PaperNodeProps['dragState'];
@@ -59,7 +60,6 @@ export default function PaperPassthroughNode({
   dragHandlers,
   isDragCompact,
   dragSizeStyle,
-  isReturnArmed,
   selectedContextId,
   onSelectContext,
   dragState,
@@ -83,8 +83,11 @@ export default function PaperPassthroughNode({
       transition={{ opacity: { duration: 0.22 }, layout: lt }}
       className={`paper-node paper-node--passthrough ${isDragCompact ? 'paper-node--dragging' : ''}`}
       drag={!isRoot && !!onRequestFloat}
+      dragListener={false}
+      dragControls={dragHandlers.dragControls}
       dragMomentum={false}
       dragElastic={0.08}
+      onPointerDown={dragHandlers.stickyPointerDown}
       onDragStart={dragHandlers.handleDragStart}
       onDrag={dragHandlers.handleDrag}
       onDragEnd={dragHandlers.handleDragEnd}
@@ -93,6 +96,7 @@ export default function PaperPassthroughNode({
         flex: isRoot ? 1 : isPrimary ? 2 : 1,
         ...(dragSizeStyle ?? {}),
       }}
+      data-docked-paper-id={mode === 'docked' && !isRoot ? paperId : undefined}
     >
       {dragState.paperId === paperId && (
         <div
@@ -100,14 +104,6 @@ export default function PaperPassthroughNode({
           aria-hidden="true"
           style={{ borderRadius: 14 }}
         />
-      )}
-      {dragState.parentId === paperId && (
-        <div
-          data-return-parent-id={paperId}
-          className={`paper-node__return-zone ${isReturnArmed ? 'paper-node__return-zone--active' : ''}`}
-        >
-          Drop to return to parent
-        </div>
       )}
       {shouldShowTopStrip && (
         <PaperTopStrip

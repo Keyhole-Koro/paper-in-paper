@@ -8,6 +8,7 @@ import FloatingLayer from './internal/FloatingLayer';
 import Sidebar from './internal/Sidebar';
 import { StoreProvider, useStore } from './internal/store';
 import type { DragState, PlacementMap, FloatMeta, SidebarMap, SidebarPlacement } from './internal/internalTypes';
+import { debugLog } from './internal/debugLog';
 import {
   getAllOpenNodeIds,
   findParentOfOpen,
@@ -22,18 +23,17 @@ interface Props {
 }
 
 interface ContentProps {
-  paperMap: PaperMap;
   rootId: PaperId;
 }
 
-function PaperCanvasContent({ paperMap, rootId }: ContentProps) {
+function PaperCanvasContent({ rootId }: ContentProps) {
   const { state, dispatch } = useStore();
   const [selectedContextId, setSelectedContextId] = useState<PaperId | null>(null);
   const [floatingSelectedContextId, setFloatingSelectedContextId] = useState<PaperId | null>(null);
   const [dragState, setDragState] = useState<DragState>({
     paperId: null,
     parentId: null,
-    returnParentId: null,
+    insertTarget: null,
     point: null,
   });
   const [placementMap, setPlacementMap] = useState<PlacementMap>(new Map());
@@ -128,6 +128,7 @@ function PaperCanvasContent({ paperMap, rootId }: ContentProps) {
   }, [state.expansionMap, maxOpenNodes]); // lruOrderRef + placementMapRef accessed via refs
 
   const handleReturnFromSidebar = useCallback((paperId: PaperId) => {
+    debugLog('sidebar-return', { paperId });
     setSidebarMap((prev) => {
       const m = new Map(prev);
       m.delete(paperId);
@@ -160,6 +161,12 @@ function PaperCanvasContent({ paperMap, rootId }: ContentProps) {
     setLruOrder((prev) => [paperId, ...prev.filter((id) => id !== paperId)]);
   }, [sidebarMap, state.expansionMap, rootId, dispatch]);
 
+  const handleInsertDrop = useCallback((paperId: PaperId, parentId: PaperId, insertBeforeId: PaperId | null) => {
+    debugLog('insert-drop-dispatch', { paperId, parentId, insertBeforeId });
+    dispatch({ type: 'REORDER', parentId, childId: paperId, insertBeforeId });
+    dispatch({ type: 'OPEN', parentId, childId: paperId });
+  }, [dispatch]);
+
   const handleFocusFloating = useCallback((paperId: PaperId) => {
     setFloatingFocusId(paperId);
     setFloatingHighlightId(paperId);
@@ -169,6 +176,13 @@ function PaperCanvasContent({ paperMap, rootId }: ContentProps) {
   const handleRequestFloat = useCallback((paperId: PaperId, info: PanInfo, meta: FloatMeta) => {
     const { nodeStartRect, ...placementMeta } = meta;
     const canvasRect = canvasRef.current?.getBoundingClientRect();
+    debugLog('request-float', {
+      paperId,
+      parentId: meta.parentId,
+      offset: { x: info.offset.x, y: info.offset.y },
+      depth: meta.depth,
+      isPrimary: meta.isPrimary,
+    });
     setPlacementMap((prev) => {
       const existing = prev.get(paperId);
       let x: number, y: number, width: number, height: number;
@@ -190,6 +204,15 @@ function PaperCanvasContent({ paperMap, rootId }: ContentProps) {
       }
       const next = new Map(prev);
       next.set(paperId, { mode: 'floating', x, y, width, height, ...placementMeta });
+      debugLog('placement-map-set', {
+        paperId,
+        parentId: placementMeta.parentId,
+        x,
+        y,
+        width,
+        height,
+        size: next.size,
+      });
       return next;
     });
   }, []);
@@ -228,6 +251,7 @@ function PaperCanvasContent({ paperMap, rootId }: ContentProps) {
         onSelectContext={setFloatingSelectedContextId}
         onDragStateChange={setDragState}
         onPlacementMapChange={setPlacementMap}
+        onInsertDrop={handleInsertDrop}
       />
     </div>
   );
@@ -243,7 +267,7 @@ export default function PaperCanvas({ paperMap, rootId }: Props) {
   return (
     <StoreProvider paperMap={paperMap}>
       <LayoutGroup>
-        <PaperCanvasContent paperMap={paperMap} rootId={resolvedRootId} />
+        <PaperCanvasContent rootId={resolvedRootId} />
       </LayoutGroup>
     </StoreProvider>
   );

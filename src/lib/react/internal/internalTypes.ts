@@ -1,9 +1,14 @@
 import type { PaperId } from '../../core/types';
 
+export interface InsertTarget {
+  parentId: PaperId;
+  insertBeforeId: PaperId | null;
+}
+
 export interface DragState {
   paperId: PaperId | null;
   parentId: PaperId | null;
-  returnParentId: PaperId | null;
+  insertTarget: InsertTarget | null;
   point: { x: number; y: number } | null;
 }
 
