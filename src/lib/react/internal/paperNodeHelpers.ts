@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import type { PaperId, PaperMap } from '../../core/types';
+import type { PaperId, PaperMap, ExpansionMap } from '../../core/types';
 import type { PlacementMap } from './internalTypes';
 
 const BRANCH_HUES = [210, 155, 35, 280, 10, 180, 320, 60];
@@ -115,4 +115,39 @@ export function getScaledRect(
   const top = rect.top + (rect.height - height) / 2;
 
   return new DOMRect(left, top, width, height);
+}
+
+export function getAllOpenNodeIds(expansionMap: ExpansionMap): PaperId[] {
+  const ids = new Set<PaperId>();
+  for (const { openChildIds } of expansionMap.values()) {
+    for (const id of openChildIds) {
+      ids.add(id);
+    }
+  }
+  return [...ids];
+}
+
+export function findParentOfOpen(childId: PaperId, expansionMap: ExpansionMap): PaperId | null {
+  for (const [parentId, { openChildIds }] of expansionMap.entries()) {
+    if (openChildIds.includes(childId)) return parentId;
+  }
+  return null;
+}
+
+export function isNodeVisible(nodeId: PaperId, rootId: PaperId, expansionMap: ExpansionMap): boolean {
+  if (nodeId === rootId) return true;
+  for (const { openChildIds } of expansionMap.values()) {
+    if (openChildIds.includes(nodeId)) return true;
+  }
+  return false;
+}
+
+export function computeCrumbs(paperId: PaperId, paperMap: PaperMap): PaperId[] {
+  const chain: PaperId[] = [];
+  let current = paperMap.get(paperId)?.parentId ?? null;
+  while (current !== null && paperMap.get(current)?.parentId !== null) {
+    chain.unshift(current);
+    current = paperMap.get(current)?.parentId ?? null;
+  }
+  return chain;
 }
