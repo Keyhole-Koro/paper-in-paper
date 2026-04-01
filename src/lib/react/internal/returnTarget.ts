@@ -15,6 +15,10 @@ interface InsertIndicatorRect {
 }
 
 const INSERT_SNAP_DISTANCE = 80;
+const EMPTY_SURFACE_MIN_WIDTH = 160;
+const EMPTY_SURFACE_MAX_WIDTH = 280;
+const EMPTY_SURFACE_SIDE_PADDING = 24;
+const EMPTY_SURFACE_INSET_Y = 12;
 
 function distanceToRect(point: Point, rect: DOMRect): number {
   const dx = Math.max(rect.left - point.x, 0, point.x - rect.right);
@@ -26,6 +30,19 @@ function distanceToVerticalGap(point: Point, x: number, rect: DOMRect): number {
   const dx = Math.abs(point.x - x);
   const dy = Math.max(rect.top - point.y, 0, point.y - rect.bottom);
   return Math.hypot(dx, dy);
+}
+
+function getEmptySurfaceRect(rect: DOMRect): DOMRect {
+  const availableWidth = Math.max(0, rect.width - EMPTY_SURFACE_SIDE_PADDING * 2);
+  const width = Math.min(
+    EMPTY_SURFACE_MAX_WIDTH,
+    Math.max(EMPTY_SURFACE_MIN_WIDTH, availableWidth),
+  );
+  const clampedWidth = Math.min(width, availableWidth);
+  const height = Math.max(0, rect.height - EMPTY_SURFACE_INSET_Y * 2);
+  const left = rect.left + (rect.width - clampedWidth) / 2;
+
+  return new DOMRect(left, rect.top + EMPTY_SURFACE_INSET_Y, clampedWidth, height);
 }
 
 export function findInsertTargetAtPoint(point: Point): InsertTarget | null {
@@ -75,7 +92,8 @@ export function findInsertTargetAtPoint(point: Point): InsertTarget | null {
     const parentId = surface.dataset.emptyInsertParentId;
     if (!parentId) continue;
 
-    const rect = surface.getBoundingClientRect();
+    const rect = getEmptySurfaceRect(surface.getBoundingClientRect());
+    if (rect.width === 0 || rect.height === 0) continue;
     const distance = distanceToRect(point, rect);
     if (distance < bestDistance) {
       bestDistance = distance;
@@ -93,7 +111,10 @@ export function findInsertIndicatorRect(target: InsertTarget): InsertIndicatorRe
       return null;
     }
 
-    const rect = surface.getBoundingClientRect();
+    const rect = getEmptySurfaceRect(surface.getBoundingClientRect());
+    if (rect.width === 0 || rect.height === 0) {
+      return null;
+    }
     return {
       kind: 'surface',
       left: rect.left,

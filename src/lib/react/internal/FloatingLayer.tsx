@@ -163,12 +163,14 @@ export default function FloatingLayer({
   }, [dragState.paperId, dragState.insertTarget, dragState.point]);
 
   const handleDragEnd = useCallback((paperId: PaperId, info: PanInfo, placement: FloatingPlacement) => {
-    const insertTarget = dragState.paperId === paperId ? dragState.insertTarget : null;
+    const liveInsertTarget = findInsertTargetAtPoint(info.point);
+    const insertTarget = liveInsertTarget;
     debugLog('floating-drag-end', {
       paperId,
       placementParentId: placement.parentId,
       dragStatePaperId: dragState.paperId,
       insertTarget,
+      liveInsertTarget,
       offset: { x: info.offset.x, y: info.offset.y },
     });
     if (insertTarget) {
