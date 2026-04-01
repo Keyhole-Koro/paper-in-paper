@@ -40,6 +40,8 @@ function PaperCanvasContent({ paperMap, rootId }: ContentProps) {
   const [sidebarMap, setSidebarMap] = useState<SidebarMap>(new Map());
   const [lruOrder, setLruOrder] = useState<PaperId[]>([]);
   const [maxOpenNodes, setMaxOpenNodes] = useState<number>(8);
+  const [floatingFocusId, setFloatingFocusId] = useState<PaperId | null>(null);
+  const [floatingHighlightId, setFloatingHighlightId] = useState<PaperId | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const prevOpenIdsRef = useRef<Set<PaperId>>(new Set());
   const lruOrderRef = useRef<PaperId[]>([]);
@@ -158,6 +160,12 @@ function PaperCanvasContent({ paperMap, rootId }: ContentProps) {
     setLruOrder((prev) => [paperId, ...prev.filter((id) => id !== paperId)]);
   }, [sidebarMap, state.expansionMap, rootId, dispatch]);
 
+  const handleFocusFloating = useCallback((paperId: PaperId) => {
+    setFloatingFocusId(paperId);
+    setFloatingHighlightId(paperId);
+    window.setTimeout(() => setFloatingHighlightId(null), 700);
+  }, []);
+
   const handleRequestFloat = useCallback((paperId: PaperId, info: PanInfo, meta: FloatMeta) => {
     const { nodeStartRect, ...placementMeta } = meta;
     const canvasRect = canvasRef.current?.getBoundingClientRect();
@@ -207,11 +215,15 @@ function PaperCanvasContent({ paperMap, rootId }: ContentProps) {
           onDragStateChange={setDragState}
           placementMap={placementMap}
           onRequestFloat={handleRequestFloat}
+          onFocusFloating={handleFocusFloating}
         />
       </div>
       <FloatingLayer
         placementMap={placementMap}
         dragState={dragState}
+        focusId={floatingFocusId}
+        highlightId={floatingHighlightId}
+        onFocus={setFloatingFocusId}
         selectedContextId={floatingSelectedContextId}
         onSelectContext={setFloatingSelectedContextId}
         onDragStateChange={setDragState}

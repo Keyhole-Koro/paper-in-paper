@@ -27,6 +27,7 @@ const PaperNode = memo(function PaperNode({
   onDragStateChange,
   placementMap,
   onRequestFloat,
+  onFocusFloating,
   allowCrumbInteractions = true,
   allowHeaderInteractions = true,
   allowContextInteractions = true,
@@ -106,6 +107,12 @@ const PaperNode = memo(function PaperNode({
     })),
     [closedChildIds, state.paperMap, childHue],
   );
+  const floatingChildren = useMemo(
+    () => openChildIds
+      .filter((id) => placementMap.has(id))
+      .map((id) => ({ id, paper: state.paperMap.get(id)!, hue: childHue(id) })),
+    [openChildIds, placementMap, state.paperMap, childHue],
+  );
   const {
     background,
     borderColor,
@@ -150,6 +157,7 @@ const PaperNode = memo(function PaperNode({
         onDragStateChange={onDragStateChange}
         placementMap={placementMap}
         onRequestFloat={onRequestFloat}
+        onFocusFloating={onFocusFloating}
         allowCrumbInteractions={allowCrumbInteractions}
         allowHeaderInteractions={allowHeaderInteractions}
         allowContextInteractions={allowContextInteractions}
@@ -263,6 +271,7 @@ const PaperNode = memo(function PaperNode({
           primaryChildId={primaryChildId}
           dockedOpenChildIds={dockedOpenChildIds}
           closedChildren={closedChildren}
+          floatingChildren={floatingChildren}
           leafVisible={paper.childIds.length === 0}
           leafStyle={hue !== null ? { color: `hsl(${hue}, 30%, 60%)` } : {}}
           getHue={childHue}
@@ -273,6 +282,7 @@ const PaperNode = memo(function PaperNode({
           onDragStateChange={onDragStateChange}
           placementMap={placementMap}
           onRequestFloat={onRequestFloat}
+          onFocusFloating={onFocusFloating}
           allowCrumbInteractions={allowCrumbInteractions}
           allowHeaderInteractions={allowHeaderInteractions}
           allowContextInteractions={allowContextInteractions}

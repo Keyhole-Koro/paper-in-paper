@@ -35,6 +35,7 @@ interface Props {
   onDragStateChange: PaperNodeProps['onDragStateChange'];
   placementMap: PaperNodeProps['placementMap'];
   onRequestFloat: PaperNodeProps['onRequestFloat'];
+  onFocusFloating: PaperNodeProps['onFocusFloating'];
   allowCrumbInteractions: boolean;
   allowHeaderInteractions: boolean;
   allowContextInteractions: boolean;
@@ -65,6 +66,7 @@ export default function PaperPassthroughNode({
   onDragStateChange,
   placementMap,
   onRequestFloat,
+  onFocusFloating,
   allowCrumbInteractions,
   allowHeaderInteractions,
   allowContextInteractions,
@@ -131,6 +133,7 @@ export default function PaperPassthroughNode({
         onDragStateChange={onDragStateChange}
         placementMap={placementMap}
         onRequestFloat={onRequestFloat}
+        onFocusFloating={onFocusFloating}
         allowCrumbInteractions={allowCrumbInteractions}
         allowHeaderInteractions={allowHeaderInteractions}
         allowContextInteractions={allowContextInteractions}

@@ -16,6 +16,7 @@ interface Props {
   dragState: DragState;
   onDragStateChange: (state: DragState) => void;
   onRequestFloat?: (paperId: PaperId, info: PanInfo, meta: FloatMeta) => void;
+  isFloating?: boolean;
 }
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
@@ -32,6 +33,7 @@ export default memo(function ChildCard({
   dragState,
   onDragStateChange,
   onRequestFloat,
+  isFloating = false,
 }: Props) {
   const childCount = paper.childIds.length;
   const cardRef = useRef<HTMLButtonElement | null>(null);
@@ -101,7 +103,7 @@ export default memo(function ChildCard({
     <motion.button
       ref={cardRef}
       layoutId={paper.id}
-      className={`child-card child-card--compact ${isDragCompact ? 'child-card--dragging' : ''}`}
+      className={`child-card child-card--compact ${isDragCompact ? 'child-card--dragging' : ''} ${isFloating ? 'child-card--floating' : ''}`}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}

@@ -19,6 +19,8 @@ interface Props {
   onDragStateChange: PaperNodeProps['onDragStateChange'];
   placementMap: PaperNodeProps['placementMap'];
   onRequestFloat: PaperNodeProps['onRequestFloat'];
+  onFocusFloating: PaperNodeProps['onFocusFloating'];
+  floatingChildren: Array<{ id: PaperId; paper: Paper; hue: number | null }>;
   allowCrumbInteractions: boolean;
   allowHeaderInteractions: boolean;
   allowContextInteractions: boolean;
@@ -32,6 +34,7 @@ export default function PaperNodeChildren({
   primaryChildId,
   dockedOpenChildIds,
   closedChildren,
+  floatingChildren,
   leafVisible,
   leafStyle,
   getHue,
@@ -42,6 +45,7 @@ export default function PaperNodeChildren({
   onDragStateChange,
   placementMap,
   onRequestFloat,
+  onFocusFloating,
   allowCrumbInteractions,
   allowHeaderInteractions,
   allowContextInteractions,
@@ -93,6 +97,27 @@ export default function PaperNodeChildren({
                 onDragStateChange={onDragStateChange}
                 onRequestFloat={onRequestFloat}
                 onClick={() => onOpenChild(id)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+      {floatingChildren.length > 0 && (
+        <div className="paper-node__closed-children">
+          <AnimatePresence mode="popLayout" initial={false}>
+            {floatingChildren.map(({ id, paper, hue }) => (
+              <ChildCard
+                key={id}
+                paper={paper}
+                hue={hue}
+                parentId={paperId}
+                depth={depth + 1}
+                crumbs={[...crumbs, paperId]}
+                dragState={dragState}
+                onDragStateChange={onDragStateChange}
+                onRequestFloat={onRequestFloat}
+                isFloating={true}
+                onClick={() => onFocusFloating?.(id)}
               />
             ))}
           </AnimatePresence>

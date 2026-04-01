@@ -9,6 +9,9 @@ import { findReturnParentIdAtPoint } from './returnTarget';
 interface Props {
   placementMap: PlacementMap;
   dragState: DragState;
+  focusId: PaperId | null;
+  highlightId: PaperId | null;
+  onFocus: (paperId: PaperId | null) => void;
   selectedContextId: PaperId | null;
   onSelectContext: (paperId: PaperId | null) => void;
   onDragStateChange: (state: DragState) => void;
@@ -20,6 +23,9 @@ interface FloatingNodeProps {
   placement: FloatingPlacement;
   placementMap: PlacementMap;
   dragState: DragState;
+  isActive: boolean;
+  isHighlighted: boolean;
+  onPointerDown: (paperId: PaperId) => void;
   selectedContextId: PaperId | null;
   onSelectContext: (paperId: PaperId | null) => void;
   onDragStateChange: (state: DragState) => void;
@@ -31,6 +37,9 @@ function FloatingNode({
   placement,
   placementMap,
   dragState,
+  isActive,
+  isHighlighted,
+  onPointerDown,
   selectedContextId,
   onSelectContext,
   onDragStateChange,
@@ -60,6 +69,7 @@ function FloatingNode({
   }, [onDragEnd, onDragStateChange, paperId, placement]);
 
   const isDragging = dragState.paperId === paperId;
+  const zIndex = isDragging ? 100 : isActive ? 50 : 10;
 
   return (
     <motion.div
@@ -69,7 +79,7 @@ function FloatingNode({
         y: placement.y,
         width: placement.width,
         height: placement.height,
-        zIndex: isDragging ? 100 : 10,
+        zIndex,
       }}
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
@@ -78,11 +88,15 @@ function FloatingNode({
       drag
       dragMomentum={false}
       dragElastic={0.08}
+      onPointerDown={() => onPointerDown(paperId)}
       onDragStart={handleDragStart}
       onDrag={handleDrag}
       onDragEnd={handleDragEnd}
       whileDrag={{ scale: 1, zIndex: 100 }}
     >
+      {isHighlighted && (
+        <div className="paper-floating-node__highlight-ring" aria-hidden="true" />
+      )}
       <PaperNode
         paperId={paperId}
         parentId={placement.parentId}
@@ -108,6 +122,9 @@ function FloatingNode({
 export default function FloatingLayer({
   placementMap,
   dragState,
+  focusId,
+  highlightId,
+  onFocus,
   selectedContextId,
   onSelectContext,
   onDragStateChange,
@@ -147,6 +164,9 @@ export default function FloatingLayer({
             placement={placement}
             placementMap={placementMap}
             dragState={dragState}
+            isActive={focusId === paperId}
+            isHighlighted={highlightId === paperId}
+            onPointerDown={onFocus}
             selectedContextId={selectedContextId}
             onSelectContext={onSelectContext}
             onDragStateChange={onDragStateChange}
