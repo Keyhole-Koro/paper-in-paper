@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import type { ComponentType } from 'react';
 import type { DragControls, PanInfo } from 'framer-motion';
 import PaperTopStrip from './PaperTopStrip';
-import type { PaperId, PaperMap } from '../../core/types';
+import type { PaperId, PaperMap } from '../../../core/types';
 import type { PaperNodeProps } from './paperNodeTypes';
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;

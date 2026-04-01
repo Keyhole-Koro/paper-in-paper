@@ -1,5 +1,5 @@
-import type { PaperId } from '../../core/types';
-import type { InsertTarget } from './internalTypes';
+import type { PaperId } from '../../../core/types';
+import type { InsertTarget } from '../types';
 
 interface Point {
   x: number;

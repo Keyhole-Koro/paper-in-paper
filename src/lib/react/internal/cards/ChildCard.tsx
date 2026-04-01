@@ -1,11 +1,11 @@
 import { motion } from 'framer-motion';
 import { memo, useCallback, useRef, useState } from 'react';
 import type { PanInfo } from 'framer-motion';
-import { useStickyDrag } from './useStickyDrag';
-import type { Paper, PaperId } from '../../core/types';
-import type { DragState, FloatMeta } from './internalTypes';
-import { getScaledRect } from './paperNodeHelpers';
-import { debugLog } from './debugLog';
+import { useStickyDrag } from '../drag/useStickyDrag';
+import type { Paper, PaperId } from '../../../core/types';
+import type { DragState, FloatMeta } from '../types';
+import { getScaledRect } from '../node/paperNodeHelpers';
+import { debugLog } from '../drag/debugLog';
 
 interface Props {
   paper: Paper;

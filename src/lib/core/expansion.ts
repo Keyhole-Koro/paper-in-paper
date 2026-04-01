@@ -1,5 +1,5 @@
 import type { ExpansionMap, NodeExpansion, PaperId, PaperMap } from './types';
-import { debugLog } from '../react/internal/debugLog';
+import { debugLog } from '../react/internal/drag/debugLog';
 
 export type ExpansionAction =
   | { type: 'OPEN'; parentId: PaperId; childId: PaperId }

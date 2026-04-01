@@ -1,9 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useMemo, useRef } from 'react';
 import type { PanInfo } from 'framer-motion';
-import type { PaperId } from '../../core/types';
-import type { DragState, FloatingPlacement, PlacementMap } from './internalTypes';
-import PaperNode from './PaperNode';
+import type { PaperId } from '../../../core/types';
+import type { DragState, FloatingPlacement, PlacementMap } from '../types';
+import PaperNode from '../node/PaperNode';
 import { findInsertIndicatorRect, findInsertTargetAtPoint } from './returnTarget';
 import { debugLog } from './debugLog';
 

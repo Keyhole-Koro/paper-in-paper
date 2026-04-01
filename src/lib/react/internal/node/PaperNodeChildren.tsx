@@ -1,7 +1,7 @@
 import { AnimatePresence } from 'framer-motion';
 import type { ComponentType } from 'react';
-import ChildCard from './ChildCard';
-import type { Paper, PaperId } from '../../core/types';
+import ChildCard from '../cards/ChildCard';
+import type { Paper, PaperId } from '../../../core/types';
 import type { PaperNodeProps } from './paperNodeTypes';
 
 interface Props {

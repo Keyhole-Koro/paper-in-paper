@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import type { PaperId, PaperMap } from '../../core/types';
-import type { SidebarMap, SidebarPlacement } from './internalTypes';
+import type { PaperId, PaperMap } from '../../../core/types';
+import type { SidebarMap, SidebarPlacement } from '../types';
 
 interface SidebarCardProps {
   paperId: PaperId;

@@ -1,6 +1,6 @@
 import type { PanInfo } from 'framer-motion';
-import type { PaperId } from '../../core/types';
-import type { DragState, FloatMeta, PlacementMap } from './internalTypes';
+import type { PaperId } from '../../../core/types';
+import type { DragState, FloatMeta, PlacementMap } from '../types';
 
 export interface PaperNodeProps {
   paperId: PaperId;

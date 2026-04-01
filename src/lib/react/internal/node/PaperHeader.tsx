@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { Paper, PaperId, PaperMap } from '../../core/types';
+import type { Paper, PaperId, PaperMap } from '../../../core/types';
 
 interface BreadcrumbProps {
   paperMap: PaperMap;

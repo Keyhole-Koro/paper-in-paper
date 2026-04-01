@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { PaperId, PaperMap } from '../../core/types';
+import type { PaperId, PaperMap } from '../../../core/types';
 
 interface Props {
   paperMap: PaperMap;

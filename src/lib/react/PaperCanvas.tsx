@@ -3,19 +3,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PanInfo } from 'framer-motion';
 import type { PaperId, PaperMap } from '../core/types';
 import { findRootId } from '../core/tree';
-import PaperNode from './internal/PaperNode';
-import FloatingLayer from './internal/FloatingLayer';
-import Sidebar from './internal/Sidebar';
-import { StoreProvider, useStore } from './internal/store';
-import type { DragState, PlacementMap, FloatMeta, SidebarMap, SidebarPlacement } from './internal/internalTypes';
-import { debugLog } from './internal/debugLog';
+import PaperNode from './internal/node/PaperNode';
+import FloatingLayer from './internal/drag/FloatingLayer';
+import Sidebar from './internal/sidebar/Sidebar';
+import { StoreProvider, useStore } from './internal/state/store';
+import type { DragState, PlacementMap, FloatMeta, SidebarMap, SidebarPlacement } from './internal/types';
+import { debugLog } from './internal/drag/debugLog';
 import {
   getAllOpenNodeIds,
   findParentOfOpen,
   isNodeVisible,
   computeCrumbs,
   getBranchHue,
-} from './internal/paperNodeHelpers';
+} from './internal/node/paperNodeHelpers';
 
 interface Props {
   paperMap: PaperMap;

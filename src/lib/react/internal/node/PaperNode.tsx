@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useCallback, useMemo, useState } from 'react';
-import type { PaperId } from '../../core/types';
-import { useStore } from './store';
+import type { PaperId } from '../../../core/types';
+import { useStore } from '../state/store';
 import PaperHeader from './PaperHeader';
 import PaperTopStrip from './PaperTopStrip';
 import type { PaperNodeProps } from './paperNodeTypes';

@@ -1,12 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { PanInfo } from 'framer-motion';
-import type { PaperId } from '../../core/types';
-import type { DragState, FloatMeta } from './internalTypes';
+import type { PaperId } from '../../../core/types';
+import type { DragState, FloatMeta } from '../types';
 import { getDragSizeStyle, getScaledRect } from './paperNodeHelpers';
-import { useStickyDrag } from './useStickyDrag';
+import { useStickyDrag } from '../drag/useStickyDrag';
 import type { DragControls } from 'framer-motion';
-import { debugLog } from './debugLog';
+import { debugLog } from '../drag/debugLog';
 
 const FLOAT_DRAG_THRESHOLD = 24;
 const PAPER_NODE_DRAG_SCALE = { width: 0.9, height: 0.92 } as const;
