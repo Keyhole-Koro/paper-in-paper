@@ -1,9 +1,10 @@
 import { AnimatePresence } from 'framer-motion';
-import { useEffect, useRef, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
 import type { PaperId } from '../../../../core/types';
 import { useLayout } from '../../layout/LayoutContext';
+import { useStore } from '../../state/store';
 import type { PaperNodeProps } from '../utils/paperNodeTypes';
-import { computeGridMetrics, computeRowSpan, SIZE_SPANS } from '../utils/layoutHelpers';
+import { computeGridMetrics, computeOpenNodeSpan, computeRowSpan, SIZE_SPANS } from '../utils/layoutHelpers';
 
 interface Props {
   paperId: PaperId;
@@ -67,7 +68,8 @@ export default function PaperNodeChildren({
   depth,
   crumbs,
 }: Props) {
-  const { getSize } = useLayout();
+  const { state } = useStore();
+  const { getSize, getNodeState } = useLayout();
   const { containerRef: openChildrenRef, gridMetrics: openGridMetrics } = useMeasuredGridMetrics(openChildIds.length > 0);
   const { containerRef: closedChildrenRef, gridMetrics: closedGridMetrics } = useMeasuredGridMetrics(closedChildIds.length > 0);
   const [childRowSpanMap, setChildRowSpanMap] = useState<Map<PaperId, number>>(new Map());
@@ -75,6 +77,18 @@ export default function PaperNodeChildren({
   const gridLineX = `hsla(${gridHue}, 88%, 50%, 0.36)`;
   const gridLineY = `hsla(${gridHue}, 82%, 46%, 0.28)`;
   const gridOutline = `hsla(${gridHue}, 80%, 42%, 0.65)`;
+
+  const getDescendantOpenCount = useCallback((nodeId: PaperId): number => {
+    const node = state.paperMap.get(nodeId);
+    if (!node) return 0;
+
+    const nodeState = getNodeState(nodeId);
+    let total = nodeState.openChildIds.length;
+    for (const childId of nodeState.openChildIds) {
+      total += getDescendantOpenCount(childId);
+    }
+    return total;
+  }, [state.paperMap, getNodeState]);
 
   return (
     <>
@@ -98,7 +112,13 @@ export default function PaperNodeChildren({
               (() => {
                 const size = getSize(childId);
                 const baseSpan = SIZE_SPANS[size];
-                const rowSpan = childRowSpanMap.get(childId) ?? baseSpan.row;
+                const smartBaseSpan = computeOpenNodeSpan({
+                  base: baseSpan,
+                  gridColumns: openGridMetrics.columns,
+                  openSiblingCount: openChildIds.length,
+                  descendantOpenCount: getDescendantOpenCount(childId),
+                });
+                const rowSpan = Math.max(childRowSpanMap.get(childId) ?? smartBaseSpan.row, smartBaseSpan.row);
 
                 return (
               <NodeComponent
@@ -110,10 +130,10 @@ export default function PaperNodeChildren({
                 depth={depth + 1}
                 crumbs={[...crumbs, paperId]}
                 hue={getHue(childId)}
-                gridColumnSpan={baseSpan.col}
+                gridColumnSpan={smartBaseSpan.col}
                 gridRowSpan={rowSpan}
                 onMeasuredHeight={(id, height) => {
-                  const nextRowSpan = computeRowSpan(height, openGridMetrics.rowHeight, baseSpan.row);
+                  const nextRowSpan = computeRowSpan(height, openGridMetrics.rowHeight, smartBaseSpan.row);
                   setChildRowSpanMap((prev) => {
                     if (prev.get(id) === nextRowSpan) return prev;
                     const next = new Map(prev);

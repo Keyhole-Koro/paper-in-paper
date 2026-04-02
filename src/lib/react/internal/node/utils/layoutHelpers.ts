@@ -38,6 +38,28 @@ export function computeRowSpan(
   return Math.max(minRows, Math.ceil((heightPx + gapPx) / (rowHeightPx + gapPx)));
 }
 
+export function computeOpenNodeSpan(params: {
+  base: { col: number; row: number };
+  gridColumns: number;
+  openSiblingCount: number;
+  descendantOpenCount: number;
+}): { col: number; row: number } {
+  const { base, gridColumns, openSiblingCount, descendantOpenCount } = params;
+  const pressure = Math.min(3, descendantOpenCount);
+
+  if (openSiblingCount <= 1) {
+    return {
+      col: Math.max(1, gridColumns),
+      row: Math.max(base.row + pressure + 1, 4),
+    };
+  }
+
+  return {
+    col: Math.min(gridColumns, base.col + Math.min(2, pressure)),
+    row: base.row + pressure,
+  };
+}
+
 /**
  * Assigns a NodeSize to each open node based on recency of access.
  * Locked sizes (user-set) are preserved and excluded from auto-assignment.
