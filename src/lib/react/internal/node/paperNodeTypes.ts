@@ -4,6 +4,7 @@ import type { DragState } from '../types';
 export interface PaperNodeProps {
   paperId: PaperId;
   parentId: PaperId | null;
+  nodeState: 'closed' | 'open';
   isPrimary: boolean;
   depth: number;
   crumbs: PaperId[];

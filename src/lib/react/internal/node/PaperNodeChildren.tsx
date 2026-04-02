@@ -1,14 +1,13 @@
 import { AnimatePresence } from 'framer-motion';
 import type { ComponentType } from 'react';
-import ChildCard from '../cards/ChildCard';
-import type { Paper, PaperId } from '../../../core/types';
+import type { PaperId } from '../../../core/types';
 import type { PaperNodeProps } from './paperNodeTypes';
 
 interface Props {
   paperId: PaperId;
   primaryChildId: PaperId | null;
   openChildIds: PaperId[];
-  closedChildren: Array<{ id: PaperId; paper: Paper; hue: number | null }>;
+  closedChildIds: PaperId[];
   leafVisible: boolean;
   leafStyle: React.CSSProperties;
   getHue: (paperId: PaperId) => number | null;
@@ -20,14 +19,13 @@ interface Props {
   allowHeaderInteractions: boolean;
   depth: number;
   crumbs: PaperId[];
-  onOpenChild: (childId: PaperId) => void;
 }
 
 export default function PaperNodeChildren({
   paperId,
   primaryChildId,
   openChildIds,
-  closedChildren,
+  closedChildIds,
   leafVisible,
   leafStyle,
   getHue,
@@ -39,7 +37,6 @@ export default function PaperNodeChildren({
   allowHeaderInteractions,
   depth,
   crumbs,
-  onOpenChild,
 }: Props) {
   return (
     <>
@@ -51,6 +48,7 @@ export default function PaperNodeChildren({
                 key={childId}
                 paperId={childId}
                 parentId={paperId}
+                nodeState="open"
                 isPrimary={childId === primaryChildId}
                 depth={depth + 1}
                 crumbs={[]}
@@ -65,21 +63,24 @@ export default function PaperNodeChildren({
           </AnimatePresence>
         </div>
       )}
-      {closedChildren.length > 0 && (
+      {closedChildIds.length > 0 && (
         <div className="paper-node__closed-children">
           <AnimatePresence mode="popLayout" initial={false}>
-            {closedChildren.map(({ id, paper, hue }) => (
-              <ChildCard
-                key={id}
-                paper={paper}
-                hue={hue}
+            {closedChildIds.map((childId) => (
+              <NodeComponent
+                key={childId}
+                paperId={childId}
                 parentId={paperId}
+                nodeState="closed"
+                isPrimary={false}
                 depth={depth + 1}
                 crumbs={[...crumbs, paperId]}
+                hue={getHue(childId)}
                 dragState={dragState}
                 onDragStateChange={onDragStateChange}
                 onInsertDrop={onInsertDrop}
-                onClick={() => onOpenChild(id)}
+                allowCrumbInteractions={allowCrumbInteractions}
+                allowHeaderInteractions={allowHeaderInteractions}
               />
             ))}
           </AnimatePresence>

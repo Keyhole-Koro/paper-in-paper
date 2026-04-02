@@ -34,7 +34,6 @@ export function getNodeVisualState({
   openChildIds,
   hasContent,
   isHeaderHovered,
-  shouldShowTopStrip,
 }: {
   isRoot: boolean;
   hue: number | null;
@@ -111,6 +110,7 @@ export function getScaledRect(
   return new DOMRect(left, top, width, height);
 }
 
+// ExpansionMap helpers — kept for potential future use
 export function getAllOpenNodeIds(expansionMap: ExpansionMap): PaperId[] {
   const ids = new Set<PaperId>();
   for (const { openChildIds } of expansionMap.values()) {
@@ -119,29 +119,4 @@ export function getAllOpenNodeIds(expansionMap: ExpansionMap): PaperId[] {
     }
   }
   return [...ids];
-}
-
-export function findParentOfOpen(childId: PaperId, expansionMap: ExpansionMap): PaperId | null {
-  for (const [parentId, { openChildIds }] of expansionMap.entries()) {
-    if (openChildIds.includes(childId)) return parentId;
-  }
-  return null;
-}
-
-export function isNodeVisible(nodeId: PaperId, rootId: PaperId, expansionMap: ExpansionMap): boolean {
-  if (nodeId === rootId) return true;
-  for (const { openChildIds } of expansionMap.values()) {
-    if (openChildIds.includes(nodeId)) return true;
-  }
-  return false;
-}
-
-export function computeCrumbs(paperId: PaperId, paperMap: PaperMap): PaperId[] {
-  const chain: PaperId[] = [];
-  let current = paperMap.get(paperId)?.parentId ?? null;
-  while (current !== null && paperMap.get(current)?.parentId !== null) {
-    chain.unshift(current);
-    current = paperMap.get(current)?.parentId ?? null;
-  }
-  return chain;
 }

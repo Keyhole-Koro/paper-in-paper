@@ -17,10 +17,12 @@ interface Params {
   dragState: DragState;
   onDragStateChange: (state: DragState) => void;
   onInsertDrop: (paperId: PaperId, parentId: PaperId, insertBeforeId: PaperId | null) => void;
+  onDragStarted?: () => void;
+  onDragEnded?: () => void;
 }
 
 interface Result {
-  nodeElementRef: React.RefObject<HTMLDivElement | null>;
+  nodeElementRef: React.RefObject<HTMLElement | null>;
   isDragCompact: boolean;
   dragSizeStyle: CSSProperties | null;
   dragControls: DragControls;
@@ -36,8 +38,10 @@ export function usePaperNodeDrag({
   dragState,
   onDragStateChange,
   onInsertDrop,
+  onDragStarted,
+  onDragEnded,
 }: Params): Result {
-  const nodeElementRef = useRef<HTMLDivElement | null>(null);
+  const nodeElementRef = useRef<HTMLElement | null>(null);
   const dragStartRectRef = useRef<DOMRect | null>(null);
   const [dragRect, setDragRect] = useState<{ width: number; height: number } | null>(null);
   const [isDragCompact, setIsDragCompact] = useState(false);
@@ -52,11 +56,7 @@ export function usePaperNodeDrag({
       insertTarget,
       point: { x: info.point.x, y: info.point.y },
     });
-    debugLog('dock-drag-move', {
-      paperId,
-      parentId,
-      point: { x: info.point.x, y: info.point.y },
-    });
+    debugLog('dock-drag-move', { paperId, parentId, point: { x: info.point.x, y: info.point.y } });
   }, [onDragStateChange, paperId, parentId]);
 
   const handleDragStart = useCallback(() => {
@@ -66,23 +66,14 @@ export function usePaperNodeDrag({
     setDragRect(dragStartRectRef.current
       ? { width: dragStartRectRef.current.width, height: dragStartRectRef.current.height }
       : null);
-    onDragStateChange({
-      paperId,
-      parentId,
-      insertTarget: null,
-      point: null,
-    });
+    onDragStateChange({ paperId, parentId, insertTarget: null, point: null });
+    onDragStarted?.();
     debugLog('dock-drag-start', { paperId, parentId });
-  }, [onDragStateChange, paperId, parentId]);
+  }, [onDragStateChange, onDragStarted, paperId, parentId]);
 
   const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const insertTarget = findInsertTargetAtPoint(info.point);
-    debugLog('dock-drag-end', {
-      paperId,
-      parentId,
-      insertTarget,
-      offset: { x: info.offset.x, y: info.offset.y },
-    });
+    debugLog('dock-drag-end', { paperId, parentId, insertTarget, offset: { x: info.offset.x, y: info.offset.y } });
 
     if (insertTarget && parentId !== null) {
       onInsertDrop(paperId, insertTarget.parentId, insertTarget.insertBeforeId);
@@ -91,8 +82,9 @@ export function usePaperNodeDrag({
     setIsDragCompact(false);
     setDragRect(null);
     onDragStateChange({ paperId: null, parentId: null, insertTarget: null, point: null });
+    onDragEnded?.();
     cleanupStickyDrag();
-  }, [paperId, parentId, onInsertDrop, onDragStateChange, cleanupStickyDrag]);
+  }, [paperId, parentId, onInsertDrop, onDragStateChange, onDragEnded, cleanupStickyDrag]);
 
   return {
     nodeElementRef,

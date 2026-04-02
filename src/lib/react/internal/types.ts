@@ -13,13 +13,3 @@ export interface DragState {
   point: { x: number; y: number } | null;
 }
 
-export interface SidebarPlacement {
-  mode: 'sidebar';
-  parentId: PaperId;
-  depth: number;
-  crumbs: PaperId[];
-  hue: number | null;
-  isPrimary: boolean;
-}
-
-export type SidebarMap = Map<PaperId, SidebarPlacement>;
