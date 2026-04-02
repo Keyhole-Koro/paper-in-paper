@@ -7,6 +7,10 @@ export default function DemoApp() {
   return (
     <PaperCanvas
       paperMap={demoPaperMap}
+      rootCanvasStyle={{
+        width: 1440,
+        height: 960,
+      }}
       layoutOptions={{
         maxOpenChildrenPerParent: 3,
         openMeasureDelayMs: 180,
