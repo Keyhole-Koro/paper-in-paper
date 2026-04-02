@@ -14,7 +14,7 @@ import {
 } from './utils/paperNodeHelpers';
 import { usePaperNodeDrag } from './hooks/usePaperNodeDrag';
 import { usePaperNodeInteractions } from './hooks/usePaperNodeInteractions';
-import { computeRowSpan, SIZE_SPANS } from './utils/layoutHelpers';
+import { SIZE_SPANS } from './utils/layoutHelpers';
 
 // ─── PASSTHROUGH NOTE ────────────────────────────────────────────────────────
 // When nodeState='open' and openChildIds.length === 1, the parent could render
@@ -24,17 +24,18 @@ import { computeRowSpan, SIZE_SPANS } from './utils/layoutHelpers';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
-const GRID_GAP_PX = 10;
 
 const PaperNode = memo(function PaperNode({
   paperId,
   parentId,
-  parentGridRowHeight,
   nodeState,
   isPrimary,
   depth,
   crumbs,
   hue,
+  gridColumnSpan,
+  gridRowSpan,
+  onMeasuredHeight,
   dragState,
   onDragStateChange,
   onInsertDrop,
@@ -50,7 +51,6 @@ const PaperNode = memo(function PaperNode({
 
   // ── Hooks (all unconditional) ─────────────────────────────────────────────
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
-  const [dynamicRowSpan, setDynamicRowSpan] = useState<number | null>(null);
   const {
     nodeElementRef,
     isDragCompact,
@@ -114,37 +114,24 @@ const PaperNode = memo(function PaperNode({
   });
 
   useEffect(() => {
-    if (nodeState !== 'open' || isRoot || !parentGridRowHeight) {
-      setDynamicRowSpan(null);
-      return;
-    }
+    if (nodeState !== 'open' || isRoot || !onMeasuredHeight) return;
 
     const el = nodeElementRef.current;
     if (!el) return;
 
-    const updateSpan = (height: number) => {
-      setDynamicRowSpan(computeRowSpan(height, parentGridRowHeight, row, GRID_GAP_PX));
+    const reportHeight = (height: number) => {
+      onMeasuredHeight(paperId, height);
     };
 
-    updateSpan(el.getBoundingClientRect().height);
+    reportHeight(el.getBoundingClientRect().height);
 
     const ro = new ResizeObserver(([entry]) => {
-      updateSpan(entry.contentRect.height);
+      reportHeight(entry.contentRect.height);
     });
     ro.observe(el);
 
     return () => ro.disconnect();
-  }, [
-    nodeState,
-    isRoot,
-    parentGridRowHeight,
-    row,
-    nodeElementRef,
-    openChildIds.length,
-    closedChildIds.length,
-    isHeaderHovered,
-    paper.content,
-  ]);
+  }, [nodeState, isRoot, onMeasuredHeight, paperId, nodeElementRef, openChildIds.length, closedChildIds.length, isHeaderHovered, paper.content]);
 
   // ── CLOSED STATE ──────────────────────────────────────────────────────────
   if (nodeState === 'closed') {
@@ -266,7 +253,7 @@ const PaperNode = memo(function PaperNode({
       style={{
         ...(isRoot
           ? { flex: 1 }
-          : { gridColumn: `span ${col}`, gridRow: `span ${dynamicRowSpan ?? row}` }
+          : { gridColumn: `span ${gridColumnSpan ?? col}`, gridRow: `span ${gridRowSpan ?? row}` }
         ),
         background,
         border: `1px solid ${borderColor}`,

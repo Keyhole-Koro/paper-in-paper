@@ -1,8 +1,9 @@
 import { AnimatePresence } from 'framer-motion';
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import type { PaperId } from '../../../../core/types';
+import { useLayout } from '../../layout/LayoutContext';
 import type { PaperNodeProps } from '../utils/paperNodeTypes';
-import { computeGridMetrics } from '../utils/layoutHelpers';
+import { computeGridMetrics, computeRowSpan, SIZE_SPANS } from '../utils/layoutHelpers';
 
 interface Props {
   paperId: PaperId;
@@ -66,8 +67,10 @@ export default function PaperNodeChildren({
   depth,
   crumbs,
 }: Props) {
+  const { getSize } = useLayout();
   const { containerRef: openChildrenRef, gridMetrics: openGridMetrics } = useMeasuredGridMetrics(openChildIds.length > 0);
   const { containerRef: closedChildrenRef, gridMetrics: closedGridMetrics } = useMeasuredGridMetrics(closedChildIds.length > 0);
+  const [childRowSpanMap, setChildRowSpanMap] = useState<Map<PaperId, number>>(new Map());
   const gridHue = hue === null ? 220 : (hue + depth * 18) % 360;
   const gridLineX = `hsla(${gridHue}, 88%, 50%, 0.36)`;
   const gridLineY = `hsla(${gridHue}, 82%, 46%, 0.28)`;
@@ -92,22 +95,40 @@ export default function PaperNodeChildren({
         >
           <AnimatePresence mode="popLayout" initial={false}>
             {openChildIds.map((childId) => (
+              (() => {
+                const size = getSize(childId);
+                const baseSpan = SIZE_SPANS[size];
+                const rowSpan = childRowSpanMap.get(childId) ?? baseSpan.row;
+
+                return (
               <NodeComponent
                 key={childId}
                 paperId={childId}
                 parentId={paperId}
-                parentGridRowHeight={openGridMetrics.rowHeight}
                 nodeState="open"
                 isPrimary={childId === primaryChildId}
                 depth={depth + 1}
                 crumbs={[...crumbs, paperId]}
                 hue={getHue(childId)}
+                gridColumnSpan={baseSpan.col}
+                gridRowSpan={rowSpan}
+                onMeasuredHeight={(id, height) => {
+                  const nextRowSpan = computeRowSpan(height, openGridMetrics.rowHeight, baseSpan.row);
+                  setChildRowSpanMap((prev) => {
+                    if (prev.get(id) === nextRowSpan) return prev;
+                    const next = new Map(prev);
+                    next.set(id, nextRowSpan);
+                    return next;
+                  });
+                }}
                 dragState={dragState}
                 onDragStateChange={onDragStateChange}
                 onInsertDrop={onInsertDrop}
                 allowCrumbInteractions={allowCrumbInteractions}
                 allowHeaderInteractions={allowHeaderInteractions}
               />
+                );
+              })()
             ))}
           </AnimatePresence>
         </div>
@@ -126,7 +147,7 @@ export default function PaperNodeChildren({
             ['--paper-grid-outline' as string]: gridOutline,
           }}
         >
-          <AnimatePresence mode="popLayout" initial={false}>
+          <AnimatePresence initial={false}>
             {closedChildIds.map((childId) => (
               <NodeComponent
                 key={childId}
