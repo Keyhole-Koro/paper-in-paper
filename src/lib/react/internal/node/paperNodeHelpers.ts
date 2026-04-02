@@ -1,6 +1,5 @@
 import type { CSSProperties } from 'react';
 import type { PaperId, PaperMap, ExpansionMap } from '../../../core/types';
-import type { PlacementMap } from '../types';
 
 const BRANCH_HUES = [210, 155, 35, 280, 10, 180, 320, 60];
 
@@ -27,10 +26,6 @@ export function getBranchHue(paperMap: PaperMap, paperId: PaperId, rootId: Paper
   return null;
 }
 
-export function getDockedOpenChildIds(openChildIds: PaperId[], placementMap: PlacementMap): PaperId[] {
-  return openChildIds.filter((id) => !placementMap.has(id));
-}
-
 export function getNodeVisualState({
   isRoot,
   hue,
@@ -48,7 +43,6 @@ export function getNodeVisualState({
   openChildIds: PaperId[];
   hasContent: boolean;
   isHeaderHovered: boolean;
-  shouldShowTopStrip: boolean;
 }) {
   const background = isRoot
     ? 'transparent'
@@ -79,7 +73,7 @@ export function getNodeVisualState({
   const contentColor = hue !== null ? `hsl(${hue}, 20%, 32%)` : '#2b2b36';
   const shouldCollapseContent = openChildIds.length > 0;
   const shouldShowContent = isPrimary && hasContent && (!shouldCollapseContent || isHeaderHovered);
-  const nodeZIndex = isRoot ? 1 : shouldShowTopStrip ? 3 : isPrimary ? 2 : 1;
+  const nodeZIndex = isRoot ? 1 : isPrimary ? 2 : 1;
 
   return {
     background,

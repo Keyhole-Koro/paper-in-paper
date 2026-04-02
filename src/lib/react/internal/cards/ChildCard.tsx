@@ -3,9 +3,10 @@ import { memo, useCallback, useRef, useState } from 'react';
 import type { PanInfo } from 'framer-motion';
 import { useStickyDrag } from '../drag/useStickyDrag';
 import type { Paper, PaperId } from '../../../core/types';
-import type { DragState, FloatMeta } from '../types';
+import type { DragState } from '../types';
 import { getScaledRect } from '../node/paperNodeHelpers';
 import { debugLog } from '../drag/debugLog';
+import { findInsertTargetAtPoint } from '../drag/returnTarget';
 
 interface Props {
   paper: Paper;
@@ -16,13 +17,10 @@ interface Props {
   crumbs: PaperId[];
   dragState: DragState;
   onDragStateChange: (state: DragState) => void;
-  onRequestFloat?: (paperId: PaperId, info: PanInfo, meta: FloatMeta) => void;
-  onCancelFloatPreview?: (paperId: PaperId) => void;
-  isFloating?: boolean;
+  onInsertDrop: (paperId: PaperId, parentId: PaperId, insertBeforeId: PaperId | null) => void;
 }
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
-const FLOAT_DRAG_THRESHOLD = 24;
 const CHILD_CARD_DRAG_SCALE = { width: 0.9, height: 0.9 } as const;
 
 export default memo(function ChildCard({
@@ -34,17 +32,14 @@ export default memo(function ChildCard({
   crumbs,
   dragState,
   onDragStateChange,
-  onRequestFloat,
-  onCancelFloatPreview,
-  isFloating = false,
+  onInsertDrop,
 }: Props) {
   const childCount = paper.childIds.length;
   const cardRef = useRef<HTMLButtonElement | null>(null);
   const dragStartRectRef = useRef<DOMRect | null>(null);
   const suppressClickRef = useRef(false);
   const [isDragCompact, setIsDragCompact] = useState(false);
-  const isDraggable = !!onRequestFloat && !isFloating;
-  const { dragControls, stickyPointerDown, cleanupStickyDrag } = useStickyDrag(isDraggable);
+  const { dragControls, stickyPointerDown, cleanupStickyDrag } = useStickyDrag(true);
   const background = hue !== null ? `hsl(${hue}, 44%, 95%)` : '#f7f7fc';
   const borderColor = hue !== null ? `hsl(${hue}, 34%, 82%)` : '#e4e4ef';
   const titleColor = hue !== null ? `hsl(${hue}, 56%, 24%)` : '#111118';
@@ -68,64 +63,35 @@ export default memo(function ChildCard({
       insertTarget: null,
       point: null,
     });
-    if (onRequestFloat) {
-      onRequestFloat(paper.id, {
-        point: dragStartRectRef.current
-          ? { x: dragStartRectRef.current.left, y: dragStartRectRef.current.top }
-          : { x: 0, y: 0 },
-        delta: { x: 0, y: 0 },
-        offset: { x: 0, y: 0 },
-        velocity: { x: 0, y: 0 },
-      }, {
-        parentId,
-        depth,
-        crumbs,
-        hue,
-        isPrimary: false,
-        nodeStartRect: dragStartRectRef.current,
-      });
-    }
     debugLog('child-drag-start', { paperId: paper.id, parentId, depth });
-  }, [onDragStateChange, onRequestFloat, paper.id, parentId, depth, crumbs, hue]);
+  }, [onDragStateChange, paper.id, parentId, depth]);
 
   const handleDrag = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    const insertTarget = findInsertTargetAtPoint(info.point);
     onDragStateChange({
       paperId: paper.id,
       parentId,
-      insertTarget: null,
+      insertTarget,
       point: { x: info.point.x, y: info.point.y },
     });
-    if (onRequestFloat) {
-      onRequestFloat(paper.id, info, {
-        parentId,
-        depth,
-        crumbs,
-        hue,
-        isPrimary: false,
-        nodeStartRect: dragStartRectRef.current,
-      });
-    }
     debugLog('child-drag-move', {
       paperId: paper.id,
       parentId,
       point: { x: info.point.x, y: info.point.y },
     });
-  }, [onDragStateChange, onRequestFloat, paper.id, parentId, depth, crumbs, hue]);
+  }, [onDragStateChange, paper.id, parentId]);
 
   const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const dragDistance = Math.hypot(info.offset.x, info.offset.y);
-    const shouldFloat = dragDistance >= FLOAT_DRAG_THRESHOLD;
-
+    const insertTarget = findInsertTargetAtPoint(info.point);
     debugLog('child-drag-end', {
       paperId: paper.id,
       parentId,
-      dragDistance,
-      shouldFloat,
+      insertTarget,
       offset: { x: info.offset.x, y: info.offset.y },
     });
 
-    if (!shouldFloat) {
-      onCancelFloatPreview?.(paper.id);
+    if (insertTarget) {
+      onInsertDrop(paper.id, insertTarget.parentId, insertTarget.insertBeforeId);
     }
 
     setIsDragCompact(false);
@@ -134,13 +100,16 @@ export default memo(function ChildCard({
     window.setTimeout(() => {
       suppressClickRef.current = false;
     }, 0);
-  }, [onCancelFloatPreview, onDragStateChange, paper.id, parentId, cleanupStickyDrag]);
+  }, [onInsertDrop, onDragStateChange, paper.id, parentId, cleanupStickyDrag]);
+
+  // suppress unused warning
+  void crumbs;
 
   return (
     <motion.button
       ref={cardRef}
-      layoutId={isFloating ? undefined : paper.id}
-      className={`child-card child-card--compact ${isDragCompact ? 'child-card--dragging' : ''} ${isFloating ? 'child-card--floating' : ''}`}
+      layoutId={paper.id}
+      className={`child-card child-card--compact ${isDragCompact ? 'child-card--dragging' : ''}`}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
@@ -150,7 +119,7 @@ export default memo(function ChildCard({
         }
         onClick();
       }}
-      drag={isDraggable}
+      drag
       dragListener={false}
       dragControls={dragControls}
       dragMomentum={false}
@@ -168,7 +137,7 @@ export default memo(function ChildCard({
         background,
         borderColor,
         boxShadow: shadow,
-        opacity: isDragging && !isFloating ? 0 : undefined,
+        opacity: isDragging ? 0 : undefined,
         ['--child-card-focus' as string]: focusColor,
         ['--child-card-preview-shadow' as string]: previewShadow,
         ['--child-card-preview-bg' as string]: previewBackground,

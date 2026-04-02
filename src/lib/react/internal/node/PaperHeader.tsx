@@ -6,8 +6,6 @@ interface BreadcrumbProps {
   crumbs: PaperId[];
   paperId: PaperId;
   onCrumbClick?: (idx: number) => void;
-  selectedContextId: PaperId | null;
-  onSelectContext?: (paperId: PaperId | null) => void;
   hue: number | null;
   allowCrumbInteractions: boolean;
 }
@@ -17,8 +15,6 @@ const Breadcrumb = memo(function Breadcrumb({
   crumbs,
   paperId,
   onCrumbClick,
-  selectedContextId,
-  onSelectContext,
   hue,
   allowCrumbInteractions,
 }: BreadcrumbProps) {
@@ -30,7 +26,7 @@ const Breadcrumb = memo(function Breadcrumb({
       {crumbs.map((id, index) => (
         <span
           key={id}
-          className={`paper-node__breadcrumb-ancestor ${selectedContextId === id ? 'paper-node__breadcrumb-ancestor--selected' : ''}`}
+          className="paper-node__breadcrumb-ancestor"
           style={{ color: ancestorColor }}
           onClick={allowCrumbInteractions ? (event) => {
             event.stopPropagation();
@@ -39,18 +35,14 @@ const Breadcrumb = memo(function Breadcrumb({
           role={allowCrumbInteractions ? 'button' : undefined}
           tabIndex={allowCrumbInteractions ? 0 : undefined}
           onKeyDown={allowCrumbInteractions ? (event) => event.key === 'Enter' && onCrumbClick?.(index) : undefined}
-          onMouseEnter={() => onSelectContext?.(id)}
-          onFocus={() => onSelectContext?.(id)}
         >
           {paperMap.get(id)!.title}
           <span className="paper-node__breadcrumb-sep" style={{ color: ancestorColor, opacity: 0.5 }}> / </span>
         </span>
       ))}
       <span
-        className={`paper-node__breadcrumb-current ${selectedContextId === paperId ? 'paper-node__breadcrumb-current--selected' : ''}`}
+        className="paper-node__breadcrumb-current"
         style={{ color: currentColor }}
-        onMouseEnter={() => onSelectContext?.(paperId)}
-        onFocus={() => onSelectContext?.(paperId)}
       >
         {paperMap.get(paperId)!.title}
       </span>
@@ -67,10 +59,8 @@ interface PaperHeaderProps {
   isRoot: boolean;
   isPrimary: boolean;
   isHovered: boolean;
-  selectedContextId: PaperId | null;
   onHeaderClick: () => void;
   onCrumbClick: (idx: number) => void;
-  onSelectContext: (paperId: PaperId | null) => void;
   onHoverChange: (hovered: boolean) => void;
   onMouseLeaveDownward: (event: React.MouseEvent<HTMLElement>) => void;
   allowCrumbInteractions?: boolean;
@@ -86,10 +76,8 @@ export default memo(function PaperHeader({
   isRoot,
   isPrimary,
   isHovered,
-  selectedContextId,
   onHeaderClick,
   onCrumbClick,
-  onSelectContext,
   onHoverChange,
   onMouseLeaveDownward,
   allowCrumbInteractions = true,
@@ -134,8 +122,6 @@ export default memo(function PaperHeader({
           crumbs={crumbs}
           paperId={paperId}
           onCrumbClick={onCrumbClick}
-          selectedContextId={selectedContextId}
-          onSelectContext={onSelectContext}
           hue={hue}
           allowCrumbInteractions={allowCrumbInteractions}
         />
@@ -163,8 +149,6 @@ export default memo(function PaperHeader({
         crumbs={crumbs}
         paperId={paperId}
         onCrumbClick={onCrumbClick}
-        selectedContextId={selectedContextId}
-        onSelectContext={onSelectContext}
         hue={hue}
         allowCrumbInteractions={allowCrumbInteractions}
       />

@@ -7,24 +7,17 @@ import type { PaperNodeProps } from './paperNodeTypes';
 interface Props {
   paperId: PaperId;
   primaryChildId: PaperId | null;
-  dockedOpenChildIds: PaperId[];
+  openChildIds: PaperId[];
   closedChildren: Array<{ id: PaperId; paper: Paper; hue: number | null }>;
   leafVisible: boolean;
   leafStyle: React.CSSProperties;
   getHue: (paperId: PaperId) => number | null;
   NodeComponent: ComponentType<PaperNodeProps>;
-  selectedContextId: PaperId | null;
-  onSelectContext: (paperId: PaperId | null) => void;
   dragState: PaperNodeProps['dragState'];
   onDragStateChange: PaperNodeProps['onDragStateChange'];
-  placementMap: PaperNodeProps['placementMap'];
-  onRequestFloat: PaperNodeProps['onRequestFloat'];
-  onCancelFloatPreview?: PaperNodeProps['onCancelFloatPreview'];
-  onFocusFloating: PaperNodeProps['onFocusFloating'];
-  floatingChildren: Array<{ id: PaperId; paper: Paper; hue: number | null }>;
+  onInsertDrop: PaperNodeProps['onInsertDrop'];
   allowCrumbInteractions: boolean;
   allowHeaderInteractions: boolean;
-  allowContextInteractions: boolean;
   depth: number;
   crumbs: PaperId[];
   onOpenChild: (childId: PaperId) => void;
@@ -33,52 +26,40 @@ interface Props {
 export default function PaperNodeChildren({
   paperId,
   primaryChildId,
-  dockedOpenChildIds,
+  openChildIds,
   closedChildren,
-  floatingChildren,
   leafVisible,
   leafStyle,
   getHue,
   NodeComponent,
-  selectedContextId,
-  onSelectContext,
   dragState,
   onDragStateChange,
-  placementMap,
-  onRequestFloat,
-  onCancelFloatPreview,
-  onFocusFloating,
+  onInsertDrop,
   allowCrumbInteractions,
   allowHeaderInteractions,
-  allowContextInteractions,
   depth,
   crumbs,
   onOpenChild,
 }: Props) {
   return (
     <>
-      {dockedOpenChildIds.length > 0 && (
+      {openChildIds.length > 0 && (
         <div className="paper-node__open-children" data-open-children-parent-id={paperId}>
           <AnimatePresence mode="popLayout" initial={false}>
-            {dockedOpenChildIds.map((childId) => (
+            {openChildIds.map((childId) => (
               <NodeComponent
                 key={childId}
                 paperId={childId}
                 parentId={paperId}
-                mode="docked"
                 isPrimary={childId === primaryChildId}
                 depth={depth + 1}
                 crumbs={[]}
                 hue={getHue(childId)}
-                selectedContextId={selectedContextId}
-                onSelectContext={onSelectContext}
                 dragState={dragState}
                 onDragStateChange={onDragStateChange}
-                placementMap={placementMap}
-                onRequestFloat={onRequestFloat}
+                onInsertDrop={onInsertDrop}
                 allowCrumbInteractions={allowCrumbInteractions}
                 allowHeaderInteractions={allowHeaderInteractions}
-                allowContextInteractions={allowContextInteractions}
               />
             ))}
           </AnimatePresence>
@@ -97,31 +78,8 @@ export default function PaperNodeChildren({
                 crumbs={[...crumbs, paperId]}
                 dragState={dragState}
                 onDragStateChange={onDragStateChange}
-                onRequestFloat={onRequestFloat}
-                onCancelFloatPreview={onCancelFloatPreview}
+                onInsertDrop={onInsertDrop}
                 onClick={() => onOpenChild(id)}
-              />
-            ))}
-          </AnimatePresence>
-        </div>
-      )}
-      {floatingChildren.length > 0 && (
-        <div className="paper-node__closed-children">
-          <AnimatePresence mode="popLayout" initial={false}>
-            {floatingChildren.map(({ id, paper, hue }) => (
-              <ChildCard
-                key={id}
-                paper={paper}
-                hue={hue}
-                parentId={paperId}
-                depth={depth + 1}
-                crumbs={[...crumbs, paperId]}
-                dragState={dragState}
-                onDragStateChange={onDragStateChange}
-                onRequestFloat={onRequestFloat}
-                onCancelFloatPreview={onCancelFloatPreview}
-                isFloating={true}
-                onClick={() => onFocusFloating?.(id)}
               />
             ))}
           </AnimatePresence>

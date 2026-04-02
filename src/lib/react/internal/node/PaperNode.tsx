@@ -3,9 +3,8 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import type { PaperId } from '../../../core/types';
 import { useStore } from '../state/store';
 import PaperHeader from './PaperHeader';
-import PaperTopStrip from './PaperTopStrip';
 import type { PaperNodeProps } from './paperNodeTypes';
-import { EMPTY_IDS, getBranchHue, getDockedOpenChildIds, getNodeVisualState } from './paperNodeHelpers';
+import { EMPTY_IDS, getBranchHue, getNodeVisualState } from './paperNodeHelpers';
 import { usePaperNodeDrag } from './usePaperNodeDrag';
 import { usePaperNodeInteractions } from './usePaperNodeInteractions';
 import PaperPassthroughNode from './PaperPassthroughNode';
@@ -16,22 +15,15 @@ const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
 const PaperNode = memo(function PaperNode({
   paperId,
   parentId,
-  mode = 'docked',
   isPrimary,
   depth,
   crumbs,
   hue,
-  selectedContextId,
-  onSelectContext,
   dragState,
   onDragStateChange,
-  placementMap,
-  onRequestFloat,
-  onCancelFloatPreview,
-  onFocusFloating,
+  onInsertDrop,
   allowCrumbInteractions = true,
   allowHeaderInteractions = true,
-  allowContextInteractions = true,
 }: PaperNodeProps) {
   const { state, dispatch } = useStore();
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
@@ -45,9 +37,6 @@ const PaperNode = memo(function PaperNode({
     [paper.childIds, openChildIds],
   );
 
-  // Stable reference for [...crumbs, paperId] — doubles as activePath for context clicks
-  const childCrumbs = useMemo(() => [...crumbs, paperId], [crumbs, paperId]);
-
   const childHue = useCallback((childId: PaperId): number | null => {
     if (isRoot) {
       return getBranchHue(state.paperMap, childId, paperId);
@@ -55,27 +44,16 @@ const PaperNode = memo(function PaperNode({
     return hue;
   }, [isRoot, state.paperMap, paperId, hue]);
 
-  // Passthrough-specific values — computed unconditionally to satisfy Rules of Hooks
-  const singleChildId = openChildIds.length === 1 ? openChildIds[0] : null;
-  const passthroughContextPathIds = useMemo(
-    () => singleChildId !== null ? [...childCrumbs, singleChildId] : childCrumbs,
-    [childCrumbs, singleChildId],
-  );
-  const shouldShowTopStrip = isRoot || selectedContextId === paperId;
   const {
     handleHeaderClick,
     handleCrumbClick,
-    onContextChildClick,
-    handleHeaderMouseLeave,
   } = usePaperNodeInteractions({
     paperId,
     parentId,
     isRoot,
     isPrimary,
     crumbs,
-    childCrumbs,
     dispatch,
-    onSelectContext,
   });
   const {
     nodeElementRef,
@@ -89,19 +67,11 @@ const PaperNode = memo(function PaperNode({
   } = usePaperNodeDrag({
     paperId,
     parentId,
-    depth,
-    crumbs,
-    hue,
-    isPrimary,
     dragState,
     onDragStateChange,
-    onRequestFloat,
-    onCancelFloatPreview,
+    onInsertDrop,
   });
-  const dockedOpenChildIds = useMemo(
-    () => getDockedOpenChildIds(openChildIds, placementMap),
-    [openChildIds, placementMap],
-  );
+
   const closedChildren = useMemo(
     () => closedChildIds.map((id) => ({
       id,
@@ -109,12 +79,6 @@ const PaperNode = memo(function PaperNode({
       hue: childHue(id),
     })),
     [closedChildIds, state.paperMap, childHue],
-  );
-  const floatingChildren = useMemo(
-    () => openChildIds
-      .filter((id) => placementMap.has(id))
-      .map((id) => ({ id, paper: state.paperMap.get(id)!, hue: childHue(id) })),
-    [openChildIds, placementMap, state.paperMap, childHue],
   );
   const {
     background,
@@ -131,40 +95,30 @@ const PaperNode = memo(function PaperNode({
     openChildIds,
     hasContent: Boolean(paper.content),
     isHeaderHovered,
-    shouldShowTopStrip,
   });
   const isDragging = dragState.paperId === paperId;
-  if (dockedOpenChildIds.length === 1 && !openChildIds.some((id) => placementMap.has(id))) {
+
+  if (openChildIds.length === 1) {
     return (
       <PaperPassthroughNode
         paperId={paperId}
-        mode={mode}
         isRoot={isRoot}
         isPrimary={isPrimary}
-        singleDockedChildId={dockedOpenChildIds[0]}
-        childCrumbs={childCrumbs}
-        passthroughContextPathIds={passthroughContextPathIds}
-        shouldShowTopStrip={shouldShowTopStrip}
+        singleOpenChildId={openChildIds[0]}
         paperMap={state.paperMap}
         getHue={childHue}
-        onContextChildClick={onContextChildClick}
         NodeComponent={PaperNode}
         nodeElementRef={nodeElementRef}
         dragHandlers={{ handleDragStart, handleDrag, handleDragEnd, dragControls, stickyPointerDown }}
         isDragCompact={isDragCompact}
         dragSizeStyle={dragSizeStyle}
-        selectedContextId={selectedContextId}
-        onSelectContext={onSelectContext}
         dragState={dragState}
         onDragStateChange={onDragStateChange}
-        placementMap={placementMap}
-        onRequestFloat={onRequestFloat}
-        onCancelFloatPreview={onCancelFloatPreview}
-        onFocusFloating={onFocusFloating}
+        onInsertDrop={onInsertDrop}
         allowCrumbInteractions={allowCrumbInteractions}
         allowHeaderInteractions={allowHeaderInteractions}
-        allowContextInteractions={allowContextInteractions}
         depth={depth}
+        crumbs={crumbs}
       />
     );
   }
@@ -172,7 +126,7 @@ const PaperNode = memo(function PaperNode({
   return (
     <motion.div
       ref={nodeElementRef}
-      layoutId={!isRoot && mode === 'docked' ? paperId : undefined}
+      layoutId={!isRoot ? paperId : undefined}
       layout
       className={[
         'paper-node',
@@ -183,7 +137,7 @@ const PaperNode = memo(function PaperNode({
       initial={isRoot ? false : { opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
-      drag={!isRoot && !!onRequestFloat}
+      drag={!isRoot}
       dragListener={false}
       dragControls={dragControls}
       dragMomentum={false}
@@ -206,7 +160,7 @@ const PaperNode = memo(function PaperNode({
         zIndex: nodeZIndex,
         ...(dragSizeStyle ?? {}),
       }}
-      data-docked-paper-id={mode === 'docked' && !isRoot ? paperId : undefined}
+      data-docked-paper-id={!isRoot ? paperId : undefined}
     >
       {isDragging && (
         <div
@@ -220,16 +174,6 @@ const PaperNode = memo(function PaperNode({
           }}
         />
       )}
-      {shouldShowTopStrip && (
-        <PaperTopStrip
-          paperMap={state.paperMap}
-          contextId={paperId}
-          currentPathIds={childCrumbs}
-          getHue={childHue}
-          onChildClick={onContextChildClick}
-          allowInteractions={allowContextInteractions}
-        />
-      )}
       <PaperHeader
         paper={paper}
         paperMap={state.paperMap}
@@ -239,19 +183,20 @@ const PaperNode = memo(function PaperNode({
         isRoot={isRoot}
         isPrimary={isPrimary}
         isHovered={isHeaderHovered}
-        selectedContextId={selectedContextId}
         onHeaderClick={handleHeaderClick}
         onCrumbClick={handleCrumbClick}
-        onSelectContext={onSelectContext}
         onHoverChange={setIsHeaderHovered}
-        onMouseLeaveDownward={handleHeaderMouseLeave}
+        onMouseLeaveDownward={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          if (event.clientY >= bounds.bottom - 1) setIsHeaderHovered(false);
+        }}
         allowCrumbInteractions={allowCrumbInteractions}
         allowHeaderInteractions={allowHeaderInteractions}
       />
 
       <div
         className="paper-node__content"
-        data-empty-insert-parent-id={dockedOpenChildIds.length === 0 ? paperId : undefined}
+        data-empty-insert-parent-id={openChildIds.length === 0 ? paperId : undefined}
       >
         <AnimatePresence initial={false}>
           {shouldShowContent && (
@@ -271,24 +216,17 @@ const PaperNode = memo(function PaperNode({
         <PaperNodeChildren
           paperId={paperId}
           primaryChildId={primaryChildId}
-          dockedOpenChildIds={dockedOpenChildIds}
+          openChildIds={openChildIds}
           closedChildren={closedChildren}
-          floatingChildren={floatingChildren}
           leafVisible={paper.childIds.length === 0}
           leafStyle={hue !== null ? { color: `hsl(${hue}, 30%, 60%)` } : {}}
           getHue={childHue}
           NodeComponent={PaperNode}
-          selectedContextId={selectedContextId}
-          onSelectContext={onSelectContext}
           dragState={dragState}
           onDragStateChange={onDragStateChange}
-          placementMap={placementMap}
-          onRequestFloat={onRequestFloat}
-          onCancelFloatPreview={onCancelFloatPreview}
-          onFocusFloating={onFocusFloating}
+          onInsertDrop={onInsertDrop}
           allowCrumbInteractions={allowCrumbInteractions}
           allowHeaderInteractions={allowHeaderInteractions}
-          allowContextInteractions={allowContextInteractions}
           depth={depth}
           crumbs={crumbs}
           onOpenChild={(childId) => dispatch({ type: 'OPEN', parentId: paperId, childId })}

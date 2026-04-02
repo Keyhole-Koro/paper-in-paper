@@ -8,9 +8,7 @@ interface Params {
   isRoot: boolean;
   isPrimary: boolean;
   crumbs: PaperId[];
-  childCrumbs: PaperId[];
   dispatch: React.Dispatch<ExpansionAction>;
-  onSelectContext: (paperId: PaperId | null) => void;
 }
 
 export function usePaperNodeInteractions({
@@ -19,9 +17,7 @@ export function usePaperNodeInteractions({
   isRoot,
   isPrimary,
   crumbs,
-  childCrumbs,
   dispatch,
-  onSelectContext,
 }: Params) {
   const handleHeaderClick = useCallback(() => {
     if (isRoot) return;
@@ -38,40 +34,8 @@ export function usePaperNodeInteractions({
     dispatch({ type: 'CLOSE', childId: toClose, parentId: fromParent });
   }, [crumbs, paperId, dispatch]);
 
-  const handleContextChildClick = useCallback((contextId: PaperId, childId: PaperId) => {
-    if (contextId === paperId) {
-      dispatch({ type: 'OPEN', parentId: paperId, childId });
-      return;
-    }
-
-    const contextIndex = childCrumbs.indexOf(contextId);
-    const activeChildId = contextIndex === -1 ? null : childCrumbs[contextIndex + 1] ?? null;
-
-    if (activeChildId === childId) {
-      dispatch({ type: 'SET_PRIMARY', parentId: contextId, childId });
-      return;
-    }
-
-    dispatch({ type: 'OPEN', parentId: contextId, childId });
-  }, [paperId, dispatch, childCrumbs]);
-
-  const onContextChildClick = useCallback(
-    (childId: PaperId) => handleContextChildClick(paperId, childId),
-    [handleContextChildClick, paperId],
-  );
-
-  const handleHeaderMouseLeave = useCallback((event: React.MouseEvent<HTMLElement>) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    if (event.clientY >= bounds.bottom - 1) {
-      onSelectContext(null);
-    }
-  }, [onSelectContext]);
-
   return {
     handleHeaderClick,
     handleCrumbClick,
-    handleContextChildClick,
-    onContextChildClick,
-    handleHeaderMouseLeave,
   };
 }

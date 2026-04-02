@@ -1,18 +1,16 @@
 import { LayoutGroup } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PanInfo } from 'framer-motion';
 import type { PaperId, PaperMap } from '../core/types';
 import { findRootId } from '../core/tree';
 import PaperNode from './internal/node/PaperNode';
 import FloatingLayer from './internal/drag/FloatingLayer';
 import Sidebar from './internal/sidebar/Sidebar';
 import { StoreProvider, useStore } from './internal/state/store';
-import type { DragState, PlacementMap, FloatMeta, SidebarMap, SidebarPlacement } from './internal/types';
+import type { DragState, SidebarMap, SidebarPlacement } from './internal/types';
 import { debugLog } from './internal/drag/debugLog';
 import {
   getAllOpenNodeIds,
   findParentOfOpen,
-  isNodeVisible,
   computeCrumbs,
   getBranchHue,
 } from './internal/node/paperNodeHelpers';
@@ -28,28 +26,20 @@ interface ContentProps {
 
 function PaperCanvasContent({ rootId }: ContentProps) {
   const { state, dispatch } = useStore();
-  const [selectedContextId, setSelectedContextId] = useState<PaperId | null>(null);
-  const [floatingSelectedContextId, setFloatingSelectedContextId] = useState<PaperId | null>(null);
   const [dragState, setDragState] = useState<DragState>({
     paperId: null,
     parentId: null,
     insertTarget: null,
     point: null,
   });
-  const [placementMap, setPlacementMap] = useState<PlacementMap>(new Map());
   const [sidebarMap, setSidebarMap] = useState<SidebarMap>(new Map());
   const [lruOrder, setLruOrder] = useState<PaperId[]>([]);
   const [maxOpenNodes, setMaxOpenNodes] = useState<number>(8);
-  const [floatingFocusId, setFloatingFocusId] = useState<PaperId | null>(null);
-  const [floatingHighlightId, setFloatingHighlightId] = useState<PaperId | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const prevOpenIdsRef = useRef<Set<PaperId>>(new Set());
   const lruOrderRef = useRef<PaperId[]>([]);
-  const placementMapRef = useRef<PlacementMap>(new Map());
 
-  // Keep refs in sync for use inside effects with intentionally limited deps
   useEffect(() => { lruOrderRef.current = lruOrder; }, [lruOrder]);
-  useEffect(() => { placementMapRef.current = placementMap; }, [placementMap]);
 
   // ResizeObserver — update maxOpenNodes based on canvas width
   useEffect(() => {
@@ -81,17 +71,6 @@ function PaperCanvasContent({ rootId }: ContentProps) {
     ]);
   }, [state.expansionMap]); // sidebarMap read as snapshot — intentionally not in deps
 
-  // LRU Effect B — move selectedContextId and all its ancestors to front
-  useEffect(() => {
-    if (!selectedContextId) return;
-    const ancestors = computeCrumbs(selectedContextId, state.paperMap);
-    const toPromote = [selectedContextId, ...ancestors];
-    setLruOrder((prev) => [
-      ...toPromote.filter((id) => prev.includes(id)),
-      ...prev.filter((id) => !toPromote.includes(id)),
-    ]);
-  }, [selectedContextId]); // state.paperMap is stable reference; intentionally not in deps
-
   // Eviction — when open count exceeds maxOpenNodes, evict oldest to sidebar
   useEffect(() => {
     const openIds = getAllOpenNodeIds(state.expansionMap);
@@ -99,7 +78,7 @@ function PaperCanvasContent({ rootId }: ContentProps) {
     const openSet = new Set(openIds);
     const candidates = [...lruOrderRef.current]
       .reverse()
-      .filter((id) => openSet.has(id) && !placementMapRef.current.has(id));
+      .filter((id) => openSet.has(id));
     const toEvict = candidates.slice(0, openIds.length - maxOpenNodes);
     if (!toEvict.length) return;
 
@@ -125,7 +104,7 @@ function PaperCanvasContent({ rootId }: ContentProps) {
         return m;
       });
     }
-  }, [state.expansionMap, maxOpenNodes]); // lruOrderRef + placementMapRef accessed via refs
+  }, [state.expansionMap, maxOpenNodes]); // lruOrderRef accessed via ref
 
   const handleReturnFromSidebar = useCallback((paperId: PaperId) => {
     debugLog('sidebar-return', { paperId });
@@ -134,104 +113,17 @@ function PaperCanvasContent({ rootId }: ContentProps) {
       m.delete(paperId);
       return m;
     });
-    // Read current sidebarMap snapshot before state update flushes
     const placement = sidebarMap.get(paperId);
     if (!placement) return;
-    const parentVisible = isNodeVisible(placement.parentId, rootId, state.expansionMap);
-    if (parentVisible) {
-      dispatch({ type: 'OPEN', parentId: placement.parentId, childId: paperId });
-    } else {
-      setPlacementMap((prev) => {
-        const m = new Map(prev);
-        m.set(paperId, {
-          mode: 'floating',
-          x: 40 + prev.size * 20,
-          y: 40 + prev.size * 20,
-          width: 320,
-          height: 200,
-          parentId: placement.parentId,
-          depth: placement.depth,
-          crumbs: placement.crumbs,
-          hue: placement.hue,
-          isPrimary: placement.isPrimary,
-        });
-        return m;
-      });
-    }
+    dispatch({ type: 'OPEN', parentId: placement.parentId, childId: paperId });
     setLruOrder((prev) => [paperId, ...prev.filter((id) => id !== paperId)]);
-  }, [sidebarMap, state.expansionMap, rootId, dispatch]);
+  }, [sidebarMap, dispatch]);
 
   const handleInsertDrop = useCallback((paperId: PaperId, parentId: PaperId, insertBeforeId: PaperId | null) => {
     debugLog('insert-drop-dispatch', { paperId, parentId, insertBeforeId });
     dispatch({ type: 'REORDER', parentId, childId: paperId, insertBeforeId });
     dispatch({ type: 'OPEN', parentId, childId: paperId });
   }, [dispatch]);
-
-  const handleFocusFloating = useCallback((paperId: PaperId) => {
-    setFloatingFocusId(paperId);
-    setFloatingHighlightId(paperId);
-    window.setTimeout(() => setFloatingHighlightId(null), 700);
-  }, []);
-
-  const handleCancelFloatPreview = useCallback((paperId: PaperId) => {
-    setPlacementMap((prev) => {
-      if (!prev.has(paperId)) {
-        return prev;
-      }
-      const next = new Map(prev);
-      next.delete(paperId);
-      return next;
-    });
-  }, []);
-
-  const handleRequestFloat = useCallback((paperId: PaperId, info: PanInfo, meta: FloatMeta) => {
-    const { nodeStartRect, ...placementMeta } = meta;
-    const canvasRect = canvasRef.current?.getBoundingClientRect();
-    debugLog('request-float', {
-      paperId,
-      parentId: meta.parentId,
-      offset: { x: info.offset.x, y: info.offset.y },
-      depth: meta.depth,
-      isPrimary: meta.isPrimary,
-    });
-    setPlacementMap((prev) => {
-      const existing = prev.get(paperId);
-      let x: number, y: number, width: number, height: number;
-      if (existing) {
-        if (nodeStartRect && canvasRect) {
-          x = nodeStartRect.left - canvasRect.left + info.offset.x;
-          y = nodeStartRect.top - canvasRect.top + info.offset.y;
-        } else {
-          x = existing.x + info.offset.x;
-          y = existing.y + info.offset.y;
-        }
-        width = existing.width;
-        height = existing.height;
-      } else if (nodeStartRect && canvasRect) {
-        x = nodeStartRect.left - canvasRect.left + info.offset.x;
-        y = nodeStartRect.top - canvasRect.top + info.offset.y;
-        width = nodeStartRect.width;
-        height = nodeStartRect.height;
-      } else {
-        x = info.offset.x;
-        y = info.offset.y;
-        width = 320;
-        height = 160;
-      }
-      const next = new Map(prev);
-      next.set(paperId, { mode: 'floating', x, y, width, height, ...placementMeta });
-      debugLog('placement-map-set', {
-        paperId,
-        parentId: placementMeta.parentId,
-        x,
-        y,
-        width,
-        height,
-        size: next.size,
-      });
-      return next;
-    });
-  }, []);
 
   return (
     <div className="paper-canvas" ref={canvasRef}>
@@ -248,28 +140,12 @@ function PaperCanvasContent({ rootId }: ContentProps) {
           depth={0}
           crumbs={[]}
           hue={null}
-          selectedContextId={selectedContextId}
-          onSelectContext={setSelectedContextId}
           dragState={dragState}
           onDragStateChange={setDragState}
-          placementMap={placementMap}
-          onRequestFloat={handleRequestFloat}
-          onCancelFloatPreview={handleCancelFloatPreview}
-          onFocusFloating={handleFocusFloating}
+          onInsertDrop={handleInsertDrop}
         />
       </div>
-      <FloatingLayer
-        placementMap={placementMap}
-        dragState={dragState}
-        focusId={floatingFocusId}
-        highlightId={floatingHighlightId}
-        onFocus={setFloatingFocusId}
-        selectedContextId={floatingSelectedContextId}
-        onSelectContext={setFloatingSelectedContextId}
-        onDragStateChange={setDragState}
-        onPlacementMapChange={setPlacementMap}
-        onInsertDrop={handleInsertDrop}
-      />
+      <FloatingLayer dragState={dragState} />
     </div>
   );
 }

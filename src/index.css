@@ -142,32 +142,6 @@ body {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65);
 }
 
-.paper-floating-node {
-  position: absolute;
-  pointer-events: auto;
-}
-
-.paper-floating-node__highlight-ring {
-  position: absolute;
-  inset: -4px;
-  border-radius: 18px;
-  pointer-events: none;
-  border: 2px solid rgba(100, 140, 255, 0.7);
-  box-shadow: 0 0 0 4px rgba(100, 140, 255, 0.15);
-  animation: floating-highlight-ring 0.7s ease-out forwards;
-  z-index: 1;
-}
-
-@keyframes floating-highlight-ring {
-  0%   { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.04); }
-}
-
-.paper-floating-node > .paper-node {
-  width: 100%;
-  height: 100%;
-}
-
 /* =========================================================
    PaperNode — recursive paper container
    ========================================================= */
@@ -211,19 +185,6 @@ body {
   gap: 8px;
   min-width: 0;
   min-height: 0;
-}
-
-.paper-node__sibling-strip {
-  position: relative;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 6px;
-  overflow-x: auto;
-  flex-shrink: 0;
-  padding: 0 4px 6px;
-  margin: -10px 0 4px;
-  z-index: 3;
 }
 
 .child-card__drag-ghost {
@@ -413,55 +374,6 @@ body {
   color: rgba(255, 255, 255, 0.45);
 }
 
-.paper-node__context-chip {
-  all: unset;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: 170px;
-  padding: 5px 9px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 999px;
-  cursor: pointer;
-  line-height: 1;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-  transition: transform 0.12s, background 0.12s, border-color 0.12s, box-shadow 0.12s, opacity 0.12s;
-}
-
-.paper-node__context-chip--active {
-  opacity: 1;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.1);
-}
-
-.paper-node__context-chip--inactive {
-  opacity: 0.58;
-}
-
-.paper-node__context-chip:hover {
-  transform: translateY(-1px);
-}
-
-.paper-node__context-chip:focus-visible {
-  outline: 2px solid rgba(136, 136, 204, 0.45);
-  outline-offset: 2px;
-}
-
-.paper-node__context-chip-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.paper-node__context-chip-count {
-  font-size: 10px;
-  font-weight: 700;
-  opacity: 0.72;
-}
-
 /* =========================================================
    PaperNode content area
    ========================================================= */
@@ -533,15 +445,6 @@ body {
   overflow: visible;
   opacity: 0.72;
   transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
-}
-
-.child-card--floating {
-  opacity: 0.6;
-  border-style: dashed;
-}
-
-.child-card--floating:hover {
-  opacity: 0.85;
 }
 
 .child-card--dragging {
