@@ -1,5 +1,5 @@
-import type { PaperId } from '../../../core/types';
-import type { DragState } from '../types';
+import type { PaperId } from '../../../../core/types';
+import type { DragState } from '../../types';
 
 export interface PaperNodeProps {
   paperId: PaperId;

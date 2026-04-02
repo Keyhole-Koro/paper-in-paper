@@ -1,7 +1,7 @@
 import { AnimatePresence } from 'framer-motion';
 import type { ComponentType } from 'react';
-import type { PaperId } from '../../../core/types';
-import type { PaperNodeProps } from './paperNodeTypes';
+import type { PaperId } from '../../../../core/types';
+import type { PaperNodeProps } from '../utils/paperNodeTypes';
 
 interface Props {
   paperId: PaperId;

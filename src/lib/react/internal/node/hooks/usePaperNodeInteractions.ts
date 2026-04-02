@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
-import type { PaperId } from '../../../core/types';
-import type { ExpansionAction } from '../../../core/expansion';
+import type { PaperId } from '../../../../core/types';
+import type { ExpansionAction } from '../../../../core/expansion';
 
 interface Params {
   paperId: PaperId;

@@ -2,12 +2,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { PaperId } from '../../../core/types';
 import { useStore } from '../state/store';
-import PaperHeader from './PaperHeader';
-import type { PaperNodeProps } from './paperNodeTypes';
-import { EMPTY_IDS, getBranchHue, getNodeVisualState } from './paperNodeHelpers';
-import { usePaperNodeDrag } from './usePaperNodeDrag';
-import { usePaperNodeInteractions } from './usePaperNodeInteractions';
-import PaperNodeChildren from './PaperNodeChildren';
+import PaperHeader from './parts/PaperHeader';
+import type { PaperNodeProps } from './utils/paperNodeTypes';
+import { EMPTY_IDS, getBranchHue, getNodeVisualState } from './utils/paperNodeHelpers';
+import { usePaperNodeDrag } from './hooks/usePaperNodeDrag';
+import { usePaperNodeInteractions } from './hooks/usePaperNodeInteractions';
+import PaperNodeChildren from './parts/PaperNodeChildren';
 
 // ─── PASSTHROUGH NOTE ────────────────────────────────────────────────────────
 // When nodeState='open' and openChildIds.length === 1, the parent could render

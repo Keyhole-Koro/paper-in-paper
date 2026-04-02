@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import type { PaperId, PaperMap, ExpansionMap } from '../../../core/types';
+import type { PaperId, PaperMap, ExpansionMap } from '../../../../core/types';
 
 const BRANCH_HUES = [210, 155, 35, 280, 10, 180, 320, 60];
 
@@ -87,10 +87,7 @@ export function getNodeVisualState({
 export function getDragSizeStyle(
   dragRect: { width: number; height: number } | null,
 ): CSSProperties | null {
-  if (!dragRect) {
-    return null;
-  }
-
+  if (!dragRect) return null;
   return {
     width: dragRect.width,
     height: dragRect.height,
@@ -106,7 +103,6 @@ export function getScaledRect(
   const height = rect.height * scale.height;
   const left = rect.left + (rect.width - width) / 2;
   const top = rect.top + (rect.height - height) / 2;
-
   return new DOMRect(left, top, width, height);
 }
 
