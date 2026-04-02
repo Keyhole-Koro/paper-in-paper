@@ -4,6 +4,7 @@ import type { PaperId } from '../../../core/types';
 import { useStore } from '../state/store';
 import { useLayout } from '../layout/LayoutContext';
 import PaperHeader from './parts/PaperHeader';
+import PaperPassthroughNode from './parts/PaperPassthroughNode';
 import PaperNodeChildren from './parts/PaperNodeChildren';
 import ResizeHandle from './parts/ResizeHandle';
 import type { PaperNodeProps } from './utils/paperNodeTypes';
@@ -15,13 +16,6 @@ import {
 import { usePaperNodeDrag } from './hooks/usePaperNodeDrag';
 import { usePaperNodeInteractions } from './hooks/usePaperNodeInteractions';
 import { SIZE_SPANS } from './utils/layoutHelpers';
-
-// ─── PASSTHROUGH NOTE ────────────────────────────────────────────────────────
-// When nodeState='open' and openChildIds.length === 1, the parent could render
-// in "passthrough" mode: no header, just a slim flex wrapper delegating visual
-// identity to the single open child. Removed for simplicity.
-// See parts/PaperPassthroughNode.tsx for the revival guide.
-// ─────────────────────────────────────────────────────────────────────────────
 
 const PaperNode = memo(function PaperNode({
   paperId,
@@ -242,6 +236,68 @@ const PaperNode = memo(function PaperNode({
 
   // ── OPEN STATE ────────────────────────────────────────────────────────────
   const isDragging = dragState.paperId === paperId;
+  const passthroughChildId = openChildIds[0] ?? null;
+  const shouldUsePassthrough =
+    !isRoot &&
+    openChildIds.length === 1;
+
+  if (shouldUsePassthrough) {
+    return (
+      <PaperPassthroughNode
+        paperId={paperId}
+        nodeElementRef={nodeElementRef}
+        gridColumnSpan={gridColumnSpan ?? col}
+        gridRowSpan={gridRowSpan ?? row}
+        isDragCompact={isDragCompact}
+        isDragging={isDragging}
+        dragSizeStyle={dragSizeStyle}
+        dragControls={dragControls}
+        stickyPointerDown={stickyPointerDown}
+        handleDragStart={handleDragStart}
+        handleDrag={handleDrag}
+        handleDragEnd={handleDragEnd}
+      >
+        {passthroughChildId && (
+          <>
+            <PaperNode
+              paperId={passthroughChildId}
+              parentId={paperId}
+              nodeState="open"
+              isPrimary={passthroughChildId === primaryChildId}
+              depth={depth + 1}
+              crumbs={[...crumbs, paperId]}
+              hue={childHue(passthroughChildId)}
+              dragState={dragState}
+              onDragStateChange={onDragStateChange}
+              onInsertDrop={onInsertDrop}
+              allowCrumbInteractions={allowCrumbInteractions}
+              allowHeaderInteractions={allowHeaderInteractions}
+            />
+            {closedChildIds.length > 0 && (
+              <PaperNodeChildren
+                paperId={paperId}
+                hue={hue}
+                primaryChildId={null}
+                openChildIds={EMPTY_IDS}
+                closedChildIds={closedChildIds}
+                leafVisible={false}
+                leafStyle={hue !== null ? { color: `hsl(${hue}, 30%, 60%)` } : {}}
+                getHue={childHue}
+                NodeComponent={PaperNode}
+                dragState={dragState}
+                onDragStateChange={onDragStateChange}
+                onInsertDrop={onInsertDrop}
+                allowCrumbInteractions={allowCrumbInteractions}
+                allowHeaderInteractions={allowHeaderInteractions}
+                depth={depth}
+                crumbs={crumbs}
+              />
+            )}
+          </>
+        )}
+      </PaperPassthroughNode>
+    );
+  }
 
   return (
     <motion.div
