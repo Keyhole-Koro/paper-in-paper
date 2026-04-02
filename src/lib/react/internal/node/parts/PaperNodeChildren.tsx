@@ -4,7 +4,13 @@ import type { PaperId } from '../../../../core/types';
 import { useLayout } from '../../layout/LayoutContext';
 import { useStore } from '../../state/store';
 import type { PaperNodeProps } from '../utils/paperNodeTypes';
-import { computeGridMetrics, computeOpenNodeSpan, computeRowSpan, SIZE_SPANS } from '../utils/layoutHelpers';
+import {
+  computeGridMetrics,
+  computeOpenNodeSpan,
+  computeRowSpan,
+  SIZE_SPANS,
+  type LayoutOptions,
+} from '../utils/layoutHelpers';
 
 interface Props {
   paperId: PaperId;
@@ -25,16 +31,19 @@ interface Props {
   crumbs: PaperId[];
 }
 
-function useMeasuredGridMetrics(active: boolean) {
+function useMeasuredGridMetrics(
+  active: boolean,
+  options: LayoutOptions,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [gridMetrics, setGridMetrics] = useState(() => computeGridMetrics(700));
+  const [gridMetrics, setGridMetrics] = useState(() => computeGridMetrics(700, options.gridGapPx, options));
 
   useEffect(() => {
     const el = containerRef.current;
     if (!active || !el) return;
 
     const updateMetrics = (width: number) => {
-      setGridMetrics(computeGridMetrics(width));
+      setGridMetrics(computeGridMetrics(width, options.gridGapPx, options));
     };
 
     updateMetrics(el.getBoundingClientRect().width);
@@ -45,7 +54,7 @@ function useMeasuredGridMetrics(active: boolean) {
     ro.observe(el);
 
     return () => ro.disconnect();
-  }, [active]);
+  }, [active, options]);
 
   return { containerRef, gridMetrics };
 }
@@ -69,9 +78,9 @@ export default function PaperNodeChildren({
   crumbs,
 }: Props) {
   const { state } = useStore();
-  const { getSize, getNodeState } = useLayout();
-  const { containerRef: openChildrenRef, gridMetrics: openGridMetrics } = useMeasuredGridMetrics(openChildIds.length > 0);
-  const { containerRef: closedChildrenRef, gridMetrics: closedGridMetrics } = useMeasuredGridMetrics(closedChildIds.length > 0);
+  const { getSize, getNodeState, options } = useLayout();
+  const { containerRef: openChildrenRef, gridMetrics: openGridMetrics } = useMeasuredGridMetrics(openChildIds.length > 0, options);
+  const { containerRef: closedChildrenRef, gridMetrics: closedGridMetrics } = useMeasuredGridMetrics(closedChildIds.length > 0, options);
   const [childRowSpanMap, setChildRowSpanMap] = useState<Map<PaperId, number>>(new Map());
   const gridHue = hue === null ? 220 : (hue + depth * 18) % 360;
   const gridLineX = `hsla(${gridHue}, 88%, 50%, 0.36)`;
@@ -117,6 +126,7 @@ export default function PaperNodeChildren({
                   gridColumns: openGridMetrics.columns,
                   openSiblingCount: openChildIds.length,
                   descendantOpenCount: getDescendantOpenCount(childId),
+                  options,
                 });
                 const rowSpan = Math.max(childRowSpanMap.get(childId) ?? smartBaseSpan.row, smartBaseSpan.row);
 

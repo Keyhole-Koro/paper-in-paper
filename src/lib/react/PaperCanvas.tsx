@@ -7,14 +7,17 @@ import { LayoutProvider, useLayout } from './internal/layout/LayoutContext';
 import { StoreProvider, useStore } from './internal/state/store';
 import type { DragState } from './internal/types';
 import { debugLog } from './internal/drag/debugLog';
+import type { LayoutOptionsInput } from './internal/node/utils/layoutHelpers';
 
 interface Props {
   paperMap: PaperMap;
   rootId?: PaperId;
+  layoutOptions?: LayoutOptionsInput;
 }
 
 interface ContentProps {
   rootId: PaperId;
+  layoutOptions?: LayoutOptionsInput;
 }
 
 function PaperCanvasInner({ rootId }: ContentProps) {
@@ -54,17 +57,17 @@ function PaperCanvasInner({ rootId }: ContentProps) {
   );
 }
 
-function PaperCanvasContent({ rootId }: ContentProps) {
+function PaperCanvasContent({ rootId, layoutOptions }: ContentProps) {
   const { state } = useStore();
 
   return (
-    <LayoutProvider paperMap={state.paperMap}>
+    <LayoutProvider paperMap={state.paperMap} options={layoutOptions}>
       <PaperCanvasInner rootId={rootId} />
     </LayoutProvider>
   );
 }
 
-export default function PaperCanvas({ paperMap, rootId }: Props) {
+export default function PaperCanvas({ paperMap, rootId, layoutOptions }: Props) {
   const resolvedRootId = rootId ?? findRootId(paperMap);
 
   if (!resolvedRootId) {
@@ -73,7 +76,7 @@ export default function PaperCanvas({ paperMap, rootId }: Props) {
 
   return (
     <StoreProvider paperMap={paperMap}>
-      <PaperCanvasContent rootId={resolvedRootId} />
+      <PaperCanvasContent rootId={resolvedRootId} layoutOptions={layoutOptions} />
     </StoreProvider>
   );
 }

@@ -1,9 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useMemo, useReducer } from 'react';
 import type { PaperId, PaperMap } from '../../../core/types';
-import { computeAutoLayout, type NodeSize } from '../node/utils/layoutHelpers';
-
-const MAX_OPEN_CHILDREN_PER_PARENT = 3;
+import {
+  computeAutoLayout,
+  DEFAULT_LAYOUT_OPTIONS,
+  type LayoutOptions,
+  type LayoutOptionsInput,
+  type NodeSize,
+} from '../node/utils/layoutHelpers';
 
 interface ParentLayoutState {
   openChildIds: PaperId[];
@@ -26,6 +30,7 @@ type LayoutAction =
 interface LayoutContextValue {
   getSize: (paperId: PaperId) => NodeSize;
   getNodeState: (parentId: PaperId) => ParentLayoutState;
+  options: LayoutOptions;
   openNode: (parentId: PaperId, childId: PaperId) => void;
   closeNode: (parentId: PaperId, childId: PaperId) => void;
   setPrimaryNode: (parentId: PaperId, childId: PaperId) => void;
@@ -38,6 +43,7 @@ const EMPTY_PARENT_STATE: ParentLayoutState = { openChildIds: [], primaryChildId
 const LayoutContext = createContext<LayoutContextValue>({
   getSize: () => 'md',
   getNodeState: () => EMPTY_PARENT_STATE,
+  options: DEFAULT_LAYOUT_OPTIONS,
   openNode: () => {},
   closeNode: () => {},
   setPrimaryNode: () => {},
@@ -59,13 +65,14 @@ function pruneParentState(
   accessMap: Map<PaperId, number>,
   parentStates: Map<PaperId, ParentLayoutState>,
   paperMap: PaperMap,
+  options: LayoutOptions,
 ): ParentLayoutState {
-  if (parentState.openChildIds.length <= MAX_OPEN_CHILDREN_PER_PARENT) return parentState;
+  if (parentState.openChildIds.length <= options.maxOpenChildrenPerParent) return parentState;
 
   const ranked = [...parentState.openChildIds].sort(
     (a, b) => (accessMap.get(b) ?? 0) - (accessMap.get(a) ?? 0),
   );
-  const keep = new Set(ranked.slice(0, MAX_OPEN_CHILDREN_PER_PARENT));
+  const keep = new Set(ranked.slice(0, options.maxOpenChildrenPerParent));
   const prunedOpenChildIds = parentState.openChildIds.filter((id) => keep.has(id));
 
   for (const childId of parentState.openChildIds) {
@@ -80,7 +87,7 @@ function pruneParentState(
   };
 }
 
-function createReducer(paperMap: PaperMap) {
+function createReducer(paperMap: PaperMap, options: LayoutOptions) {
   return function layoutReducer(state: LayoutState, action: LayoutAction): LayoutState {
     switch (action.type) {
       case 'ACCESS': {
@@ -101,7 +108,7 @@ function createReducer(paperMap: PaperMap) {
         };
         parentStates.set(
           action.parentId,
-          pruneParentState(nextState, accessMap, parentStates, paperMap),
+          pruneParentState(nextState, accessMap, parentStates, paperMap, options),
         );
 
         return { ...state, accessMap, parentStates };
@@ -146,11 +153,22 @@ export function useLayout(): LayoutContextValue {
 export function LayoutProvider({
   children,
   paperMap,
+  options,
 }: {
   children: React.ReactNode;
   paperMap: PaperMap;
+  options?: LayoutOptionsInput;
 }) {
-  const [state, dispatch] = useReducer(createReducer(paperMap), {
+  const mergedOptions = useMemo<LayoutOptions>(() => ({
+    ...DEFAULT_LAYOUT_OPTIONS,
+    ...options,
+    gridColumns: { ...DEFAULT_LAYOUT_OPTIONS.gridColumns, ...options?.gridColumns },
+    gridRowHeight: { ...DEFAULT_LAYOUT_OPTIONS.gridRowHeight, ...options?.gridRowHeight },
+    singleOpen: { ...DEFAULT_LAYOUT_OPTIONS.singleOpen, ...options?.singleOpen },
+    descendantPressure: { ...DEFAULT_LAYOUT_OPTIONS.descendantPressure, ...options?.descendantPressure },
+  }), [options]);
+
+  const [state, dispatch] = useReducer(createReducer(paperMap, mergedOptions), {
     accessMap: new Map(),
     lockedSizes: new Map(),
     parentStates: new Map(),
@@ -200,8 +218,8 @@ export function LayoutProvider({
   }, []);
 
   const value = useMemo(
-    () => ({ getSize, getNodeState, openNode, closeNode, setPrimaryNode, onAccess, onResize }),
-    [getSize, getNodeState, openNode, closeNode, setPrimaryNode, onAccess, onResize],
+    () => ({ getSize, getNodeState, options: mergedOptions, openNode, closeNode, setPrimaryNode, onAccess, onResize }),
+    [getSize, getNodeState, mergedOptions, openNode, closeNode, setPrimaryNode, onAccess, onResize],
   );
 
   return <LayoutContext.Provider value={value}>{children}</LayoutContext.Provider>;

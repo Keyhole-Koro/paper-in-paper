@@ -23,8 +23,6 @@ import { SIZE_SPANS } from './utils/layoutHelpers';
 // See parts/PaperPassthroughNode.tsx for the revival guide.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const OPEN_MEASURE_DELAY_MS = 180;
-
 const PaperNode = memo(function PaperNode({
   paperId,
   parentId,
@@ -43,7 +41,7 @@ const PaperNode = memo(function PaperNode({
   allowHeaderInteractions = true,
 }: PaperNodeProps) {
   const { state } = useStore();
-  const { getSize, getNodeState, openNode, closeNode, setPrimaryNode, onAccess, onResize } = useLayout();
+  const { getSize, getNodeState, options, openNode, closeNode, setPrimaryNode, onAccess, onResize } = useLayout();
 
   const paper = state.paperMap.get(paperId)!;
   const isRoot = parentId === null;
@@ -141,7 +139,7 @@ const PaperNode = memo(function PaperNode({
     const enableTimer = window.setTimeout(() => {
       canReport = true;
       reportHeight(el.getBoundingClientRect().height);
-    }, OPEN_MEASURE_DELAY_MS);
+    }, options.openMeasureDelayMs);
 
     const ro = new ResizeObserver(([entry]) => {
       if (frameId !== null) window.cancelAnimationFrame(frameId);
@@ -157,7 +155,7 @@ const PaperNode = memo(function PaperNode({
       if (frameId !== null) window.cancelAnimationFrame(frameId);
       ro.disconnect();
     };
-  }, [nodeState, isRoot, onMeasuredHeight, paperId, nodeElementRef, openChildIds.length, closedChildIds.length, isHeaderHovered, paper.content]);
+  }, [nodeState, isRoot, onMeasuredHeight, paperId, nodeElementRef, openChildIds.length, closedChildIds.length, isHeaderHovered, paper.content, options.openMeasureDelayMs]);
 
   // ── CLOSED STATE ──────────────────────────────────────────────────────────
   if (nodeState === 'closed') {
