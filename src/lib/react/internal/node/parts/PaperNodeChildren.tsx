@@ -6,6 +6,7 @@ import { computeGridMetrics } from '../utils/layoutHelpers';
 
 interface Props {
   paperId: PaperId;
+  hue: number | null;
   primaryChildId: PaperId | null;
   openChildIds: PaperId[];
   closedChildIds: PaperId[];
@@ -49,6 +50,7 @@ function useMeasuredGridMetrics(active: boolean) {
 
 export default function PaperNodeChildren({
   paperId,
+  hue,
   primaryChildId,
   openChildIds,
   closedChildIds,
@@ -66,6 +68,10 @@ export default function PaperNodeChildren({
 }: Props) {
   const { containerRef: openChildrenRef, gridMetrics: openGridMetrics } = useMeasuredGridMetrics(openChildIds.length > 0);
   const { containerRef: closedChildrenRef, gridMetrics: closedGridMetrics } = useMeasuredGridMetrics(closedChildIds.length > 0);
+  const gridHue = hue === null ? 220 : (hue + depth * 18) % 360;
+  const gridLineX = `hsla(${gridHue}, 88%, 50%, 0.36)`;
+  const gridLineY = `hsla(${gridHue}, 82%, 46%, 0.28)`;
+  const gridOutline = `hsla(${gridHue}, 80%, 42%, 0.65)`;
 
   return (
     <>
@@ -79,6 +85,9 @@ export default function PaperNodeChildren({
             ['--paper-open-children-row-height' as string]: `${openGridMetrics.rowHeight}px`,
             ['--paper-grid-columns' as string]: String(openGridMetrics.columns),
             ['--paper-grid-row-height' as string]: `${openGridMetrics.rowHeight}px`,
+            ['--paper-grid-line-x' as string]: gridLineX,
+            ['--paper-grid-line-y' as string]: gridLineY,
+            ['--paper-grid-outline' as string]: gridOutline,
           }}
         >
           <AnimatePresence mode="popLayout" initial={false}>
@@ -112,6 +121,9 @@ export default function PaperNodeChildren({
             ['--paper-closed-children-row-height' as string]: `${closedGridMetrics.rowHeight}px`,
             ['--paper-grid-columns' as string]: String(closedGridMetrics.columns),
             ['--paper-grid-row-height' as string]: `${closedGridMetrics.rowHeight}px`,
+            ['--paper-grid-line-x' as string]: gridLineX,
+            ['--paper-grid-line-y' as string]: gridLineY,
+            ['--paper-grid-outline' as string]: gridOutline,
           }}
         >
           <AnimatePresence mode="popLayout" initial={false}>

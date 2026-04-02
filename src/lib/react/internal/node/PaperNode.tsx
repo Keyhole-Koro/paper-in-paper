@@ -331,6 +331,7 @@ const PaperNode = memo(function PaperNode({
         </AnimatePresence>
           <PaperNodeChildren
             paperId={paperId}
+            hue={hue}
             primaryChildId={primaryChildId}
             openChildIds={openChildIds}
             closedChildIds={closedChildIds}

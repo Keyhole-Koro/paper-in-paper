@@ -28,9 +28,10 @@ interface Props {
   expansionMap: ExpansionMap;
   layoutHints?: Map<PaperId, NodeSize>;
   onLayoutChange?: (layout: Map<PaperId, NodeSize>) => void;
+  onAccessMapChange?: (accessMap: AccessMap) => void;
 }
 
-export function LayoutProvider({ children, expansionMap, layoutHints, onLayoutChange }: Props) {
+export function LayoutProvider({ children, expansionMap, layoutHints, onLayoutChange, onAccessMapChange }: Props) {
   const [accessMap, setAccessMap] = useState<AccessMap>(new Map());
   const [lockedSizes, setLockedSizes] = useState<Map<PaperId, NodeSize>>(new Map());
 
@@ -63,6 +64,11 @@ export function LayoutProvider({ children, expansionMap, layoutHints, onLayoutCh
     prevLayoutRef.current = computedLayout;
     onLayoutChange(computedLayout);
   }, [computedLayout, onLayoutChange]);
+
+  useEffect(() => {
+    if (!onAccessMapChange) return;
+    onAccessMapChange(accessMap);
+  }, [accessMap, onAccessMapChange]);
 
   const getSize = useCallback(
     (paperId: PaperId): NodeSize => computedLayout.get(paperId) ?? 'md',
