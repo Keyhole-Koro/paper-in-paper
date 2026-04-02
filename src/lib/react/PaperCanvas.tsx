@@ -1,10 +1,9 @@
-import { LayoutGroup } from 'framer-motion';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { PaperId, PaperMap } from '../core/types';
 import { findRootId } from '../core/tree';
 import PaperNode from './internal/node/PaperNode';
 import FloatingLayer from './internal/drag/FloatingLayer';
-import { LayoutProvider } from './internal/layout/LayoutContext';
+import { LayoutProvider, useLayout } from './internal/layout/LayoutContext';
 import { StoreProvider, useStore } from './internal/state/store';
 import type { DragState } from './internal/types';
 import { debugLog } from './internal/drag/debugLog';
@@ -18,11 +17,9 @@ interface ContentProps {
   rootId: PaperId;
 }
 
-const MAX_OPEN_CHILDREN_PER_PARENT = 3;
-
-function PaperCanvasContent({ rootId }: ContentProps) {
-  const { state, dispatch } = useStore();
-  const [accessMap, setAccessMap] = useState<Map<PaperId, number>>(new Map());
+function PaperCanvasInner({ rootId }: ContentProps) {
+  const { dispatch } = useStore();
+  const { openNode } = useLayout();
   const [dragState, setDragState] = useState<DragState>({
     paperId: null,
     parentId: null,
@@ -33,44 +30,36 @@ function PaperCanvasContent({ rootId }: ContentProps) {
   const handleInsertDrop = useCallback((paperId: PaperId, parentId: PaperId, insertBeforeId: PaperId | null) => {
     debugLog('insert-drop-dispatch', { paperId, parentId, insertBeforeId });
     dispatch({ type: 'REORDER', parentId, childId: paperId, insertBeforeId });
-    dispatch({ type: 'OPEN', parentId, childId: paperId });
-  }, [dispatch]);
-
-  useEffect(() => {
-    for (const [parentId, expansion] of state.expansionMap.entries()) {
-      if (expansion.openChildIds.length <= MAX_OPEN_CHILDREN_PER_PARENT) continue;
-
-      const ranked = [...expansion.openChildIds].sort(
-        (a, b) => (accessMap.get(b) ?? 0) - (accessMap.get(a) ?? 0),
-      );
-      const keep = new Set(ranked.slice(0, MAX_OPEN_CHILDREN_PER_PARENT));
-      const toClose = expansion.openChildIds.filter((childId) => !keep.has(childId));
-
-      for (const childId of toClose) {
-        dispatch({ type: 'CLOSE', parentId, childId });
-      }
-    }
-  }, [state.expansionMap, accessMap, dispatch]);
+    openNode(parentId, paperId);
+  }, [dispatch, openNode]);
 
   return (
-    <LayoutProvider expansionMap={state.expansionMap} onAccessMapChange={setAccessMap}>
-      <div className="paper-canvas">
-        <div className="paper-universe">
-          <PaperNode
-            paperId={rootId}
-            parentId={null}
-            nodeState="open"
-            isPrimary={true}
-            depth={0}
-            crumbs={[]}
-            hue={null}
-            dragState={dragState}
-            onDragStateChange={setDragState}
-            onInsertDrop={handleInsertDrop}
-          />
-        </div>
-        <FloatingLayer dragState={dragState} />
+    <div className="paper-canvas">
+      <div className="paper-universe">
+        <PaperNode
+          paperId={rootId}
+          parentId={null}
+          nodeState="open"
+          isPrimary={true}
+          depth={0}
+          crumbs={[]}
+          hue={null}
+          dragState={dragState}
+          onDragStateChange={setDragState}
+          onInsertDrop={handleInsertDrop}
+        />
       </div>
+      <FloatingLayer dragState={dragState} />
+    </div>
+  );
+}
+
+function PaperCanvasContent({ rootId }: ContentProps) {
+  const { state } = useStore();
+
+  return (
+    <LayoutProvider paperMap={state.paperMap}>
+      <PaperCanvasInner rootId={rootId} />
     </LayoutProvider>
   );
 }
@@ -84,9 +73,7 @@ export default function PaperCanvas({ paperMap, rootId }: Props) {
 
   return (
     <StoreProvider paperMap={paperMap}>
-      <LayoutGroup>
-        <PaperCanvasContent rootId={resolvedRootId} />
-      </LayoutGroup>
+      <PaperCanvasContent rootId={resolvedRootId} />
     </StoreProvider>
   );
 }

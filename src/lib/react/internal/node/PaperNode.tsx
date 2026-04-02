@@ -23,7 +23,7 @@ import { SIZE_SPANS } from './utils/layoutHelpers';
 // See parts/PaperPassthroughNode.tsx for the revival guide.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
+const OPEN_MEASURE_DELAY_MS = 180;
 
 const PaperNode = memo(function PaperNode({
   paperId,
@@ -42,8 +42,8 @@ const PaperNode = memo(function PaperNode({
   allowCrumbInteractions = true,
   allowHeaderInteractions = true,
 }: PaperNodeProps) {
-  const { state, dispatch } = useStore();
-  const { getSize, onAccess, onResize } = useLayout();
+  const { state } = useStore();
+  const { getSize, getNodeState, openNode, closeNode, setPrimaryNode, onAccess, onResize } = useLayout();
 
   const paper = state.paperMap.get(paperId)!;
   const isRoot = parentId === null;
@@ -76,13 +76,14 @@ const PaperNode = memo(function PaperNode({
     isRoot,
     isPrimary,
     crumbs,
-    dispatch,
+    closeNode,
+    setPrimaryNode,
   });
 
   // Open state derived data (computed unconditionally for hook consistency)
-  const expansion = state.expansionMap.get(paperId);
-  const openChildIds = expansion?.openChildIds ?? EMPTY_IDS;
-  const primaryChildId = expansion?.primaryChildId ?? null;
+  const parentState = getNodeState(paperId);
+  const openChildIds = parentState.openChildIds ?? EMPTY_IDS;
+  const primaryChildId = parentState.primaryChildId ?? null;
   const closedChildIds = useMemo(
     () => paper.childIds.filter((id) => !openChildIds.includes(id)),
     [paper.childIds, openChildIds],
@@ -91,6 +92,16 @@ const PaperNode = memo(function PaperNode({
     if (isRoot) return getBranchHue(state.paperMap, childId, paperId);
     return hue;
   }, [isRoot, state.paperMap, paperId, hue]);
+
+  const handleNodeHeaderClick = useCallback(() => {
+    onAccess(paperId);
+    handleHeaderClick();
+  }, [onAccess, paperId, handleHeaderClick]);
+
+  const handleNodeCrumbClick = useCallback((idx: number) => {
+    onAccess(paperId);
+    handleCrumbClick(idx);
+  }, [onAccess, paperId, handleCrumbClick]);
 
   // Layout size (only meaningful for open nodes, but read unconditionally)
   const size = getSize(paperId);
@@ -119,18 +130,33 @@ const PaperNode = memo(function PaperNode({
     const el = nodeElementRef.current;
     if (!el) return;
 
+    let canReport = false;
+    let frameId: number | null = null;
+
     const reportHeight = (height: number) => {
+      if (!canReport) return;
       onMeasuredHeight(paperId, height);
     };
 
-    reportHeight(el.getBoundingClientRect().height);
+    const enableTimer = window.setTimeout(() => {
+      canReport = true;
+      reportHeight(el.getBoundingClientRect().height);
+    }, OPEN_MEASURE_DELAY_MS);
 
     const ro = new ResizeObserver(([entry]) => {
-      reportHeight(entry.contentRect.height);
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        reportHeight(entry.contentRect.height);
+      });
     });
     ro.observe(el);
 
-    return () => ro.disconnect();
+    return () => {
+      window.clearTimeout(enableTimer);
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      ro.disconnect();
+    };
   }, [nodeState, isRoot, onMeasuredHeight, paperId, nodeElementRef, openChildIds.length, closedChildIds.length, isHeaderHovered, paper.content]);
 
   // ── CLOSED STATE ──────────────────────────────────────────────────────────
@@ -155,20 +181,17 @@ const PaperNode = memo(function PaperNode({
     return (
       <motion.button
         ref={nodeElementRef as React.RefObject<HTMLButtonElement>}
-        layoutId={paperId}
         className={`child-card child-card--compact ${isDragCompact ? 'child-card--dragging' : ''}`}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ opacity: { duration: 0.2 }, layout: lt, duration: 0.15 }}
+        transition={{ opacity: { duration: 0.2 }, duration: 0.15 }}
         onClick={() => {
           if (suppressClickRef.current) return;
-          dispatch({ type: 'OPEN', parentId: parentId!, childId: paperId });
-        }}
-        onPointerDown={(e) => {
           onAccess(paperId);
-          stickyPointerDown(e);
+          openNode(parentId!, paperId);
         }}
+        onPointerDown={stickyPointerDown}
         drag
         dragListener={false}
         dragControls={dragControls}
@@ -198,14 +221,14 @@ const PaperNode = memo(function PaperNode({
             style={{ borderRadius: 10, background: bg, borderColor: border, boxShadow: previewShadow }}
           />
         )}
-        <motion.div layout="position" className="child-card__row">
+        <div className="child-card__row">
           <div className="child-card__title" style={{ color: titleColor }}>{paper.title}</div>
           {childCount > 0 && (
             <div className="child-card__count" style={{ color: hintColor, background: badgeBg }}>
               {childCount}
             </div>
           )}
-        </motion.div>
+        </div>
         <div className="child-card__preview">
           <div className="child-card__preview-title" style={{ color: titleColor }}>{paper.title}</div>
           {paper.description && (
@@ -225,8 +248,7 @@ const PaperNode = memo(function PaperNode({
   return (
     <motion.div
       ref={nodeElementRef as React.RefObject<HTMLDivElement>}
-      layoutId={!isRoot ? paperId : undefined}
-      layout
+      layout="position"
       className={[
         'paper-node',
         isRoot ? 'paper-node--root' : '',
@@ -241,15 +263,12 @@ const PaperNode = memo(function PaperNode({
       dragControls={dragControls}
       dragMomentum={false}
       dragElastic={0.08}
-      onPointerDown={(e) => {
-        onAccess(paperId);
-        stickyPointerDown(e);
-      }}
+      onPointerDown={stickyPointerDown}
       onDragStart={handleDragStart}
       onDrag={handleDrag}
       onDragEnd={handleDragEnd}
       whileDrag={{ scale: 1, zIndex: 20 }}
-      transition={{ opacity: { duration: 0.22 }, layout: lt }}
+      transition={{ opacity: { duration: 0.22 }, layout: { duration: 0.22, ease: [0.2, 0, 0.2, 1] } }}
       style={{
         ...(isRoot
           ? { flex: 1 }
@@ -286,8 +305,8 @@ const PaperNode = memo(function PaperNode({
         isRoot={isRoot}
         isPrimary={isPrimary}
         isHovered={isHeaderHovered}
-        onHeaderClick={handleHeaderClick}
-        onCrumbClick={handleCrumbClick}
+        onHeaderClick={handleNodeHeaderClick}
+        onCrumbClick={handleNodeCrumbClick}
         onHoverChange={setIsHeaderHovered}
         onMouseLeaveDownward={(event) => {
           const bounds = event.currentTarget.getBoundingClientRect();

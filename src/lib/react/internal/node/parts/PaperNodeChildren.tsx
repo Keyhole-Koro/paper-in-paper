@@ -93,7 +93,7 @@ export default function PaperNodeChildren({
             ['--paper-grid-outline' as string]: gridOutline,
           }}
         >
-          <AnimatePresence mode="popLayout" initial={false}>
+          <AnimatePresence initial={false}>
             {openChildIds.map((childId) => (
               (() => {
                 const size = getSize(childId);
