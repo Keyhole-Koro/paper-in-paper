@@ -4,6 +4,7 @@ import type { PaperId, PaperMap } from '../core/types';
 import { findRootId } from '../core/tree';
 import PaperNode from './internal/node/PaperNode';
 import FloatingLayer from './internal/drag/FloatingLayer';
+import { LayoutProvider } from './internal/layout/LayoutContext';
 import { StoreProvider, useStore } from './internal/state/store';
 import type { DragState } from './internal/types';
 import { debugLog } from './internal/drag/debugLog';
@@ -18,7 +19,7 @@ interface ContentProps {
 }
 
 function PaperCanvasContent({ rootId }: ContentProps) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const [dragState, setDragState] = useState<DragState>({
     paperId: null,
     parentId: null,
@@ -33,23 +34,25 @@ function PaperCanvasContent({ rootId }: ContentProps) {
   }, [dispatch]);
 
   return (
-    <div className="paper-canvas">
-      <div className="paper-universe">
-        <PaperNode
-          paperId={rootId}
-          parentId={null}
-          nodeState="open"
-          isPrimary={true}
-          depth={0}
-          crumbs={[]}
-          hue={null}
-          dragState={dragState}
-          onDragStateChange={setDragState}
-          onInsertDrop={handleInsertDrop}
-        />
+    <LayoutProvider expansionMap={state.expansionMap}>
+      <div className="paper-canvas">
+        <div className="paper-universe">
+          <PaperNode
+            paperId={rootId}
+            parentId={null}
+            nodeState="open"
+            isPrimary={true}
+            depth={0}
+            crumbs={[]}
+            hue={null}
+            dragState={dragState}
+            onDragStateChange={setDragState}
+            onInsertDrop={handleInsertDrop}
+          />
+        </div>
+        <FloatingLayer dragState={dragState} />
       </div>
-      <FloatingLayer dragState={dragState} />
-    </div>
+    </LayoutProvider>
   );
 }
 

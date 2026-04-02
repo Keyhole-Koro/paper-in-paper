@@ -1,27 +1,35 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PaperId } from '../../../core/types';
 import { useStore } from '../state/store';
+import { useLayout } from '../layout/LayoutContext';
 import PaperHeader from './parts/PaperHeader';
+import PaperNodeChildren from './parts/PaperNodeChildren';
+import ResizeHandle from './parts/ResizeHandle';
 import type { PaperNodeProps } from './utils/paperNodeTypes';
-import { EMPTY_IDS, getBranchHue, getNodeVisualState } from './utils/paperNodeHelpers';
+import {
+  EMPTY_IDS,
+  getBranchHue,
+  getNodeVisualState,
+} from './utils/paperNodeHelpers';
 import { usePaperNodeDrag } from './hooks/usePaperNodeDrag';
 import { usePaperNodeInteractions } from './hooks/usePaperNodeInteractions';
-import PaperNodeChildren from './parts/PaperNodeChildren';
+import { computeRowSpan, SIZE_SPANS } from './utils/layoutHelpers';
 
 // ─── PASSTHROUGH NOTE ────────────────────────────────────────────────────────
 // When nodeState='open' and openChildIds.length === 1, the parent could render
-// in a "passthrough" mode: no header, just a slim flex wrapper that delegates
-// visual identity to the single open child. This avoids redundant nesting and
-// keeps the hierarchy visually flat. Removed for simplicity.
-// See git history / PaperPassthroughNode.tsx for the old implementation.
+// in "passthrough" mode: no header, just a slim flex wrapper delegating visual
+// identity to the single open child. Removed for simplicity.
+// See parts/PaperPassthroughNode.tsx for the revival guide.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const lt = { duration: 0.45, ease: [0.4, 0, 0.2, 1] } as const;
+const GRID_GAP_PX = 10;
 
 const PaperNode = memo(function PaperNode({
   paperId,
   parentId,
+  parentGridRowHeight,
   nodeState,
   isPrimary,
   depth,
@@ -34,11 +42,15 @@ const PaperNode = memo(function PaperNode({
   allowHeaderInteractions = true,
 }: PaperNodeProps) {
   const { state, dispatch } = useStore();
+  const { getSize, onAccess, onResize } = useLayout();
+
   const paper = state.paperMap.get(paperId)!;
   const isRoot = parentId === null;
-
   const suppressClickRef = useRef(false);
 
+  // ── Hooks (all unconditional) ─────────────────────────────────────────────
+  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
+  const [dynamicRowSpan, setDynamicRowSpan] = useState<number | null>(null);
   const {
     nodeElementRef,
     isDragCompact,
@@ -57,6 +69,82 @@ const PaperNode = memo(function PaperNode({
     onDragStarted: () => { suppressClickRef.current = true; },
     onDragEnded: () => { window.setTimeout(() => { suppressClickRef.current = false; }, 0); },
   });
+
+  const { handleHeaderClick, handleCrumbClick } = usePaperNodeInteractions({
+    paperId,
+    parentId,
+    isRoot,
+    isPrimary,
+    crumbs,
+    dispatch,
+  });
+
+  // Open state derived data (computed unconditionally for hook consistency)
+  const expansion = state.expansionMap.get(paperId);
+  const openChildIds = expansion?.openChildIds ?? EMPTY_IDS;
+  const primaryChildId = expansion?.primaryChildId ?? null;
+  const closedChildIds = useMemo(
+    () => paper.childIds.filter((id) => !openChildIds.includes(id)),
+    [paper.childIds, openChildIds],
+  );
+  const childHue = useCallback((childId: PaperId): number | null => {
+    if (isRoot) return getBranchHue(state.paperMap, childId, paperId);
+    return hue;
+  }, [isRoot, state.paperMap, paperId, hue]);
+
+  // Layout size (only meaningful for open nodes, but read unconditionally)
+  const size = getSize(paperId);
+  const { col, row } = SIZE_SPANS[size];
+
+  const {
+    background,
+    borderColor,
+    shadow,
+    contentColor,
+    shouldShowContent,
+    nodeZIndex,
+  } = getNodeVisualState({
+    isRoot,
+    hue,
+    isPrimary,
+    depth,
+    openChildIds,
+    hasContent: Boolean(paper.content),
+    isHeaderHovered,
+  });
+
+  useEffect(() => {
+    if (nodeState !== 'open' || isRoot || !parentGridRowHeight) {
+      setDynamicRowSpan(null);
+      return;
+    }
+
+    const el = nodeElementRef.current;
+    if (!el) return;
+
+    const updateSpan = (height: number) => {
+      setDynamicRowSpan(computeRowSpan(height, parentGridRowHeight, row, GRID_GAP_PX));
+    };
+
+    updateSpan(el.getBoundingClientRect().height);
+
+    const ro = new ResizeObserver(([entry]) => {
+      updateSpan(entry.contentRect.height);
+    });
+    ro.observe(el);
+
+    return () => ro.disconnect();
+  }, [
+    nodeState,
+    isRoot,
+    parentGridRowHeight,
+    row,
+    nodeElementRef,
+    openChildIds.length,
+    closedChildIds.length,
+    isHeaderHovered,
+    paper.content,
+  ]);
 
   // ── CLOSED STATE ──────────────────────────────────────────────────────────
   if (nodeState === 'closed') {
@@ -90,12 +178,15 @@ const PaperNode = memo(function PaperNode({
           if (suppressClickRef.current) return;
           dispatch({ type: 'OPEN', parentId: parentId!, childId: paperId });
         }}
+        onPointerDown={(e) => {
+          onAccess(paperId);
+          stickyPointerDown(e);
+        }}
         drag
         dragListener={false}
         dragControls={dragControls}
         dragMomentum={false}
         dragElastic={0.08}
-        onPointerDown={stickyPointerDown}
         onDragStart={handleDragStart}
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
@@ -142,46 +233,6 @@ const PaperNode = memo(function PaperNode({
   }
 
   // ── OPEN STATE ────────────────────────────────────────────────────────────
-  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
-  const expansion = state.expansionMap.get(paperId);
-  const openChildIds = expansion?.openChildIds ?? EMPTY_IDS;
-  const primaryChildId = expansion?.primaryChildId ?? null;
-  const closedChildIds = useMemo(
-    () => paper.childIds.filter((id) => !openChildIds.includes(id)),
-    [paper.childIds, openChildIds],
-  );
-
-  const childHue = useCallback((childId: PaperId): number | null => {
-    if (isRoot) return getBranchHue(state.paperMap, childId, paperId);
-    return hue;
-  }, [isRoot, state.paperMap, paperId, hue]);
-
-  const { handleHeaderClick, handleCrumbClick } = usePaperNodeInteractions({
-    paperId,
-    parentId,
-    isRoot,
-    isPrimary,
-    crumbs,
-    dispatch,
-  });
-
-  const {
-    background,
-    borderColor,
-    shadow,
-    contentColor,
-    shouldShowContent,
-    nodeZIndex,
-  } = getNodeVisualState({
-    isRoot,
-    hue,
-    isPrimary,
-    depth,
-    openChildIds,
-    hasContent: Boolean(paper.content),
-    isHeaderHovered,
-  });
-
   const isDragging = dragState.paperId === paperId;
 
   return (
@@ -203,19 +254,26 @@ const PaperNode = memo(function PaperNode({
       dragControls={dragControls}
       dragMomentum={false}
       dragElastic={0.08}
-      onPointerDown={stickyPointerDown}
+      onPointerDown={(e) => {
+        onAccess(paperId);
+        stickyPointerDown(e);
+      }}
       onDragStart={handleDragStart}
       onDrag={handleDrag}
       onDragEnd={handleDragEnd}
       whileDrag={{ scale: 1, zIndex: 20 }}
       transition={{ opacity: { duration: 0.22 }, layout: lt }}
       style={{
-        flex: isRoot ? 1 : isPrimary ? 2 : 1,
+        ...(isRoot
+          ? { flex: 1 }
+          : { gridColumn: `span ${col}`, gridRow: `span ${dynamicRowSpan ?? row}` }
+        ),
         background,
         border: `1px solid ${borderColor}`,
         borderRadius: isRoot ? 16 : 14,
         boxShadow: shadow,
         zIndex: nodeZIndex,
+        position: 'relative',
         ...(dragSizeStyle ?? {}),
       }}
       data-docked-paper-id={!isRoot ? paperId : undefined}
@@ -254,6 +312,7 @@ const PaperNode = memo(function PaperNode({
       <div
         className="paper-node__content"
         data-empty-insert-parent-id={openChildIds.length === 0 ? paperId : undefined}
+        onScroll={() => onAccess(paperId)}
       >
         <AnimatePresence initial={false}>
           {shouldShowContent && (
@@ -270,24 +329,30 @@ const PaperNode = memo(function PaperNode({
             </motion.div>
           )}
         </AnimatePresence>
-        <PaperNodeChildren
-          paperId={paperId}
-          primaryChildId={primaryChildId}
-          openChildIds={openChildIds}
-          closedChildIds={closedChildIds}
-          leafVisible={paper.childIds.length === 0}
-          leafStyle={hue !== null ? { color: `hsl(${hue}, 30%, 60%)` } : {}}
-          getHue={childHue}
-          NodeComponent={PaperNode}
-          dragState={dragState}
-          onDragStateChange={onDragStateChange}
-          onInsertDrop={onInsertDrop}
-          allowCrumbInteractions={allowCrumbInteractions}
-          allowHeaderInteractions={allowHeaderInteractions}
-          depth={depth}
-          crumbs={crumbs}
-        />
+          <PaperNodeChildren
+            paperId={paperId}
+            primaryChildId={primaryChildId}
+            openChildIds={openChildIds}
+            closedChildIds={closedChildIds}
+            leafVisible={paper.childIds.length === 0}
+            leafStyle={hue !== null ? { color: `hsl(${hue}, 30%, 60%)` } : {}}
+            getHue={childHue}
+            NodeComponent={PaperNode}
+            dragState={dragState}
+            onDragStateChange={onDragStateChange}
+            onInsertDrop={onInsertDrop}
+            allowCrumbInteractions={allowCrumbInteractions}
+            allowHeaderInteractions={allowHeaderInteractions}
+            depth={depth}
+            crumbs={crumbs}
+          />
       </div>
+      {!isRoot && (
+        <ResizeHandle
+          currentSize={size}
+          onResize={(s) => onResize(paperId, s)}
+        />
+      )}
     </motion.div>
   );
 });

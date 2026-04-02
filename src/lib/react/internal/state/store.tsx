@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useMemo, useReducer } from 'react';
 import { expansionReducer, type ExpansionAction } from '../../../core/expansion';
 import type { ExpansionMap, PaperMap } from '../../../core/types';

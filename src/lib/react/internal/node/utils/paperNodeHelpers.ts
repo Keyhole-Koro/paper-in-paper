@@ -106,13 +106,10 @@ export function getScaledRect(
   return new DOMRect(left, top, width, height);
 }
 
-// ExpansionMap helpers — kept for potential future use
-export function getAllOpenNodeIds(expansionMap: ExpansionMap): PaperId[] {
-  const ids = new Set<PaperId>();
-  for (const { openChildIds } of expansionMap.values()) {
-    for (const id of openChildIds) {
-      ids.add(id);
-    }
+// Returns the parentId that currently has paperId in its openChildIds.
+export function findCurrentParent(paperId: PaperId, expansionMap: ExpansionMap): PaperId | null {
+  for (const [parentId, { openChildIds }] of expansionMap.entries()) {
+    if (openChildIds.includes(paperId)) return parentId;
   }
-  return [...ids];
+  return null;
 }
