@@ -87,6 +87,24 @@ export function buildSrcDoc(content: string, theme: IframeTheme): string {
   a[data-paper-id]:active {
     transform: translateY(0);
   }
+  figure {
+    margin: 12px 0;
+  }
+  img {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    object-fit: cover;
+  }
+  figcaption {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #6a6a78;
+  }
   p { margin-bottom: 10px; }
   p:last-child { margin-bottom: 0; }
 </style>

@@ -6,7 +6,6 @@ import type { InsertTarget } from './internal/hitTest';
 import { PaperNode } from './components/PaperNode';
 import { Sidebar } from './components/Sidebar';
 import { FloatingLayer } from './components/FloatingLayer';
-import { useImportanceTick } from './hooks/useImportanceTick';
 
 export interface PaperCanvasProps {
   paperMap: PaperMap;
@@ -23,7 +22,6 @@ export interface PaperCanvasProps {
 function PaperCanvasInner() {
   const { state, dispatch } = usePaperStore();
   const rootId = getRootId(state.paperMap);
-  useImportanceTick();
 
   function handleDrop(session: DragSession, target: InsertTarget) {
     if (session.mode === 'attach-unplaced') {

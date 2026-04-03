@@ -14,7 +14,20 @@ export interface RoomLayout {
 const DEFAULT_MIN_AR = 0.25;
 const DEFAULT_MAX_AR = 4.0;
 const CONTENT_IMPORTANCE = 100;
+const CHILD_BASE_WEIGHT = 100;
 const CONTENT_ID = '__content__';
+const MIN_CHILD_WEIGHT = 18;
+const SHRINK_STEP = 0.84;
+const MAX_SHRINK_PASSES = 24;
+
+function layoutOverflows(rects: LayoutRect[], containerWidth: number, containerHeight: number) {
+  return rects.some((rect) => {
+    return rect.x < -0.5
+      || rect.y < -0.5
+      || rect.x + rect.width > containerWidth + 0.5
+      || rect.y + rect.height > containerHeight + 0.5;
+  });
+}
 
 export function usePaperLayout(
   nodeId: PaperId,
@@ -54,15 +67,52 @@ export function usePaperLayout(
       state.importanceMap,
     );
 
-    const items = [
-      { id: CONTENT_ID, weight: CONTENT_IMPORTANCE },
-      ...openChildIds.map((id) => ({
-        id,
-        weight: Math.max(1, effectiveMap.get(id) ?? CONTENT_IMPORTANCE),
-      })),
-    ];
+    const childPriority = [...openChildIds].sort((a, b) => {
+      const ia = effectiveMap.get(a) ?? CONTENT_IMPORTANCE;
+      const ib = effectiveMap.get(b) ?? CONTENT_IMPORTANCE;
+      if (ia !== ib) return ia - ib;
+      const ta = state.accessMap.get(a) ?? 0;
+      const tb = state.accessMap.get(b) ?? 0;
+      return ta - tb;
+    });
 
-    const { rects } = computeRoomLayout(items, w, h, minAR, maxAR);
+    const childWeights = new Map(openChildIds.map((id) => [id, CHILD_BASE_WEIGHT]));
+    let rects = computeRoomLayout(
+      [
+        { id: CONTENT_ID, weight: CONTENT_IMPORTANCE },
+        ...openChildIds.map((id) => ({ id, weight: childWeights.get(id) ?? CHILD_BASE_WEIGHT })),
+      ],
+      w,
+      h,
+      minAR,
+      maxAR,
+    ).rects;
+
+    let pass = 0;
+    while (layoutOverflows(rects, w, h) && pass < MAX_SHRINK_PASSES) {
+      let changed = false;
+      for (const childId of childPriority) {
+        const current = childWeights.get(childId) ?? CHILD_BASE_WEIGHT;
+        if (current <= MIN_CHILD_WEIGHT) continue;
+        const next = Math.max(MIN_CHILD_WEIGHT, current * SHRINK_STEP);
+        if (next < current) {
+          childWeights.set(childId, next);
+          changed = true;
+        }
+      }
+      if (!changed) break;
+      rects = computeRoomLayout(
+        [
+          { id: CONTENT_ID, weight: CONTENT_IMPORTANCE },
+          ...openChildIds.map((id) => ({ id, weight: childWeights.get(id) ?? CHILD_BASE_WEIGHT })),
+        ],
+        w,
+        h,
+        minAR,
+        maxAR,
+      ).rects;
+      pass += 1;
+    }
 
     const contentRect = rects.find((r) => r.id === CONTENT_ID) ?? fallback;
     const childRects = new Map<PaperId, LayoutRect>(

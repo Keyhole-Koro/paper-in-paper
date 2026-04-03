@@ -149,7 +149,6 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
           </div>
         ))}
       </div>
-
     </div>
   );
 }

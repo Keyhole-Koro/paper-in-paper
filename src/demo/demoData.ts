@@ -80,6 +80,15 @@ const papers: Paper[] = [
         Papers do not need to expose every child through inline links.
         A room can still contain child cards that are discoverable spatially.
       </p>
+      <figure>
+        <img
+          src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80"
+          alt="Desk with notes and diagrams"
+        />
+        <figcaption>
+          Content can also mix text with media, not just links and paragraphs.
+        </figcaption>
+      </figure>
     `,
     parentId: 'root',
     childIds: [],
