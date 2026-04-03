@@ -2,20 +2,23 @@ import { useRef, useState } from 'react';
 import type { Paper, PaperId } from '../../core/types';
 import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
+import { getPaperTone, type PaperColorContext } from '../internal/paperColors';
 
 interface ChildCardProps {
   paper: Paper;
   parentId: PaperId;
+  color: PaperColorContext;
 }
 
 const DRAG_THRESHOLD = 5;
 
-export function ChildCard({ paper, parentId }: ChildCardProps) {
+export function ChildCard({ paper, parentId, color }: ChildCardProps) {
   const { dispatch } = usePaperStore();
   const { startDrag } = useDrag();
   const [hovered, setHovered] = useState(false);
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
   const dragging = useRef(false);
+  const tone = getPaperTone(color);
 
   function handlePointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
@@ -57,11 +60,12 @@ export function ChildCard({ paper, parentId }: ChildCardProps) {
         position: 'relative',
         display: 'inline-block',
         padding: '6px 12px',
-        border: '1px solid #ccc',
+        border: `1px solid ${tone.border}`,
         borderRadius: 6,
         cursor: 'grab',
-        background: hovered ? '#f5f5f5' : '#fff',
+        background: hovered ? tone.backgroundHover : tone.background,
         fontSize: 13,
+        color: tone.text,
         userSelect: 'none',
         touchAction: 'none',
       }}
@@ -76,7 +80,7 @@ export function ChildCard({ paper, parentId }: ChildCardProps) {
             left: 0,
             marginBottom: 6,
             padding: '6px 10px',
-            background: '#333',
+            background: tone.title,
             color: '#fff',
             borderRadius: 4,
             fontSize: 12,

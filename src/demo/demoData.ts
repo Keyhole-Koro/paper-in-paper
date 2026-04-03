@@ -6,6 +6,7 @@ const papers: Paper[] = [
     id: 'root',
     title: 'Paper in Paper',
     description: 'Recursive paper demo root.',
+    hue: 36,
     content: `
       <p>
         Paper in Paper is a reading UI where concepts expand in place.
@@ -25,6 +26,7 @@ const papers: Paper[] = [
     id: 'concept',
     title: 'Concept',
     description: 'Why recursive reading is useful.',
+    hue: 150,
     content: `
       <p>
         Instead of showing one long article, each paper can open a narrower topic.
@@ -40,6 +42,7 @@ const papers: Paper[] = [
     id: 'architecture',
     title: 'Architecture',
     description: 'React + TypeScript implementation slices.',
+    hue: 215,
     content: `
       <p>
         The implementation separates
@@ -55,6 +58,7 @@ const papers: Paper[] = [
     id: 'interaction',
     title: 'Interaction',
     description: 'Open, close, breadcrumbs, and drag.',
+    hue: 338,
     content: `
       <p>
         Users open linked papers inline, close branches from breadcrumbs,
@@ -70,6 +74,7 @@ const papers: Paper[] = [
     id: 'notes',
     title: 'Notes',
     description: 'Free-standing paper without inline links.',
+    hue: 270,
     content: `
       <p>
         Papers do not need to expose every child through inline links.

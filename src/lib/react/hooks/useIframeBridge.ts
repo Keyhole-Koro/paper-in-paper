@@ -1,14 +1,22 @@
 import { useEffect, useRef } from 'react';
 import { buildSrcDoc, isPaperContentEvent, type PaperContentEvent } from '../internal/iframeBridge';
 
+interface IframeTheme {
+  linkBackground: string;
+  linkBackgroundHover: string;
+  linkBorder: string;
+  linkText: string;
+}
+
 interface UseIframeBridgeOptions {
   content: string;
+  theme: IframeTheme;
   onEvent: (event: PaperContentEvent) => void;
 }
 
-export function useIframeBridge({ content, onEvent }: UseIframeBridgeOptions) {
+export function useIframeBridge({ content, theme, onEvent }: UseIframeBridgeOptions) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const srcDoc = buildSrcDoc(content);
+  const srcDoc = buildSrcDoc(content, theme);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 

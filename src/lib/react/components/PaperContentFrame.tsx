@@ -5,12 +5,20 @@ import { useIframeBridge } from '../hooks/useIframeBridge';
 import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
 
+interface PaperContentTheme {
+  linkBackground: string;
+  linkBackgroundHover: string;
+  linkBorder: string;
+  linkText: string;
+}
+
 interface PaperContentFrameProps {
   nodeId: PaperId;
   content: string;
+  theme: PaperContentTheme;
 }
 
-export function PaperContentFrame({ nodeId, content }: PaperContentFrameProps) {
+export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameProps) {
   const { dispatch, state } = usePaperStore();
   const { startDrag } = useDrag();
   const [height, setHeight] = useState(60);
@@ -35,7 +43,7 @@ export function PaperContentFrame({ nodeId, content }: PaperContentFrameProps) {
     [nodeId, dispatch, startDrag, state.paperMap],
   );
 
-  const { iframeRef, srcDoc } = useIframeBridge({ content, onEvent: handleEvent });
+  const { iframeRef, srcDoc } = useIframeBridge({ content, theme, onEvent: handleEvent });
 
   return (
     <iframe

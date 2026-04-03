@@ -45,10 +45,22 @@ export function PaperStoreProvider({
   }, [expansionMap]);
 
   useEffect(() => {
+    if (paperMap !== state.paperMap) {
+      rawDispatch({ type: '__SYNC_PAPER_MAP', paperMap });
+    }
+  }, [paperMap, state.paperMap]);
+
+  useEffect(() => {
     if (focusedNodeId !== undefined && focusedNodeId !== state.focusedNodeId) {
       rawDispatch({ type: '__SYNC_FOCUSED' as never, focusedNodeId } as never);
     }
   }, [focusedNodeId]);
+
+  useEffect(() => {
+    if (unplacedNodeIds !== undefined && unplacedNodeIds !== state.unplacedNodeIds) {
+      rawDispatch({ type: '__SYNC_UNPLACED', unplacedNodeIds });
+    }
+  }, [unplacedNodeIds, state.unplacedNodeIds]);
 
   // wrap dispatch to fire callbacks after each command
   const dispatch = useCallback(

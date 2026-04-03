@@ -14,7 +14,9 @@ export type Command =
   | { type: 'ATTACH_UNPLACED_NODE'; nodeId: PaperId; targetParentId: PaperId; insertBeforeId: PaperId | null }
   | { type: 'REPORT_CONTENT_HEIGHT'; nodeId: PaperId; height: number }
   | { type: 'TICK_IMPORTANCE'; now: number }
-  | { type: 'AUTO_CLOSE_NODE'; nodeId: PaperId };
+  | { type: 'AUTO_CLOSE_NODE'; nodeId: PaperId }
+  | { type: '__SYNC_PAPER_MAP'; paperMap: PaperViewState['paperMap'] }
+  | { type: '__SYNC_UNPLACED'; unplacedNodeIds: PaperViewState['unplacedNodeIds'] };
 
 const IMPORTANCE_INITIAL = 100;
 const IMPORTANCE_OPEN_BONUS = 30;
@@ -209,6 +211,14 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
         command.nodeId,
       );
       return { ...state, expansionMap };
+    }
+
+    case '__SYNC_PAPER_MAP': {
+      return { ...state, paperMap: command.paperMap };
+    }
+
+    case '__SYNC_UNPLACED': {
+      return { ...state, unplacedNodeIds: command.unplacedNodeIds };
     }
 
     default:

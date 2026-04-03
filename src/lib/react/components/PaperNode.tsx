@@ -4,6 +4,11 @@ import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
 import { usePaperLayout } from '../hooks/usePaperLayout';
 import { useRoomSize } from '../hooks/useRoomSize';
+import {
+  getPaperTone,
+  resolvePaperColorContext,
+  type PaperColorContext,
+} from '../internal/paperColors';
 import { PaperContentFrame } from './PaperContentFrame';
 import { ChildCard } from './ChildCard';
 
@@ -13,9 +18,10 @@ const CLOSED_CARDS_HEIGHT = 52;
 interface PaperNodeProps {
   nodeId: PaperId;
   parentId: PaperId | null;
+  inheritedColor?: PaperColorContext | null;
 }
 
-export function PaperNode({ nodeId, parentId }: PaperNodeProps) {
+export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNodeProps) {
   const { state, dispatch } = usePaperStore();
   const { session, insertTarget, registerRoom } = useDrag();
   const [roomRef, roomSize] = useRoomSize();
@@ -42,6 +48,8 @@ export function PaperNode({ nodeId, parentId }: PaperNodeProps) {
 
   const isFocused = state.focusedNodeId === nodeId;
   const isDragTarget = session !== null && insertTarget?.parentId === nodeId;
+  const color = resolvePaperColorContext(paper.hue, inheritedColor);
+  const tone = getPaperTone(color, { isRoot, isFocused });
 
   function handleHeaderClick() {
     if (isRoot) return;
@@ -51,10 +59,10 @@ export function PaperNode({ nodeId, parentId }: PaperNodeProps) {
   return (
     <div
       style={{
-        border: `1px solid ${isFocused ? '#4a90e2' : '#ddd'}`,
+        border: `1px solid ${isFocused ? tone.accent : tone.border}`,
         borderRadius: 8,
         overflow: 'hidden',
-        background: '#fff',
+        background: tone.background,
         display: 'flex',
         flexDirection: 'column',
         width: '100%',
@@ -70,8 +78,8 @@ export function PaperNode({ nodeId, parentId }: PaperNodeProps) {
           justifyContent: 'space-between',
           padding: '8px 14px',
           height: HEADER_HEIGHT,
-          background: isFocused ? '#eaf3ff' : '#fafafa',
-          borderBottom: '1px solid #eee',
+          background: isFocused ? tone.headerBackgroundFocused : tone.headerBackground,
+          borderBottom: `1px solid ${tone.divider}`,
           cursor: isRoot ? 'default' : 'pointer',
           userSelect: 'none',
           flexShrink: 0,
@@ -79,8 +87,8 @@ export function PaperNode({ nodeId, parentId }: PaperNodeProps) {
         }}
         onClick={handleHeaderClick}
       >
-        <span style={{ fontWeight: 600, fontSize: 14 }}>{paper.title}</span>
-        {!isRoot && <span style={{ fontSize: 11, color: '#aaa' }}>✕</span>}
+        <span style={{ fontWeight: 600, fontSize: 14, color: tone.title }}>{paper.title}</span>
+        {!isRoot && <span style={{ fontSize: 11, color: tone.mutedText }}>✕</span>}
       </div>
 
       {/* room: 絶対配置で content + open children を 2D 配置 */}
@@ -90,7 +98,7 @@ export function PaperNode({ nodeId, parentId }: PaperNodeProps) {
           position: 'relative',
           flex: 1,
           minHeight: 0,
-          outline: isDragTarget ? '2px dashed #4a90e2' : '2px dashed transparent',
+          outline: isDragTarget ? `2px dashed ${tone.accent}` : '2px dashed transparent',
           transition: 'outline 0.1s',
         }}
       >
@@ -103,12 +111,22 @@ export function PaperNode({ nodeId, parentId }: PaperNodeProps) {
             width: layout.contentRect.width,
             height: layout.contentRect.height,
             overflow: 'auto',
-            borderRight: layout.childRects.size > 0 ? '1px solid #eee' : 'none',
+            borderRight: layout.childRects.size > 0 ? `1px solid ${tone.divider}` : 'none',
             boxSizing: 'border-box',
             padding: 10,
+            color: tone.text,
           }}
         >
-          <PaperContentFrame nodeId={nodeId} content={paper.content} />
+          <PaperContentFrame
+            nodeId={nodeId}
+            content={paper.content}
+            theme={{
+              linkBackground: tone.headerBackground,
+              linkBackgroundHover: tone.backgroundHover,
+              linkBorder: tone.border,
+              linkText: tone.title,
+            }}
+          />
         </div>
 
         {/* open children */}
@@ -122,39 +140,16 @@ export function PaperNode({ nodeId, parentId }: PaperNodeProps) {
               width: rect.width,
               height: rect.height,
               overflow: 'hidden',
-              borderLeft: '1px solid #eee',
-              borderTop: rect.y > 0 ? '1px solid #eee' : 'none',
+              borderLeft: `1px solid ${tone.divider}`,
+              borderTop: rect.y > 0 ? `1px solid ${tone.divider}` : 'none',
               boxSizing: 'border-box',
             }}
           >
-            <PaperNode nodeId={childId} parentId={nodeId} />
+            <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={color} />
           </div>
         ))}
       </div>
 
-      {/* closed child cards */}
-      {layout.closedChildIds.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 8,
-            padding: '8px 14px',
-            borderTop: '1px solid #eee',
-            flexShrink: 0,
-            height: CLOSED_CARDS_HEIGHT,
-            alignItems: 'center',
-            boxSizing: 'border-box',
-            overflowX: 'auto',
-          }}
-        >
-          {layout.closedChildIds.map((childId) => {
-            const childPaper = state.paperMap.get(childId);
-            if (!childPaper) return null;
-            return <ChildCard key={childId} paper={childPaper} parentId={nodeId} />;
-          })}
-        </div>
-      )}
     </div>
   );
 }

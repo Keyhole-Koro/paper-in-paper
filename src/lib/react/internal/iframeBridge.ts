@@ -1,5 +1,12 @@
 import type { PaperId } from '../../core/types';
 
+interface IframeTheme {
+  linkBackground: string;
+  linkBackgroundHover: string;
+  linkBorder: string;
+  linkText: string;
+}
+
 export type PaperContentEvent =
   | { type: 'open'; paperId: PaperId }
   | { type: 'dragstart'; paperId: PaperId; clientX: number; clientY: number }
@@ -36,7 +43,7 @@ const BOOTSTRAP_SCRIPT = `
 })();
 `;
 
-export function buildSrcDoc(content: string): string {
+export function buildSrcDoc(content: string, theme: IframeTheme): string {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -44,7 +51,42 @@ export function buildSrcDoc(content: string): string {
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: sans-serif; font-size: 14px; line-height: 1.6; color: #333; padding: 0; }
-  a[data-paper-id] { color: #4a90e2; text-decoration: underline; cursor: pointer; }
+  a[data-paper-id] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    margin: 0 0.12em;
+    padding: 0.1em 0.58em;
+    border: 1px solid ${theme.linkBorder};
+    border-radius: 999px;
+    background: ${theme.linkBackground};
+    color: ${theme.linkText};
+    text-decoration: none;
+    font-weight: 600;
+    line-height: 1.4;
+    cursor: pointer;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset;
+    transition:
+      background 120ms ease,
+      border-color 120ms ease,
+      transform 120ms ease,
+      box-shadow 120ms ease;
+  }
+  a[data-paper-id]::after {
+    content: '↗';
+    font-size: 0.82em;
+    opacity: 0.72;
+  }
+  a[data-paper-id]:hover {
+    background: ${theme.linkBackgroundHover};
+    transform: translateY(-1px);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.75) inset,
+      0 4px 10px rgba(0, 0, 0, 0.08);
+  }
+  a[data-paper-id]:active {
+    transform: translateY(0);
+  }
   p { margin-bottom: 10px; }
   p:last-child { margin-bottom: 0; }
 </style>

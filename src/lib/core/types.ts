@@ -5,6 +5,7 @@ export interface Paper {
   title: string;
   description: string;
   content: string;
+  hue?: number;
   parentId: PaperId | null;
   childIds: PaperId[];
 }
