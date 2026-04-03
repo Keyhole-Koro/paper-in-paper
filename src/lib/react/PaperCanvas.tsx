@@ -1,105 +1,79 @@
-import { useCallback, useState, type CSSProperties } from 'react';
-import type { PaperId, PaperMap } from '../core/types';
-import { findRootId } from '../core/tree';
-import PaperNode from './internal/node/PaperNode';
-import FloatingLayer from './internal/drag/FloatingLayer';
-import { LayoutProvider, useLayout } from './internal/layout/LayoutContext';
-import { StoreProvider, useStore } from './internal/state/store';
-import type { DragState } from './internal/types';
-import { debugLog } from './internal/drag/debugLog';
-import type { LayoutOptionsInput } from './internal/node/utils/layoutHelpers';
+import type { ExpansionMap, PaperId, PaperMap } from '../core/types';
+import { getRootId } from '../core/tree';
+import { PaperStoreProvider, usePaperStore } from './context/PaperStoreContext';
+import { DragProvider, type DragSession } from './context/DragContext';
+import type { InsertTarget } from './internal/hitTest';
+import { PaperNode } from './components/PaperNode';
+import { Sidebar } from './components/Sidebar';
+import { FloatingLayer } from './components/FloatingLayer';
+import { useImportanceTick } from './hooks/useImportanceTick';
 
-export interface RootCanvasStyle {
-  width?: CSSProperties['width'];
-  height?: CSSProperties['height'];
-  minWidth?: CSSProperties['minWidth'];
-  minHeight?: CSSProperties['minHeight'];
-  maxWidth?: CSSProperties['maxWidth'];
-  maxHeight?: CSSProperties['maxHeight'];
-}
-
-const DEFAULT_ROOT_CANVAS_STYLE: RootCanvasStyle = {
-  width: 1440,
-  height: 960,
-};
-
-interface Props {
+export interface PaperCanvasProps {
   paperMap: PaperMap;
   rootId?: PaperId;
-  layoutOptions?: LayoutOptionsInput;
-  rootCanvasStyle?: RootCanvasStyle;
+  expansionMap?: ExpansionMap;
+  unplacedNodeIds?: PaperId[];
+  focusedNodeId?: PaperId | null;
+  onPaperMapChange?: (paperMap: PaperMap) => void;
+  onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
+  onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
+  onUnplacedNodeIdsChange?: (ids: PaperId[]) => void;
 }
 
-interface ContentProps {
-  rootId: PaperId;
-  layoutOptions?: LayoutOptionsInput;
-  rootCanvasStyle: RootCanvasStyle;
-}
+function PaperCanvasInner() {
+  const { state, dispatch } = usePaperStore();
+  const rootId = getRootId(state.paperMap);
+  useImportanceTick();
 
-function PaperCanvasInner({ rootId, rootCanvasStyle }: ContentProps) {
-  const { dispatch } = useStore();
-  const { openNode } = useLayout();
-  const [dragState, setDragState] = useState<DragState>({
-    paperId: null,
-    parentId: null,
-    insertTarget: null,
-    point: null,
-  });
-
-  const handleInsertDrop = useCallback((paperId: PaperId, parentId: PaperId, insertBeforeId: PaperId | null) => {
-    debugLog('insert-drop-dispatch', { paperId, parentId, insertBeforeId });
-    dispatch({ type: 'REORDER', parentId, childId: paperId, insertBeforeId });
-    openNode(parentId, paperId);
-  }, [dispatch, openNode]);
-
-  return (
-    <div className="paper-canvas">
-      <div className="paper-universe">
-        <div className="paper-root-frame" style={rootCanvasStyle}>
-          <PaperNode
-            paperId={rootId}
-            parentId={null}
-            nodeState="open"
-            isPrimary={true}
-            depth={0}
-            crumbs={[]}
-            hue={null}
-            dragState={dragState}
-            onDragStateChange={setDragState}
-            onInsertDrop={handleInsertDrop}
-          />
-        </div>
-      </div>
-      <FloatingLayer dragState={dragState} />
-    </div>
-  );
-}
-
-function PaperCanvasContent({ rootId, layoutOptions, rootCanvasStyle }: ContentProps) {
-  const { state } = useStore();
-
-  return (
-    <LayoutProvider paperMap={state.paperMap} options={layoutOptions}>
-      <PaperCanvasInner rootId={rootId} rootCanvasStyle={rootCanvasStyle} />
-    </LayoutProvider>
-  );
-}
-
-export default function PaperCanvas({ paperMap, rootId, layoutOptions, rootCanvasStyle }: Props) {
-  const resolvedRootId = rootId ?? findRootId(paperMap);
-  const mergedRootCanvasStyle = { ...DEFAULT_ROOT_CANVAS_STYLE, ...rootCanvasStyle };
-
-  if (!resolvedRootId) {
-    throw new Error('PaperCanvas requires a root node.');
+  function handleDrop(session: DragSession, target: InsertTarget) {
+    if (session.mode === 'attach-unplaced') {
+      dispatch({ type: 'ATTACH_UNPLACED_NODE', nodeId: session.draggedPaperId, targetParentId: target.parentId, insertBeforeId: target.insertBeforeId });
+    } else if (session.mode === 'move-parent' || session.mode === 'content-link') {
+      dispatch({ type: 'MOVE_NODE', nodeId: session.draggedPaperId, targetParentId: target.parentId, insertBeforeId: target.insertBeforeId });
+    } else if (session.mode === 'reorder') {
+      if (session.sourceParentId === target.parentId) {
+        dispatch({ type: 'REORDER_WITHIN_PARENT', parentId: target.parentId, paperId: session.draggedPaperId, position: { x: 0, y: 0 } });
+      } else {
+        dispatch({ type: 'MOVE_NODE', nodeId: session.draggedPaperId, targetParentId: target.parentId, insertBeforeId: target.insertBeforeId });
+      }
+    }
   }
 
   return (
-    <StoreProvider paperMap={paperMap}>
-      <PaperCanvasContent
-        rootId={resolvedRootId}
-        layoutOptions={layoutOptions}
-        rootCanvasStyle={mergedRootCanvasStyle}
-      />
-    </StoreProvider>
+    <DragProvider onDrop={handleDrop}>
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+        <div style={{ flex: 1, height: '100%', overflow: 'hidden' }}>
+          <PaperNode nodeId={rootId} parentId={null} />
+        </div>
+        <Sidebar />
+      </div>
+      <FloatingLayer />
+    </DragProvider>
+  );
+}
+
+export function PaperCanvas({
+  paperMap,
+  unplacedNodeIds,
+  expansionMap,
+  focusedNodeId,
+  onPaperMapChange,
+  onExpansionMapChange,
+  onFocusedNodeIdChange,
+  onUnplacedNodeIdsChange,
+}: PaperCanvasProps) {
+  return (
+    <PaperStoreProvider
+      paperMap={paperMap}
+      unplacedNodeIds={unplacedNodeIds}
+      expansionMap={expansionMap}
+      focusedNodeId={focusedNodeId}
+      onPaperMapChange={onPaperMapChange}
+      onExpansionMapChange={onExpansionMapChange}
+      onFocusedNodeIdChange={onFocusedNodeIdChange}
+      onUnplacedNodeIdsChange={onUnplacedNodeIdsChange}
+    >
+      <PaperCanvasInner />
+    </PaperStoreProvider>
   );
 }

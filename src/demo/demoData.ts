@@ -2,60 +2,174 @@ import { buildPaperMap } from '../lib/core/tree';
 import type { Paper, PaperMap } from '../lib/core/types';
 
 const papers: Paper[] = [
-  { id: 'root', title: 'Product Design', description: 'The top-level vision for the product.', content: 'Product design aligns user needs, technical constraints, and business goals into one coherent system. This root paper frames the major decision areas and acts as the entry point for the whole canvas.', parentId: null, childIds: ['ux', 'tech', 'biz'] },
-  { id: 'ux', title: 'UX Design', description: 'User experience and interaction design principles.', content: 'UX design shapes the structure and feel of the product. It covers navigation, flows, testing, and the quality of each interaction from first use to long-term retention.', parentId: 'root', childIds: ['ia', 'visual', 'proto', 'research', 'copy', 'motion', 'access', 'test', 'iterate'] },
-  { id: 'tech', title: 'Technology', description: 'Technical architecture and implementation.', content: 'The technology branch turns product intent into durable systems. It covers frontend architecture, backend contracts, and the operational surface needed to ship and maintain the product.', parentId: 'root', childIds: ['frontend', 'backend', 'infra'] },
-  { id: 'biz', title: 'Business', description: 'Business strategy and metrics.', content: 'Business design defines how the product grows and sustains itself. It includes acquisition, monetization, and the metrics that tell whether the product is creating lasting value.', parentId: 'root', childIds: ['growth', 'monetize'] },
-  { id: 'ia', title: 'Information Architecture', description: 'Structure and organization of content.', content: 'Information architecture decides how content and functionality are grouped so people can predict where things live and how to move through the system.', parentId: 'ux', childIds: ['sitemap', 'taxonomy'] },
-  { id: 'visual', title: 'Visual Design', description: 'Color, typography, and layout systems.', content: 'Visual design gives the product a consistent language through type, rhythm, spacing, and color. It turns structure into an interface that feels legible and intentional.', parentId: 'ux', childIds: ['color', 'type'] },
-  { id: 'proto', title: 'Prototyping', description: 'Low and high fidelity prototypes.', content: 'Prototyping makes ideas tangible early. It helps validate flows, transitions, and interactions before the full implementation cost is paid.', parentId: 'ux', childIds: [] },
-  { id: 'research', title: 'User Research', description: 'Interviews, surveys, and usability tests.', content: 'Research grounds product decisions in evidence. It connects design direction to observed behavior, unmet needs, and real-world constraints.', parentId: 'ux', childIds: ['discovery', 'synthesis'] },
-  { id: 'copy', title: 'Copywriting', description: 'Voice, tone, and microcopy.', content: 'Copywriting shapes how the interface communicates intent. Clear labels, guidance, and feedback text reduce friction and increase confidence.', parentId: 'ux', childIds: [] },
-  { id: 'motion', title: 'Motion Design', description: 'Transitions and micro-interactions.', content: 'Motion design makes change visible. It can clarify hierarchy, continuity, and causality when screens, states, and layers shift.', parentId: 'ux', childIds: [] },
-  { id: 'access', title: 'Accessibility', description: 'WCAG compliance and inclusive design.', content: 'Accessibility ensures the interface remains perceivable and operable for a wide range of users and assistive technologies.', parentId: 'ux', childIds: [] },
-  { id: 'test', title: 'Usability Testing', description: 'Testing with real users.', content: 'Usability testing surfaces practical friction in tasks, labels, expectations, and pacing before those issues scale into the shipped product.', parentId: 'ux', childIds: [] },
-  { id: 'iterate', title: 'Iteration', description: 'Continuous improvement cycles.', content: 'Iteration turns each release into feedback for the next one. Teams learn, adjust, and improve the product in smaller, compounding steps.', parentId: 'ux', childIds: [] },
-  { id: 'frontend', title: 'Frontend', description: 'React, TypeScript, CSS.', content: 'Frontend engineering delivers the product surface people use directly. It coordinates rendering, state, interaction, and visual polish in the browser.', parentId: 'tech', childIds: ['components', 'state', 'routing'] },
-  { id: 'backend', title: 'Backend', description: 'API design and data modeling.', content: 'Backend systems define how data is stored, validated, and exchanged. They provide the contract that keeps product behavior reliable across clients and services.', parentId: 'tech', childIds: ['api', 'jobs', 'storage'] },
-  { id: 'infra', title: 'Infrastructure', description: 'Cloud, CI/CD, monitoring.', content: 'Infrastructure supports deployment, reliability, and observability. It determines how safely and repeatedly a team can ship changes.', parentId: 'tech', childIds: [] },
-  { id: 'components', title: 'Component Library', description: 'Reusable UI components.', content: 'A component library creates a shared interface vocabulary so screens can move faster without losing consistency.', parentId: 'frontend', childIds: ['primitives', 'patterns'] },
-  { id: 'state', title: 'State Management', description: 'Global and local state patterns.', content: 'State management decides how UI data flows through the system and how views remain predictable as they react to user input and async events.', parentId: 'frontend', childIds: ['queries', 'cache'] },
-  { id: 'routing', title: 'Routing', description: 'Client-side navigation.', content: 'Routing maps interface state to navigable URLs and transitions, giving users stable entry points and recoverable navigation paths.', parentId: 'frontend', childIds: ['nested-routes'] },
-  { id: 'sitemap', title: 'Sitemap', description: 'Page hierarchy and navigation.', content: 'A sitemap captures the top-level shape of the product and helps teams reason about how major areas connect.', parentId: 'ia', childIds: ['entry-points'] },
-  { id: 'taxonomy', title: 'Taxonomy', description: 'Content classification system.', content: 'Taxonomy provides naming and grouping rules that keep content discoverable and scalable as the product grows.', parentId: 'ia', childIds: ['labels'] },
-  { id: 'color', title: 'Color System', description: 'Palette and semantic tokens.', content: 'A color system defines semantic roles for hue, tone, and contrast so screens can be expressive without becoming inconsistent.', parentId: 'visual', childIds: ['semantic-tokens'] },
-  { id: 'type', title: 'Typography', description: 'Font scale and text styles.', content: 'Typography sets the reading rhythm of the interface. It creates hierarchy, improves legibility, and stabilizes the overall visual voice.', parentId: 'visual', childIds: ['type-scale'] },
-  { id: 'growth', title: 'Growth', description: 'Acquisition and retention strategies.', content: 'Growth connects product quality to reach and retention. It focuses on how people discover the product, activate, and keep coming back.', parentId: 'biz', childIds: [] },
-  { id: 'monetize', title: 'Monetization', description: 'Revenue models and pricing.', content: 'Monetization defines how value is exchanged. It balances pricing, packaging, and incentives with user trust and business health.', parentId: 'biz', childIds: [] },
-  { id: 'discovery', title: 'Discovery Research', description: 'Exploratory interviews and field work.', content: 'Discovery research explores motivations, routines, and pain points before the team converges on concrete interface directions.', parentId: 'research', childIds: ['interviews', 'field-notes'] },
-  { id: 'synthesis', title: 'Research Synthesis', description: 'Themes, patterns, and opportunity mapping.', content: 'Synthesis turns raw observations into patterns, decision frames, and prioritized opportunities the team can design against.', parentId: 'research', childIds: ['affinity', 'opportunities'] },
-  { id: 'interviews', title: 'Interviews', description: 'Semi-structured conversations with users.', content: 'Interviews reveal intent, memory, and tradeoffs that are difficult to infer from analytics alone.', parentId: 'discovery', childIds: ['guide', 'recruiting'] },
-  { id: 'field-notes', title: 'Field Notes', description: 'Observed context and behaviors.', content: 'Field notes capture the environmental detail around the task so insights are not detached from context.', parentId: 'discovery', childIds: [] },
-  { id: 'guide', title: 'Interview Guide', description: 'Question flow and prompts.', content: 'The interview guide controls pacing, sequence, and depth so sessions remain comparable while leaving space for follow-up.', parentId: 'interviews', childIds: ['warmup', 'core-topics'] },
-  { id: 'recruiting', title: 'Recruiting', description: 'Participant sourcing and screening.', content: 'Recruiting determines whether the study includes the right people with the right context and constraints.', parentId: 'interviews', childIds: [] },
-  { id: 'warmup', title: 'Warmup Questions', description: 'Context-setting prompts.', content: 'Warmup questions reduce interview friction and establish the participant baseline before deeper questions.', parentId: 'guide', childIds: [] },
-  { id: 'core-topics', title: 'Core Topics', description: 'Primary themes to probe.', content: 'Core topics anchor the interview around recurring decisions, workarounds, triggers, and perceptions.', parentId: 'guide', childIds: [] },
-  { id: 'affinity', title: 'Affinity Mapping', description: 'Cluster observations into themes.', content: 'Affinity mapping helps the team see repeated signals across sessions and separate noise from pattern.', parentId: 'synthesis', childIds: [] },
-  { id: 'opportunities', title: 'Opportunity Areas', description: 'Design spaces suggested by the evidence.', content: 'Opportunity areas connect research themes to concrete problem statements and possible bets.', parentId: 'synthesis', childIds: [] },
-  { id: 'api', title: 'API Layer', description: 'Contracts, validation, and handlers.', content: 'The API layer exposes product capabilities through consistent contracts, validation rules, and transport concerns.', parentId: 'backend', childIds: ['rest', 'events'] },
-  { id: 'jobs', title: 'Background Jobs', description: 'Async work and orchestration.', content: 'Background jobs handle long-running work that should not block the request path.', parentId: 'backend', childIds: ['queues'] },
-  { id: 'storage', title: 'Storage', description: 'Persistence and retrieval design.', content: 'Storage decisions influence consistency, performance, and operational complexity across the whole product.', parentId: 'backend', childIds: ['schemas'] },
-  { id: 'rest', title: 'REST Endpoints', description: 'HTTP resource design.', content: 'REST endpoints define how resource state is exposed and mutated through stable URLs and methods.', parentId: 'api', childIds: ['authz'] },
-  { id: 'events', title: 'Domain Events', description: 'Internal event contracts.', content: 'Domain events capture meaningful changes so systems can react without hard synchronous coupling.', parentId: 'api', childIds: [] },
-  { id: 'queues', title: 'Queues', description: 'Job routing and retry policy.', content: 'Queues determine how async work is prioritized, retried, and isolated under failure.', parentId: 'jobs', childIds: ['dead-letter'] },
-  { id: 'schemas', title: 'Schemas', description: 'Data shape and indexing.', content: 'Schemas balance correctness and queryability while leaving room for change over time.', parentId: 'storage', childIds: [] },
-  { id: 'authz', title: 'Authorization', description: 'Permission checks and policy.', content: 'Authorization ensures each endpoint enforces who can act, against what, and under which constraints.', parentId: 'rest', childIds: ['policy-cache'] },
-  { id: 'dead-letter', title: 'Dead Letter Queue', description: 'Failed job quarantine.', content: 'A dead letter queue isolates poison messages so the main queue can continue progressing safely.', parentId: 'queues', childIds: [] },
-  { id: 'policy-cache', title: 'Policy Cache', description: 'Memoized permission decisions.', content: 'A policy cache reduces repeated authorization work while keeping permission checks explicit and inspectable.', parentId: 'authz', childIds: [] },
-  { id: 'primitives', title: 'Primitives', description: 'Buttons, inputs, and low-level UI.', content: 'Primitives create the stable low-level building blocks that more opinionated patterns can reuse.', parentId: 'components', childIds: [] },
-  { id: 'patterns', title: 'Patterns', description: 'Composed interface structures.', content: 'Patterns turn primitives into repeated screen-level solutions like tables, sidebars, and editors.', parentId: 'components', childIds: [] },
-  { id: 'queries', title: 'Queries', description: 'Read models and cache keys.', content: 'Query architecture decides how remote state is fetched, invalidated, and reused across views.', parentId: 'state', childIds: [] },
-  { id: 'cache', title: 'Client Cache', description: 'Consistency of local remote-state cache.', content: 'The client cache balances freshness, optimistic UI, and memory cost across longer sessions.', parentId: 'state', childIds: [] },
-  { id: 'nested-routes', title: 'Nested Routes', description: 'Layouts inside layouts.', content: 'Nested routes keep interface structure aligned with URL structure so complex products remain navigable.', parentId: 'routing', childIds: [] },
-  { id: 'entry-points', title: 'Entry Points', description: 'First-contact surfaces.', content: 'Entry points define which areas are prominent enough to act as starting places for different user goals.', parentId: 'sitemap', childIds: [] },
-  { id: 'labels', title: 'Labels', description: 'Naming rules and vocabulary.', content: 'Labels make the taxonomy usable by turning abstract grouping rules into language people can actually recognize.', parentId: 'taxonomy', childIds: [] },
-  { id: 'semantic-tokens', title: 'Semantic Tokens', description: 'Meaningful color roles.', content: 'Semantic tokens map design intent to reusable names so themes can evolve without rewriting every surface.', parentId: 'color', childIds: [] },
-  { id: 'type-scale', title: 'Type Scale', description: 'Systematic text hierarchy.', content: 'A type scale creates a predictable relationship between headings, body sizes, and supporting text.', parentId: 'type', childIds: [] },
+  {
+    id: 'root',
+    title: 'Paper in Paper',
+    description: 'Recursive paper demo root.',
+    content: `
+      <p>
+        Paper in Paper is a reading UI where concepts expand in place.
+        Start from <a data-paper-id="concept">concept</a>, inspect the
+        <a data-paper-id="architecture">architecture</a>, or jump into the
+        <a data-paper-id="interaction">interaction model</a>.
+      </p>
+      <p>
+        This demo is intentionally small, but it exercises nested expansion,
+        iframe click handling, breadcrumbs, and drag-and-drop between rooms.
+      </p>
+    `,
+    parentId: null,
+    childIds: ['concept', 'architecture', 'interaction', 'notes'],
+  },
+  {
+    id: 'concept',
+    title: 'Concept',
+    description: 'Why recursive reading is useful.',
+    content: `
+      <p>
+        Instead of showing one long article, each paper can open a narrower topic.
+        A reader can move from the main thread into
+        <a data-paper-id="focus">focused reading</a> or compare it with
+        <a data-paper-id="sidebar">sidebar staging</a>.
+      </p>
+    `,
+    parentId: 'root',
+    childIds: ['focus', 'sidebar'],
+  },
+  {
+    id: 'architecture',
+    title: 'Architecture',
+    description: 'React + TypeScript implementation slices.',
+    content: `
+      <p>
+        The implementation separates
+        <a data-paper-id="core-state">core state</a>,
+        <a data-paper-id="iframe-bridge">iframe bridge</a>, and
+        <a data-paper-id="layout-engine">layout logic</a>.
+      </p>
+    `,
+    parentId: 'root',
+    childIds: ['core-state', 'iframe-bridge', 'layout-engine'],
+  },
+  {
+    id: 'interaction',
+    title: 'Interaction',
+    description: 'Open, close, breadcrumbs, and drag.',
+    content: `
+      <p>
+        Users open linked papers inline, close branches from breadcrumbs,
+        and rearrange nodes with drag-and-drop. See
+        <a data-paper-id="breadcrumbs">breadcrumbs</a> and
+        <a data-paper-id="drag-drop">drag and drop</a>.
+      </p>
+    `,
+    parentId: 'root',
+    childIds: ['breadcrumbs', 'drag-drop'],
+  },
+  {
+    id: 'notes',
+    title: 'Notes',
+    description: 'Free-standing paper without inline links.',
+    content: `
+      <p>
+        Papers do not need to expose every child through inline links.
+        A room can still contain child cards that are discoverable spatially.
+      </p>
+    `,
+    parentId: 'root',
+    childIds: [],
+  },
+  {
+    id: 'focus',
+    title: 'Focused Reading',
+    description: 'Readers expand only the concepts they need.',
+    content: `
+      <p>
+        Focused reading reduces overload. It keeps the current context visible
+        while allowing a local deep dive into one branch.
+      </p>
+    `,
+    parentId: 'concept',
+    childIds: [],
+  },
+  {
+    id: 'sidebar',
+    title: 'Sidebar Staging',
+    description: 'Unplaced nodes can wait off-canvas.',
+    content: `
+      <p>
+        The sidebar stores papers that are not currently attached to a room.
+        They can be dragged into the tree when needed.
+      </p>
+    `,
+    parentId: 'concept',
+    childIds: [],
+  },
+  {
+    id: 'core-state',
+    title: 'Core State',
+    description: 'Tree and expansion state stay explicit.',
+    content: `
+      <p>
+        Tree structure, open children, focus, and access timestamps are modeled
+        separately so reducers stay predictable.
+      </p>
+    `,
+    parentId: 'architecture',
+    childIds: [],
+  },
+  {
+    id: 'iframe-bridge',
+    title: 'Iframe Bridge',
+    description: 'HTML content lives in isolated iframes.',
+    content: `
+      <p>
+        Each paper renders HTML in an iframe and reports link clicks plus height
+        changes back to the parent through <code>postMessage</code>.
+      </p>
+    `,
+    parentId: 'architecture',
+    childIds: [],
+  },
+  {
+    id: 'layout-engine',
+    title: 'Layout Engine',
+    description: 'Size is derived rather than stored.',
+    content: `
+      <p>
+        Node size should come from derived layout calculations, not mutable
+        authoritative state. That keeps space propagation coherent.
+      </p>
+    `,
+    parentId: 'architecture',
+    childIds: [],
+  },
+  {
+    id: 'breadcrumbs',
+    title: 'Breadcrumbs',
+    description: 'Only the focused branch is shown.',
+    content: `
+      <p>
+        Breadcrumbs are built from the focused node back to root. Clicking an
+        ancestor closes the branch below it and moves focus upward.
+      </p>
+    `,
+    parentId: 'interaction',
+    childIds: [],
+  },
+  {
+    id: 'drag-drop',
+    title: 'Drag and Drop',
+    description: 'Cards and open nodes can be repositioned.',
+    content: `
+      <p>
+        Closed cards can be opened or moved. Open nodes can also be dragged into
+        a different room to change parentage.
+      </p>
+    `,
+    parentId: 'interaction',
+    childIds: [],
+  },
 ];
 
 export function buildDemoPaperMap(): PaperMap {
