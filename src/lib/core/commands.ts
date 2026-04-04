@@ -13,6 +13,7 @@ export type Command =
   | { type: 'REORDER_WITHIN_PARENT'; parentId: PaperId; paperId: PaperId; position: GridPosition }
   | { type: 'ATTACH_UNPLACED_NODE'; nodeId: PaperId; targetParentId: PaperId; insertBeforeId: PaperId | null }
   | { type: 'REPORT_CONTENT_HEIGHT'; nodeId: PaperId; height: number }
+  | { type: 'COMMIT_HEIGHTS' }
   | { type: 'TICK_IMPORTANCE'; now: number }
   | { type: 'AUTO_CLOSE_NODE'; nodeId: PaperId }
   | { type: '__SYNC_PAPER_MAP'; paperMap: PaperViewState['paperMap'] }
@@ -97,6 +98,7 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
         accessMap,
         protectedUntilMap,
         focusedNodeId: command.childId,
+        committedHeightMap: new Map(state.contentHeightMap),
       };
     }
 
@@ -179,10 +181,14 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
 
     case 'REPORT_CONTENT_HEIGHT': {
       const prev = state.contentHeightMap.get(command.nodeId);
-      if (prev === command.height) return state;
+      if (prev !== undefined && Math.abs(prev - command.height) / prev < 0.1) return state;
       const contentHeightMap = new Map(state.contentHeightMap);
       contentHeightMap.set(command.nodeId, command.height);
       return { ...state, contentHeightMap };
+    }
+
+    case 'COMMIT_HEIGHTS': {
+      return { ...state, committedHeightMap: new Map(state.contentHeightMap) };
     }
 
     case 'TICK_IMPORTANCE': {
@@ -248,6 +254,7 @@ export function createInitialState(
     importanceMap,
     manualPlacementMap: new Map(),
     contentHeightMap: new Map(),
+    committedHeightMap: new Map(),
     protectedUntilMap: new Map(),
   };
 }

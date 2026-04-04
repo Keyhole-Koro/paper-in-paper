@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import type { ExpansionMap, PaperId, PaperMap } from '../core/types';
 import { getRootId } from '../core/tree';
 import { PaperStoreProvider, usePaperStore } from './context/PaperStoreContext';
 import { DragProvider, type DragSession } from './context/DragContext';
+import { DebugContext } from './context/DebugContext';
 import type { InsertTarget } from './internal/hitTest';
 import { PaperNode } from './components/PaperNode';
 import { Sidebar } from './components/Sidebar';
@@ -13,6 +15,7 @@ export interface PaperCanvasProps {
   expansionMap?: ExpansionMap;
   unplacedNodeIds?: PaperId[];
   focusedNodeId?: PaperId | null;
+  debug?: boolean;
   onPaperMapChange?: (paperMap: PaperMap) => void;
   onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
   onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
@@ -22,6 +25,13 @@ export interface PaperCanvasProps {
 function PaperCanvasInner() {
   const { state, dispatch } = usePaperStore();
   const rootId = getRootId(state.paperMap);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      dispatch({ type: 'COMMIT_HEIGHTS' });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [state.contentHeightMap, dispatch]);
 
   function handleDrop(session: DragSession, target: InsertTarget) {
     if (session.mode === 'attach-unplaced') {
@@ -55,12 +65,14 @@ export function PaperCanvas({
   unplacedNodeIds,
   expansionMap,
   focusedNodeId,
+  debug = false,
   onPaperMapChange,
   onExpansionMapChange,
   onFocusedNodeIdChange,
   onUnplacedNodeIdsChange,
 }: PaperCanvasProps) {
   return (
+    <DebugContext.Provider value={debug}>
     <PaperStoreProvider
       paperMap={paperMap}
       unplacedNodeIds={unplacedNodeIds}
@@ -73,5 +85,6 @@ export function PaperCanvas({
     >
       <PaperCanvasInner />
     </PaperStoreProvider>
+    </DebugContext.Provider>
   );
 }

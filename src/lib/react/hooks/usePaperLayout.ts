@@ -4,6 +4,7 @@ import { usePaperStore } from '../context/PaperStoreContext';
 import { getOpenChildIds } from '../../core/expansion';
 import { buildEffectiveImportanceMap } from '../../core/importance';
 import { computeRoomLayout, type LayoutRect } from '../internal/roomLayout';
+import type { ExpansionMap } from '../../core/types';
 
 export interface RoomLayout {
   contentRect: LayoutRect;
@@ -12,13 +13,30 @@ export interface RoomLayout {
 }
 
 const DEFAULT_MIN_AR = 0.25;
-const DEFAULT_MAX_AR = 4.0;
+const DEFAULT_MAX_AR = 2.0;
 const CONTENT_IMPORTANCE = 100;
 const CHILD_BASE_WEIGHT = 100;
 const CONTENT_ID = '__content__';
 const MIN_CHILD_WEIGHT = 18;
 const SHRINK_STEP = 0.84;
 const MAX_SHRINK_PASSES = 24;
+
+function computeContentWeight(
+  nodeId: PaperId,
+  expansionMap: ExpansionMap,
+  contentHeightMap: Map<PaperId, number>,
+  importanceMap: Map<PaperId, number>,
+  fallback: number,
+): number {
+  const ownHeight = contentHeightMap.get(nodeId) ?? fallback;
+  const importance = importanceMap.get(nodeId) ?? 0;
+  const multiplier = 1 + importance / 100;
+  const openChildIds = getOpenChildIds(expansionMap, nodeId);
+  return openChildIds.reduce(
+    (sum, childId) => sum + computeContentWeight(childId, expansionMap, contentHeightMap, importanceMap, fallback),
+    ownHeight * multiplier,
+  );
+}
 
 function layoutOverflows(rects: LayoutRect[], containerWidth: number, containerHeight: number) {
   return rects.some((rect) => {
@@ -76,10 +94,14 @@ export function usePaperLayout(
       return ta - tb;
     });
 
-    const childWeights = new Map(openChildIds.map((id) => [id, CHILD_BASE_WEIGHT]));
+    const childWeights = new Map(openChildIds.map((id) => [
+      id,
+      computeContentWeight(id, state.expansionMap, state.committedHeightMap, state.importanceMap, CHILD_BASE_WEIGHT),
+    ]));
+    const contentWeight = state.committedHeightMap.get(nodeId) ?? CONTENT_IMPORTANCE;
     let rects = computeRoomLayout(
       [
-        { id: CONTENT_ID, weight: CONTENT_IMPORTANCE },
+        { id: CONTENT_ID, weight: contentWeight },
         ...openChildIds.map((id) => ({ id, weight: childWeights.get(id) ?? CHILD_BASE_WEIGHT })),
       ],
       w,
@@ -103,7 +125,7 @@ export function usePaperLayout(
       if (!changed) break;
       rects = computeRoomLayout(
         [
-          { id: CONTENT_ID, weight: CONTENT_IMPORTANCE },
+          { id: CONTENT_ID, weight: contentWeight },
           ...openChildIds.map((id) => ({ id, weight: childWeights.get(id) ?? CHILD_BASE_WEIGHT })),
         ],
         w,
@@ -120,5 +142,5 @@ export function usePaperLayout(
     );
 
     return { contentRect, childRects, closedChildIds };
-  }, [nodeId, containerWidth, containerHeight, minAR, maxAR, state.expansionMap, state.importanceMap, state.paperMap]);
+  }, [nodeId, containerWidth, containerHeight, minAR, maxAR, state.expansionMap, state.importanceMap, state.paperMap, state.committedHeightMap]);
 }

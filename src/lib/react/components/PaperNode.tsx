@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { PaperId } from '../../core/types';
 import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
+import { useDebug } from '../context/DebugContext';
 import { usePaperLayout } from '../hooks/usePaperLayout';
 import { useRoomSize } from '../hooks/useRoomSize';
 import {
@@ -38,12 +39,14 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
 
   if (!paper) return null;
 
+  const debug = useDebug();
   const isFocused = state.focusedNodeId === nodeId;
   const isDragTarget = session !== null && insertTarget?.parentId === nodeId;
   const color = resolvePaperColorContext(paper.hue, inheritedColor);
   const tone = getPaperTone(color, { isRoot, isFocused });
 
   function handleHeaderClick() {
+    dispatch({ type: 'FOCUS_NODE', nodeId });
     if (isRoot) return;
     dispatch({ type: 'CLOSE_NODE', parentId: parentId!, childId: nodeId });
   }
@@ -112,7 +115,6 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
           <PaperContentFrame
             nodeId={nodeId}
             content={paper.content}
-            isRoot={isRoot}
             theme={{
               surface: tone.background,
               surfaceAlt: tone.backgroundHover,
@@ -127,6 +129,34 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
             }}
           />
         </div>
+
+        {/* debug overlay */}
+        {debug && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 4,
+              right: 4,
+              zIndex: 9999,
+              background: 'rgba(0,0,0,0.72)',
+              color: '#0f0',
+              fontFamily: 'monospace',
+              fontSize: 10,
+              lineHeight: 1.6,
+              padding: '4px 6px',
+              borderRadius: 4,
+              pointerEvents: 'none',
+              whiteSpace: 'pre',
+            }}
+          >
+            {`id: ${nodeId}
+room: ${roomSize.width}×${roomSize.height} (inner h: ${roomHeight})
+content: x${layout.contentRect.x} y${layout.contentRect.y} ${layout.contentRect.width}×${layout.contentRect.height}
+contentHeight(reported): ${state.contentHeightMap.get(nodeId) ?? 'none'}
+importance: ${Math.round(state.importanceMap.get(nodeId) ?? 0)}
+children: ${layout.childRects.size} open / ${layout.closedChildIds.length} closed`}
+          </div>
+        )}
 
         {/* open children */}
         {Array.from(layout.childRects.entries()).map(([childId, rect]) => (

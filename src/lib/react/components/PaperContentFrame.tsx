@@ -22,7 +22,6 @@ interface PaperContentFrameProps {
   nodeId: PaperId;
   content: string;
   theme: PaperContentTheme;
-  isRoot?: boolean;
 }
 
 function calcContentFontSize(charCount: number): number {
@@ -31,7 +30,7 @@ function calcContentFontSize(charCount: number): number {
   return Math.min(MAX, Math.max(MIN, MIN + 2 * Math.log10(charCount)));
 }
 
-export function PaperContentFrame({ nodeId, content, theme, isRoot = false }: PaperContentFrameProps) {
+export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameProps) {
   const { dispatch, state } = usePaperStore();
   const { startDrag } = useDrag();
   const [height, setHeight] = useState(60);
@@ -57,7 +56,7 @@ export function PaperContentFrame({ nodeId, content, theme, isRoot = false }: Pa
   );
 
   const plainText = content.replace(/<[^>]+>/g, '');
-  const fontSize = isRoot ? 14 : calcContentFontSize(plainText.length);
+  const fontSize = calcContentFontSize(plainText.length);
 
   const { iframeRef, srcDoc } = useIframeBridge({ content, theme, fontSize, onEvent: handleEvent });
 

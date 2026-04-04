@@ -59,6 +59,11 @@ export function computeRoomLayout(
     return { rects: [] };
   }
 
+  // 横長コンテナは転置して「縦に列詰め→右に積む」に切り替え、最後に戻す
+  const useColumns = containerWidth > containerHeight;
+  const w = useColumns ? containerHeight : containerWidth;
+  const h = useColumns ? containerWidth : containerHeight;
+
   const totalWeight = items.reduce((s, i) => s + i.weight, 0);
 
   // 貪欲行詰め: worst AR が改善する間は同じ行に追加
@@ -73,14 +78,10 @@ export function computeRoomLayout(
       continue;
     }
 
-    const prevWorst = worstAspectRatio(
-      currentRow, currentRowWeight, totalWeight, containerWidth, containerHeight,
-    );
+    const prevWorst = worstAspectRatio(currentRow, currentRowWeight, totalWeight, w, h);
     const nextRow = [...currentRow, item];
     const nextWeight = currentRowWeight + item.weight;
-    const nextWorst = worstAspectRatio(
-      nextRow, nextWeight, totalWeight, containerWidth, containerHeight,
-    );
+    const nextWorst = worstAspectRatio(nextRow, nextWeight, totalWeight, w, h);
 
     if (nextWorst <= prevWorst) {
       // AR が改善 or 維持 → 同じ行に追加
@@ -101,11 +102,11 @@ export function computeRoomLayout(
 
   for (const row of rows) {
     const rowWeight = row.reduce((s, i) => s + i.weight, 0);
-    const rowHeight = (rowWeight / totalWeight) * containerHeight;
+    const rowHeight = (rowWeight / totalWeight) * h;
 
     let x = 0;
     for (const item of row) {
-      const width = (item.weight / rowWeight) * containerWidth;
+      const width = (item.weight / rowWeight) * w;
       const height = rowHeight;
 
       // AR 制約に引っかかる場合はクランプ（レイアウトが歪むより見切れる方がまし）
@@ -122,5 +123,11 @@ export function computeRoomLayout(
     y += rowHeight;
   }
 
+  // 転置した場合は x↔y, width↔height を戻す
+  if (useColumns) {
+    return {
+      rects: rects.map(r => ({ id: r.id, x: r.y, y: r.x, width: r.height, height: r.width })),
+    };
+  }
   return { rects };
 }
