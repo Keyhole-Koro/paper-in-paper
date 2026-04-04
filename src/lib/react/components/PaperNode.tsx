@@ -10,10 +10,8 @@ import {
   type PaperColorContext,
 } from '../internal/paperColors';
 import { PaperContentFrame } from './PaperContentFrame';
-import { ChildCard } from './ChildCard';
 
 const HEADER_HEIGHT = 37;
-const CLOSED_CARDS_HEIGHT = 52;
 
 interface PaperNodeProps {
   nodeId: PaperId;
@@ -29,13 +27,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
   const paper = state.paperMap.get(nodeId);
   const isRoot = parentId === null;
 
-  // room 内の利用可能高さ（header と closed cards の分を引く）
-  const hasClosedChildren = (paper?.childIds ?? []).some(
-    (id) => !(state.expansionMap.get(nodeId)?.openChildIds ?? []).includes(id),
-  );
-  const reservedHeight =
-    HEADER_HEIGHT + (hasClosedChildren ? CLOSED_CARDS_HEIGHT : 0);
-  const roomHeight = Math.max(0, roomSize.height - reservedHeight);
+  const roomHeight = Math.max(0, roomSize.height - HEADER_HEIGHT);
 
   const layout = usePaperLayout(nodeId, roomSize.width, roomHeight);
 
@@ -120,7 +112,14 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
           <PaperContentFrame
             nodeId={nodeId}
             content={paper.content}
+            isRoot={isRoot}
             theme={{
+              surface: tone.background,
+              surfaceAlt: tone.backgroundHover,
+              surfaceRaised: tone.headerBackground,
+              text: tone.text,
+              mutedText: tone.mutedText,
+              divider: tone.divider,
               linkBackground: tone.headerBackground,
               linkBackgroundHover: tone.backgroundHover,
               linkBorder: tone.border,

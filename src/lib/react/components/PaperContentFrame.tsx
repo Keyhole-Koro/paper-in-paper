@@ -6,6 +6,12 @@ import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
 
 interface PaperContentTheme {
+  surface: string;
+  surfaceAlt: string;
+  surfaceRaised: string;
+  text: string;
+  mutedText: string;
+  divider: string;
   linkBackground: string;
   linkBackgroundHover: string;
   linkBorder: string;
@@ -16,9 +22,16 @@ interface PaperContentFrameProps {
   nodeId: PaperId;
   content: string;
   theme: PaperContentTheme;
+  isRoot?: boolean;
 }
 
-export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameProps) {
+function calcContentFontSize(charCount: number): number {
+  const MIN = 11, MAX = 16;
+  if (charCount === 0) return MIN;
+  return Math.min(MAX, Math.max(MIN, MIN + 2 * Math.log10(charCount)));
+}
+
+export function PaperContentFrame({ nodeId, content, theme, isRoot = false }: PaperContentFrameProps) {
   const { dispatch, state } = usePaperStore();
   const { startDrag } = useDrag();
   const [height, setHeight] = useState(60);
@@ -43,7 +56,10 @@ export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameP
     [nodeId, dispatch, startDrag, state.paperMap],
   );
 
-  const { iframeRef, srcDoc } = useIframeBridge({ content, theme, onEvent: handleEvent });
+  const plainText = content.replace(/<[^>]+>/g, '');
+  const fontSize = isRoot ? 14 : calcContentFontSize(plainText.length);
+
+  const { iframeRef, srcDoc } = useIframeBridge({ content, theme, fontSize, onEvent: handleEvent });
 
   return (
     <iframe
