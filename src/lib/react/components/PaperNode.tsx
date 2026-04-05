@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { PaperId } from '../../core/types';
 import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
@@ -16,6 +17,8 @@ import { PaperContentFrame } from './PaperContentFrame';
 const DRAG_THRESHOLD = 5;
 
 const HEADER_HEIGHT = 37;
+
+const SPRING = { type: 'spring' as const, stiffness: 300, damping: 30, mass: 0.8 };
 
 interface PaperNodeProps {
   nodeId: PaperId;
@@ -152,13 +155,18 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
         }}
       >
         {/* content */}
-        <div
-          style={{
-            position: 'absolute',
-            left: layout.contentRect.x,
-            top: layout.contentRect.y,
+        <motion.div
+          animate={{
+            x: layout.contentRect.x,
+            y: layout.contentRect.y,
             width: layout.contentRect.width,
             height: layout.contentRect.height,
+          }}
+          transition={SPRING}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
             overflow: 'hidden',
             borderRight: layout.childRects.size > 0 ? `1px solid ${tone.divider}` : 'none',
             boxSizing: 'border-box',
@@ -182,28 +190,32 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
               linkText: tone.title,
             }}
           />
-        </div>
+        </motion.div>
 
         {/* open children */}
-        {Array.from(layout.childRects.entries()).map(([childId, rect]) => (
-          <div
-            key={childId}
-            data-child-id={childId}
-            style={{
-              position: 'absolute',
-              left: rect.x,
-              top: rect.y,
-              width: rect.width,
-              height: rect.height,
-              overflow: 'hidden',
-              borderLeft: `1px solid ${tone.divider}`,
-              borderTop: rect.y > 0 ? `1px solid ${tone.divider}` : 'none',
-              boxSizing: 'border-box',
-            }}
-          >
-            <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={color} />
-          </div>
-        ))}
+        <AnimatePresence>
+          {Array.from(layout.childRects.entries()).map(([childId, rect]) => (
+            <motion.div
+              key={childId}
+              data-child-id={childId}
+              initial={{ opacity: 0, scale: 0.95, x: rect.x, y: rect.y, width: rect.width, height: rect.height }}
+              animate={{ opacity: 1, scale: 1, x: rect.x, y: rect.y, width: rect.width, height: rect.height }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={SPRING}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                overflow: 'hidden',
+                borderLeft: `1px solid ${tone.divider}`,
+                borderTop: rect.y > 0 ? `1px solid ${tone.divider}` : 'none',
+                boxSizing: 'border-box',
+              }}
+            >
+              <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={color} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
 
         {/* drop indicator for open children */}
         {isDragTarget && insertTarget?.insertBeforeId && layout.childRects.has(insertTarget.insertBeforeId) && (() => {
