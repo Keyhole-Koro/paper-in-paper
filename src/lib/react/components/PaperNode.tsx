@@ -84,6 +84,10 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
     });
   }
 
+  function stopHeaderPointerEvent(e: React.PointerEvent) {
+    e.stopPropagation();
+  }
+
   function handleHeaderPointerUp() {
     if (!headerDidDrag.current) {
       dispatch({ type: 'FOCUS_NODE', nodeId });
@@ -132,12 +136,23 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
         <span style={{ fontWeight: 600, fontSize: 14, color: tone.title }}>{paper.title}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {onCreateChild && (
-            <span
+            <button
+              type="button"
+              onPointerDown={stopHeaderPointerEvent}
+              onPointerUp={stopHeaderPointerEvent}
               onClick={handleAddChild}
-              style={{ fontSize: 14, color: tone.mutedText, cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}
+              style={{
+                fontSize: 14,
+                color: tone.mutedText,
+                cursor: 'pointer',
+                lineHeight: 1,
+                padding: '0 2px',
+                border: 'none',
+                background: 'transparent',
+              }}
             >
               +
-            </span>
+            </button>
           )}
           {!isRoot && <span style={{ fontSize: 11, color: tone.mutedText }}>✕</span>}
         </div>
@@ -167,7 +182,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
             position: 'absolute',
             left: 0,
             top: 0,
-            overflow: 'hidden',
+            overflow: 'auto',
             borderRight: layout.childRects.size > 0 ? `1px solid ${tone.divider}` : 'none',
             boxSizing: 'border-box',
             padding: 10,
