@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { PaperId } from '../../core/types';
 import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
@@ -12,6 +12,8 @@ import {
 } from '../internal/paperColors';
 import { PaperContentFrame } from './PaperContentFrame';
 
+const DRAG_THRESHOLD = 5;
+
 const HEADER_HEIGHT = 37;
 
 interface PaperNodeProps {
@@ -22,14 +24,14 @@ interface PaperNodeProps {
 
 export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNodeProps) {
   const { state, dispatch } = usePaperStore();
-  const { session, insertTarget, registerRoom } = useDrag();
+  const { session, insertTarget, startDrag, registerRoom } = useDrag();
   const [roomRef, roomSize] = useRoomSize();
+  const debug = useDebug();
 
   const paper = state.paperMap.get(nodeId);
   const isRoot = parentId === null;
 
   const roomHeight = Math.max(0, roomSize.height - HEADER_HEIGHT);
-
   const layout = usePaperLayout(nodeId, roomSize.width, roomHeight);
 
   useEffect(() => {
@@ -37,18 +39,47 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
     return () => registerRoom(nodeId, null);
   }, [nodeId, registerRoom, roomRef]);
 
+  // header drag state
+  const headerPointerDown = useRef<{ x: number; y: number } | null>(null);
+  const headerDidDrag = useRef(false);
+
   if (!paper) return null;
 
-  const debug = useDebug();
   const isFocused = state.focusedNodeId === nodeId;
   const isDragTarget = session !== null && insertTarget?.parentId === nodeId;
   const color = resolvePaperColorContext(paper.hue, inheritedColor);
   const tone = getPaperTone(color, { isRoot, isFocused });
 
-  function handleHeaderClick() {
-    dispatch({ type: 'FOCUS_NODE', nodeId });
-    if (isRoot) return;
-    dispatch({ type: 'CLOSE_NODE', parentId: parentId!, childId: nodeId });
+  // --- header interaction ---
+  function handleHeaderPointerDown(e: React.PointerEvent) {
+    if (isRoot || e.button !== 0) return;
+    headerPointerDown.current = { x: e.clientX, y: e.clientY };
+    headerDidDrag.current = false;
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handleHeaderPointerMove(e: React.PointerEvent) {
+    if (!headerPointerDown.current || headerDidDrag.current) return;
+    const dx = e.clientX - headerPointerDown.current.x;
+    const dy = e.clientY - headerPointerDown.current.y;
+    if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      headerDidDrag.current = true;
+      startDrag(
+        { draggedPaperId: nodeId, sourceParentId: parentId!, mode: 'move-parent', draggedTitle: paper!.title },
+        { x: e.clientX, y: e.clientY },
+      );
+    }
+  }
+
+  function handleHeaderPointerUp() {
+    if (!headerDidDrag.current) {
+      dispatch({ type: 'FOCUS_NODE', nodeId });
+      if (!isRoot) {
+        dispatch({ type: 'CLOSE_NODE', parentId: parentId!, childId: nodeId });
+      }
+    }
+    headerPointerDown.current = null;
+    headerDidDrag.current = false;
   }
 
   return (
@@ -75,12 +106,15 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
           height: HEADER_HEIGHT,
           background: isFocused ? tone.headerBackgroundFocused : tone.headerBackground,
           borderBottom: `1px solid ${tone.divider}`,
-          cursor: isRoot ? 'default' : 'pointer',
+          cursor: isRoot ? 'default' : 'grab',
           userSelect: 'none',
           flexShrink: 0,
           boxSizing: 'border-box',
+          touchAction: 'none',
         }}
-        onClick={handleHeaderClick}
+        onPointerDown={handleHeaderPointerDown}
+        onPointerMove={handleHeaderPointerMove}
+        onPointerUp={handleHeaderPointerUp}
       >
         <span style={{ fontWeight: 600, fontSize: 14, color: tone.title }}>{paper.title}</span>
         {!isRoot && <span style={{ fontSize: 11, color: tone.mutedText }}>✕</span>}
@@ -105,7 +139,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
             top: layout.contentRect.y,
             width: layout.contentRect.width,
             height: layout.contentRect.height,
-            overflow: 'auto',
+            overflow: 'hidden',
             borderRight: layout.childRects.size > 0 ? `1px solid ${tone.divider}` : 'none',
             boxSizing: 'border-box',
             padding: 10,
@@ -129,6 +163,47 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
             }}
           />
         </div>
+
+        {/* open children */}
+        {Array.from(layout.childRects.entries()).map(([childId, rect]) => (
+          <div
+            key={childId}
+            data-child-id={childId}
+            style={{
+              position: 'absolute',
+              left: rect.x,
+              top: rect.y,
+              width: rect.width,
+              height: rect.height,
+              overflow: 'hidden',
+              borderLeft: `1px solid ${tone.divider}`,
+              borderTop: rect.y > 0 ? `1px solid ${tone.divider}` : 'none',
+              boxSizing: 'border-box',
+            }}
+          >
+            <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={color} />
+          </div>
+        ))}
+
+        {/* drop indicator for open children */}
+        {isDragTarget && insertTarget?.insertBeforeId && layout.childRects.has(insertTarget.insertBeforeId) && (() => {
+          const r = layout.childRects.get(insertTarget.insertBeforeId)!;
+          return (
+            <div
+              style={{
+                position: 'absolute',
+                left: r.x,
+                top: r.y,
+                width: 2,
+                height: r.height,
+                background: tone.accent,
+                borderRadius: 1,
+                pointerEvents: 'none',
+                zIndex: 10,
+              }}
+            />
+          );
+        })()}
 
         {/* debug overlay */}
         {debug && (
@@ -157,27 +232,8 @@ importance: ${Math.round(state.importanceMap.get(nodeId) ?? 0)}
 children: ${layout.childRects.size} open / ${layout.closedChildIds.length} closed`}
           </div>
         )}
-
-        {/* open children */}
-        {Array.from(layout.childRects.entries()).map(([childId, rect]) => (
-          <div
-            key={childId}
-            style={{
-              position: 'absolute',
-              left: rect.x,
-              top: rect.y,
-              width: rect.width,
-              height: rect.height,
-              overflow: 'hidden',
-              borderLeft: `1px solid ${tone.divider}`,
-              borderTop: rect.y > 0 ? `1px solid ${tone.divider}` : 'none',
-              boxSizing: 'border-box',
-            }}
-          >
-            <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={color} />
-          </div>
-        ))}
       </div>
+
     </div>
   );
 }

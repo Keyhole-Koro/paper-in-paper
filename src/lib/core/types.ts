@@ -44,6 +44,5 @@ export interface PaperViewState {
   importanceMap: ImportanceMap;
   manualPlacementMap: PlacementMap;
   contentHeightMap: Map<PaperId, number>;
-  committedHeightMap: Map<PaperId, number>;
   protectedUntilMap: Map<PaperId, number>;
 }

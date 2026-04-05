@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import type { ExpansionMap, PaperId, PaperMap } from '../core/types';
 import { getRootId } from '../core/tree';
 import { PaperStoreProvider, usePaperStore } from './context/PaperStoreContext';
@@ -26,12 +25,6 @@ function PaperCanvasInner() {
   const { state, dispatch } = usePaperStore();
   const rootId = getRootId(state.paperMap);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      dispatch({ type: 'COMMIT_HEIGHTS' });
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [state.contentHeightMap, dispatch]);
 
   function handleDrop(session: DragSession, target: InsertTarget) {
     if (session.mode === 'attach-unplaced') {

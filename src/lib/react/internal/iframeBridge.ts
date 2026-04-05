@@ -29,22 +29,33 @@ const BOOTSTRAP_SCRIPT = `
   observer.observe(document.body);
   notifyHeight();
 
-  document.addEventListener('click', function (e) {
-    var el = e.target.closest('[data-paper-id]');
-    if (!el) return;
-    e.preventDefault();
-    parent.postMessage({ type: 'open', paperId: el.getAttribute('data-paper-id') }, '*');
-  });
+  var downEl = null;
+  var downX = 0;
+  var downY = 0;
 
   document.addEventListener('pointerdown', function (e) {
     var el = e.target.closest('[data-paper-id]');
     if (!el) return;
+    downEl = el;
+    downX = e.clientX;
+    downY = e.clientY;
     parent.postMessage({
       type: 'dragstart',
       paperId: el.getAttribute('data-paper-id'),
       clientX: e.clientX,
       clientY: e.clientY,
     }, '*');
+  });
+
+  document.addEventListener('pointerup', function (e) {
+    if (!downEl) return;
+    var dx = e.clientX - downX;
+    var dy = e.clientY - downY;
+    if (Math.sqrt(dx * dx + dy * dy) < 5) {
+      e.preventDefault();
+      parent.postMessage({ type: 'open', paperId: downEl.getAttribute('data-paper-id') }, '*');
+    }
+    downEl = null;
   });
 })();
 `;
@@ -77,6 +88,7 @@ export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: numbe
     line-height: 1.7;
     color: var(--text);
     padding: 0;
+    overflow: hidden;
     background:
       radial-gradient(circle at top right, color-mix(in srgb, ${theme.linkBackground} 50%, transparent), transparent 34%),
       linear-gradient(180deg, var(--surface), var(--surface-alt));

@@ -24,6 +24,7 @@ interface DragContextValue {
   startDrag: (session: DragSession, initial: { x: number; y: number }) => void;
   endDrag: () => void;
   registerRoom: (parentId: PaperId, el: HTMLElement | null) => void;
+  isDragging: boolean;
 }
 
 const DragContext = createContext<DragContextValue | null>(null);
@@ -90,7 +91,7 @@ export function DragProvider({
   }, []);
 
   return (
-    <DragContext value={{ session, insertTarget, pointerPos, startDrag, endDrag, registerRoom }}>
+    <DragContext value={{ session, insertTarget, pointerPos, startDrag, endDrag, registerRoom, isDragging: session !== null }}>
       {children}
     </DragContext>
   );

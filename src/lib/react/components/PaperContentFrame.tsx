@@ -32,7 +32,7 @@ function calcContentFontSize(charCount: number): number {
 
 export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameProps) {
   const { dispatch, state } = usePaperStore();
-  const { startDrag } = useDrag();
+  const { startDrag, isDragging } = useDrag();
   const [height, setHeight] = useState(60);
 
   const handleEvent = useCallback(
@@ -69,6 +69,7 @@ export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameP
         height,
         border: 'none',
         display: 'block',
+        pointerEvents: isDragging ? 'none' : 'auto',
       }}
       sandbox="allow-scripts"
       title={`paper-content-${nodeId}`}
