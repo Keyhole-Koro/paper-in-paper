@@ -20,6 +20,8 @@ export type PaperContentEvent =
 
 const BOOTSTRAP_SCRIPT = `
 (function () {
+  var DRAG_THRESHOLD = 5;
+
   function notifyHeight() {
     var h = document.documentElement.scrollHeight;
     parent.postMessage({ type: 'resize', height: h }, '*');
@@ -32,6 +34,7 @@ const BOOTSTRAP_SCRIPT = `
   var downEl = null;
   var downX = 0;
   var downY = 0;
+  var didDrag = false;
 
   document.addEventListener('pointerdown', function (e) {
     var el = e.target.closest('[data-paper-id]');
@@ -39,9 +42,19 @@ const BOOTSTRAP_SCRIPT = `
     downEl = el;
     downX = e.clientX;
     downY = e.clientY;
+    didDrag = false;
+  });
+
+  document.addEventListener('pointermove', function (e) {
+    if (!downEl || didDrag) return;
+    var dx = e.clientX - downX;
+    var dy = e.clientY - downY;
+    if (Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
+
+    didDrag = true;
     parent.postMessage({
       type: 'dragstart',
-      paperId: el.getAttribute('data-paper-id'),
+      paperId: downEl.getAttribute('data-paper-id'),
       clientX: e.clientX,
       clientY: e.clientY,
     }, '*');
@@ -51,11 +64,17 @@ const BOOTSTRAP_SCRIPT = `
     if (!downEl) return;
     var dx = e.clientX - downX;
     var dy = e.clientY - downY;
-    if (Math.sqrt(dx * dx + dy * dy) < 5) {
+    if (!didDrag && Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) {
       e.preventDefault();
       parent.postMessage({ type: 'open', paperId: downEl.getAttribute('data-paper-id') }, '*');
     }
     downEl = null;
+    didDrag = false;
+  });
+
+  document.addEventListener('pointercancel', function () {
+    downEl = null;
+    didDrag = false;
   });
 })();
 `;
