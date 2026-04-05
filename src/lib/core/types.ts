@@ -1,10 +1,14 @@
+import type { ReactNode } from 'react';
+
 export type PaperId = string;
+
+export type PaperContent = string | ReactNode;
 
 export interface Paper {
   id: PaperId;
   title: string;
   description: string;
-  content: string;
+  content: PaperContent;
   hue?: number;
   parentId: PaperId | null;
   childIds: PaperId[];

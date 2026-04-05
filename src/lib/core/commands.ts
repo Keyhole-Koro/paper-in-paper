@@ -1,10 +1,11 @@
-import type { GridPosition, PaperId, PaperViewState } from './types';
+import type { GridPosition, PaperContent, PaperId, PaperViewState } from './types';
 import { openChild, closeChild, removeNodeFromExpansion } from './expansion';
 import { addChild, moveNode, removeNode } from './tree';
 import { nanoid } from './nanoid';
 
 export type Command =
-  | { type: 'CREATE_UNPLACED_NODE'; title: string; description: string; content: string }
+  | { type: 'CREATE_UNPLACED_NODE'; title: string; description: string; content: PaperContent }
+  | { type: 'CREATE_CHILD_NODE'; parentId: PaperId; title: string; description: string; content: PaperContent; hue?: number }
   | { type: 'DELETE_NODE'; nodeId: PaperId }
   | { type: 'OPEN_NODE'; parentId: PaperId; childId: PaperId }
   | { type: 'CLOSE_NODE'; parentId: PaperId; childId: PaperId }
@@ -47,6 +48,39 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
         unplacedNodeIds: [...state.unplacedNodeIds, id],
         importanceMap,
         accessMap,
+      };
+    }
+
+    case 'CREATE_CHILD_NODE': {
+      const id = nanoid();
+      const next = new Map(state.paperMap);
+      const parent = next.get(command.parentId);
+      if (!parent) return state;
+      next.set(id, {
+        id,
+        title: command.title,
+        description: command.description,
+        content: command.content,
+        hue: command.hue,
+        parentId: command.parentId,
+        childIds: [],
+      });
+      next.set(command.parentId, { ...parent, childIds: [...parent.childIds, id] });
+      const expansionMap = openChild(state.expansionMap, command.parentId, id);
+      const importanceMap = new Map(state.importanceMap);
+      importanceMap.set(id, IMPORTANCE_INITIAL);
+      const accessMap = new Map(state.accessMap);
+      accessMap.set(id, Date.now());
+      const protectedUntilMap = new Map(state.protectedUntilMap);
+      protectedUntilMap.set(id, Date.now() + PROTECT_DURATION_MS);
+      return {
+        ...state,
+        paperMap: next,
+        expansionMap,
+        importanceMap,
+        accessMap,
+        protectedUntilMap,
+        focusedNodeId: id,
       };
     }
 

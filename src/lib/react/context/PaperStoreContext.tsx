@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useReducer } from 'react';
+import { createContext, useCallback, useContext, useEffect, useReducer, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { ExpansionMap, PaperId, PaperMap, PaperViewState } from '../../core/types';
 import { type Command, createInitialState, reduce } from '../../core/commands';
@@ -34,17 +34,20 @@ export function PaperStoreProvider({
   );
 
   // controlled props → sync into internal state when they change
+  // Use refs to track last synced value so internal state changes don't trigger re-sync
+  const lastSyncedPaperMapRef = useRef(paperMap);
+  useEffect(() => {
+    if (paperMap !== lastSyncedPaperMapRef.current) {
+      lastSyncedPaperMapRef.current = paperMap;
+      rawDispatch({ type: '__SYNC_PAPER_MAP', paperMap });
+    }
+  }, [paperMap]);
+
   useEffect(() => {
     if (expansionMap !== undefined && expansionMap !== state.expansionMap) {
       rawDispatch({ type: '__SYNC_EXPANSION' as never, expansionMap } as never);
     }
   }, [expansionMap]);
-
-  useEffect(() => {
-    if (paperMap !== state.paperMap) {
-      rawDispatch({ type: '__SYNC_PAPER_MAP', paperMap });
-    }
-  }, [paperMap, state.paperMap]);
 
   useEffect(() => {
     if (focusedNodeId !== undefined && focusedNodeId !== state.focusedNodeId) {

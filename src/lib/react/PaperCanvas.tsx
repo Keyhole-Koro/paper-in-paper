@@ -3,6 +3,7 @@ import { getRootId } from '../core/tree';
 import { PaperStoreProvider, usePaperStore } from './context/PaperStoreContext';
 import { DragProvider, type DragSession } from './context/DragContext';
 import { DebugContext } from './context/DebugContext';
+import { CreateChildContext, type OnCreateChild } from './context/CreateChildContext';
 import type { InsertTarget } from './internal/hitTest';
 import { PaperNode } from './components/PaperNode';
 import { FloatingLayer } from './components/FloatingLayer';
@@ -13,6 +14,7 @@ export interface PaperCanvasProps {
   expansionMap?: ExpansionMap;
   focusedNodeId?: PaperId | null;
   debug?: boolean;
+  onCreateChild?: OnCreateChild;
   onPaperMapChange?: (paperMap: PaperMap) => void;
   onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
   onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
@@ -49,12 +51,14 @@ export function PaperCanvas({
   expansionMap,
   focusedNodeId,
   debug = false,
+  onCreateChild,
   onPaperMapChange,
   onExpansionMapChange,
   onFocusedNodeIdChange,
 }: PaperCanvasProps) {
   return (
     <DebugContext.Provider value={debug}>
+    <CreateChildContext.Provider value={onCreateChild ?? null}>
     <PaperStoreProvider
       paperMap={paperMap}
       expansionMap={expansionMap}
@@ -65,6 +69,7 @@ export function PaperCanvas({
     >
       <PaperCanvasInner />
     </PaperStoreProvider>
+    </CreateChildContext.Provider>
     </DebugContext.Provider>
   );
 }

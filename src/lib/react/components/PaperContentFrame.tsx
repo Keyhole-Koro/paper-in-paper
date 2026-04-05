@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import type { PaperId } from '../../core/types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PaperContent, PaperId } from '../../core/types';
 import type { PaperContentEvent } from '../internal/iframeBridge';
 import { useIframeBridge } from '../hooks/useIframeBridge';
 import { usePaperStore } from '../context/PaperStoreContext';
@@ -20,7 +20,7 @@ interface PaperContentTheme {
 
 interface PaperContentFrameProps {
   nodeId: PaperId;
-  content: string;
+  content: PaperContent;
   theme: PaperContentTheme;
 }
 
@@ -55,6 +55,10 @@ export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameP
     [nodeId, dispatch, startDrag, state.paperMap],
   );
 
+  if (typeof content !== 'string') {
+    return <PaperContentReact nodeId={nodeId} content={content} theme={theme} />;
+  }
+
   const plainText = content.replace(/<[^>]+>/g, '');
   const fontSize = calcContentFontSize(plainText.length);
 
@@ -74,5 +78,57 @@ export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameP
       sandbox="allow-scripts"
       title={`paper-content-${nodeId}`}
     />
+  );
+}
+
+interface PaperContentReactProps {
+  nodeId: PaperId;
+  content: Exclude<PaperContent, string>;
+  theme: PaperContentTheme;
+}
+
+function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
+  const { dispatch } = usePaperStore();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    function reportHeight() {
+      const nextEl = containerRef.current;
+      if (!nextEl) return;
+      dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: nextEl.scrollHeight });
+    }
+
+    const observer = new ResizeObserver(reportHeight);
+    observer.observe(el);
+    reportHeight();
+    return () => observer.disconnect();
+  }, [dispatch, nodeId, content]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        ['--surface' as string]: theme.surface,
+        ['--surface-alt' as string]: theme.surfaceAlt,
+        ['--surface-raised' as string]: theme.surfaceRaised,
+        ['--text' as string]: theme.text,
+        ['--muted' as string]: theme.mutedText,
+        ['--line' as string]: theme.divider,
+        ['--soft-line' as string]: `color-mix(in srgb, ${theme.divider} 55%, white)`,
+        ['--panel' as string]: `color-mix(in srgb, ${theme.surfaceRaised} 88%, white)`,
+        ['--quote' as string]: `color-mix(in srgb, ${theme.linkBackground} 45%, white)`,
+        ['--accent' as string]: theme.linkText,
+        color: theme.text,
+        display: 'grid',
+        gap: 12,
+        fontFamily: 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
+        lineHeight: 1.7,
+      }}
+    >
+      {content}
+    </div>
   );
 }

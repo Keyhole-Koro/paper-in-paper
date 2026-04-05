@@ -3,6 +3,7 @@ import type { PaperId } from '../../core/types';
 import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
 import { useDebug } from '../context/DebugContext';
+import { useCreateChild } from '../context/CreateChildContext';
 import { usePaperLayout } from '../hooks/usePaperLayout';
 import { useRoomSize } from '../hooks/useRoomSize';
 import {
@@ -27,6 +28,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
   const { session, insertTarget, startDrag, registerRoom } = useDrag();
   const [roomRef, roomSize] = useRoomSize();
   const debug = useDebug();
+  const onCreateChild = useCreateChild();
 
   const paper = state.paperMap.get(nodeId);
   const isRoot = parentId === null;
@@ -69,6 +71,14 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
         { x: e.clientX, y: e.clientY },
       );
     }
+  }
+
+  function handleAddChild(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!onCreateChild) return;
+    onCreateChild(nodeId, ({ title, content, description = '', hue }) => {
+      dispatch({ type: 'CREATE_CHILD_NODE', parentId: nodeId, title, content, description, hue });
+    });
   }
 
   function handleHeaderPointerUp() {
@@ -117,7 +127,17 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
         onPointerUp={handleHeaderPointerUp}
       >
         <span style={{ fontWeight: 600, fontSize: 14, color: tone.title }}>{paper.title}</span>
-        {!isRoot && <span style={{ fontSize: 11, color: tone.mutedText }}>✕</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {onCreateChild && (
+            <span
+              onClick={handleAddChild}
+              style={{ fontSize: 14, color: tone.mutedText, cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}
+            >
+              +
+            </span>
+          )}
+          {!isRoot && <span style={{ fontSize: 11, color: tone.mutedText }}>✕</span>}
+        </div>
       </div>
 
       {/* room: 絶対配置で content + open children を 2D 配置 */}
