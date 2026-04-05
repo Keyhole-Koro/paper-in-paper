@@ -42,6 +42,7 @@ export function DragProvider({
 
   const roomsRef = useRef<Map<PaperId, RoomEntry>>(new Map());
   const sessionRef = useRef<DragSession | null>(null);
+  const pointerPosRef = useRef({ x: 0, y: 0 });
   const onDropRef = useRef(onDrop);
   onDropRef.current = onDrop;
 
@@ -56,19 +57,21 @@ export function DragProvider({
   const endDrag = useCallback(() => {
     const s = sessionRef.current;
     if (s) {
-      const target = findInsertTarget(roomsRef.current, pointerPos, s.draggedPaperId);
+      const target = findInsertTarget(roomsRef.current, pointerPosRef.current, s.draggedPaperId);
       if (target) onDropRef.current(s, target);
     }
     sessionRef.current = null;
     setSession(null);
     setInsertTarget(null);
+    document.body.style.userSelect = '';
 
     window.removeEventListener('pointermove', handlePointerMove);
     window.removeEventListener('pointerup', handlePointerUp);
-  }, [pointerPos]);
+  }, []);
 
   function handlePointerMove(e: PointerEvent) {
     const pos = { x: e.clientX, y: e.clientY };
+    pointerPosRef.current = pos;
     setPointerPos(pos);
     const s = sessionRef.current;
     if (!s) return;
@@ -82,9 +85,11 @@ export function DragProvider({
 
   const startDrag = useCallback((newSession: DragSession, initial: { x: number; y: number }) => {
     sessionRef.current = newSession;
+    pointerPosRef.current = initial;
     setSession(newSession);
     setPointerPos(initial);
     setInsertTarget(null);
+    document.body.style.userSelect = 'none';
 
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);

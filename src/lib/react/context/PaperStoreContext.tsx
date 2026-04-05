@@ -5,13 +5,11 @@ import { type Command, createInitialState, reduce } from '../../core/commands';
 
 export interface PaperStoreProviderProps {
   paperMap: PaperMap;
-  unplacedNodeIds?: PaperId[];
   expansionMap?: ExpansionMap;
   focusedNodeId?: PaperId | null;
   onPaperMapChange?: (paperMap: PaperMap) => void;
   onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
   onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
-  onUnplacedNodeIdsChange?: (ids: PaperId[]) => void;
   children: ReactNode;
 }
 
@@ -24,17 +22,15 @@ const PaperStoreContext = createContext<PaperStoreContextValue | null>(null);
 
 export function PaperStoreProvider({
   paperMap,
-  unplacedNodeIds,
   expansionMap,
   focusedNodeId,
   onPaperMapChange,
   onExpansionMapChange,
   onFocusedNodeIdChange,
-  onUnplacedNodeIdsChange,
   children,
 }: PaperStoreProviderProps) {
   const [state, rawDispatch] = useReducer(reduce, undefined, () =>
-    createInitialState(paperMap, unplacedNodeIds ?? []),
+    createInitialState(paperMap),
   );
 
   // controlled props → sync into internal state when they change
@@ -56,12 +52,6 @@ export function PaperStoreProvider({
     }
   }, [focusedNodeId]);
 
-  useEffect(() => {
-    if (unplacedNodeIds !== undefined && unplacedNodeIds !== state.unplacedNodeIds) {
-      rawDispatch({ type: '__SYNC_UNPLACED', unplacedNodeIds });
-    }
-  }, [unplacedNodeIds, state.unplacedNodeIds]);
-
   // wrap dispatch to fire callbacks after each command
   const dispatch = useCallback(
     (command: Command) => {
@@ -82,10 +72,6 @@ export function PaperStoreProvider({
   useEffect(() => {
     onFocusedNodeIdChange?.(state.focusedNodeId);
   }, [state.focusedNodeId]);
-
-  useEffect(() => {
-    onUnplacedNodeIdsChange?.(state.unplacedNodeIds);
-  }, [state.unplacedNodeIds]);
 
   return (
     <PaperStoreContext value={{ state, dispatch }}>
