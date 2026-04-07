@@ -1,47 +1,47 @@
-# Paper in Paper 挙動仕様
+# Paper in Paper Behavior Specification
 
-この文書は、インタラクションの基準仕様を固定するためのものです。
-以後の設計や実装変更は、この文書に明示的な変更を加えない限り、ここで定義した挙動を保つ前提とします。
+This document fixes the reference interaction behavior for Paper in Paper.
+Future design or implementation changes are expected to preserve the behaviors defined here unless this document is explicitly updated.
 
-## 初期状態
+## Initial State
 
-起動時はモックデータを初期状態として使用する。
+At startup, the application uses mock data as the initial state.
 
-## コアコンセプト
+## Core Concept
 
-長文の文章を一度に表示するのではなく、文章中の概念をクリックで展開できる再帰的な構造。
-読者が能動的に読むスコープを広げたり戻したりできることが目的である。
+Instead of showing a long document all at once, the system presents a recursive structure in which concepts inside the text can be expanded by clicking them.
+The goal is to let readers actively widen or narrow their reading scope as needed.
 
-例：「C言語は**ポインタ**を扱う」→ ポインタをクリックすると展開される。
+Example: `The C language uses pointers.` Clicking `pointers` expands that concept.
 
-## 対象範囲
+## Scope
 
-この仕様で扱うもの:
+This specification defines:
 
-- ツリー構造とその不変条件
-- 展開・縮小の挙動
-- サイズ伝播の挙動
-- スペース管理（自動縮小）
-- パンくずリストによるナビゲーション
-- ドラッグ&ドロップによる並べ替え
+- Tree structure and its invariants
+- Expand and collapse behavior
+- Size propagation behavior
+- Space management through automatic collapsing
+- Breadcrumb-based navigation
+- Reordering via drag and drop
 
-この仕様で固定しないもの:
+This specification does not fix:
 
-- アニメーション時間の細部
-- 色、影、余白などの見た目の詳細
-- grid の具体的な分割数
-- コンポーネントの内部構成
+- Detailed animation timing
+- Visual styling such as colors, shadows, and spacing
+- The exact number of grid divisions
+- Internal component structure
 
-## ツリーモデル
+## Tree Model
 
-データは正規化された paper のグラフとして扱う。
+Data is treated as a normalized graph of paper nodes.
 
-paper node は以下の2種類に分類される:
+Paper nodes are classified into two categories:
 
-- **配置済みノード**: いずれかの親の `childIds` に含まれるノード
-- **未配置ノード**: どの親にも属さず、サイドバーに存在するノード
+- **Placed nodes**: nodes that appear in some parent's `childIds`
+- **Unplaced nodes**: nodes that belong to no parent and are shown in the sidebar
 
-各 paper は以下の情報を持つ:
+Each paper contains:
 
 - `id`
 - `title`
@@ -50,195 +50,195 @@ paper node は以下の2種類に分類される:
 - `parentId`
 - `childIds`
 
-グローバルな状態:
+Global state:
 
-- `unplacedNodes`: 未配置ノードの配列（サイドバーに表示される）
+- `unplacedNodes`: an array of unplaced nodes displayed in the sidebar
 
-不変条件:
+Invariants:
 
-- `id` はランダムな識別子であり、意味を持たない。同じ `title` を持つノードが複数存在してよい
-- `parentId === null` のノードはちょうど 1 つだけ存在し、それが root である
-- root 以外の各ノードは、ちょうど 1 つの親ノードの `childIds` に含まれるか、`unplacedNodes` に含まれるかのどちらかである
-- `childIds` の順序は意味を持ち、保持されなければならない
+- `id` is a random identifier and has no semantic meaning. Multiple nodes may share the same `title`
+- Exactly one node has `parentId === null`, and that node is the root
+- Every non-root node must belong to exactly one parent's `childIds` or to `unplacedNodes`
+- The order of `childIds` is meaningful and must be preserved
 
-## コンテンツモデル
+## Content Model
 
-各 paper の `content` は任意の HTML/CSS である。
+Each paper's `content` may contain arbitrary HTML and CSS.
 
-content は iframe 内にレンダリングされる。
+Content is rendered inside an iframe.
 
-- iframe により各 paper のスタイルと JS が完全に隔離される
-- content 内の child paper へのリンクは `data-paper-id` 属性で表現する
+- The iframe fully isolates the paper's styles and JavaScript
+- Links to child papers inside the content are expressed with the `data-paper-id` attribute
 
 ```html
-<p>C言語は<a data-paper-id="xxxx">ポインタ</a>を扱う</p>
+<p>The C language uses <a data-paper-id="xxxx">pointers</a>.</p>
 ```
 
-### iframe と親の通信
+### Communication Between the Iframe and Its Parent
 
-iframe 内でのイベントは `postMessage` で親に伝達する。
+Events inside the iframe are sent to the parent via `postMessage`.
 
-| イベント | 送信元 | 内容 |
-|---------|--------|------|
-| リンククリック | iframe → 親 | `{ type: "open", paperId: "xxxx" }` |
-| リンクドラッグ開始 | iframe → 親 | `{ type: "dragstart", paperId: "xxxx" }` |
-| コンテンツ高さ変化 | iframe → 親 | `{ type: "resize", height: number }` |
+| Event | Sender | Payload |
+| --- | --- | --- |
+| Link click | iframe -> parent | `{ type: "open", paperId: "xxxx" }` |
+| Link drag start | iframe -> parent | `{ type: "dragstart", paperId: "xxxx" }` |
+| Content height change | iframe -> parent | `{ type: "resize", height: number }` |
 
-- `childIds` が正本であり、content 内の `data-paper-id` はそれへの参照にすぎない
-- content 内に存在しない `childIds` のノードがあってもよい（部屋に存在するが文中にリンクがない状態）
+- `childIds` is the source of truth, and `data-paper-id` entries in the content are only references to it
+- A node may appear in `childIds` even if the content does not include a link to it
 
-## サイドバー
+## Sidebar
 
-サイドバーは未配置ノードの一覧を表示する。
+The sidebar displays the list of unplaced nodes.
 
-挙動:
+Behavior:
 
-- 「+」ボタンで新しい未配置ノードを作成し、`unplacedNodes` に追加する
-- サイドバーのノードを部屋にドラッグすると、そのノードが target parent の `childIds` に追加され、`unplacedNodes` から除外される
-- 部屋から取り出してサイドバーに戻すことはできない（親の変更ドラッグで別の部屋に移す）
+- Clicking the `+` button creates a new unplaced node and appends it to `unplacedNodes`
+- Dragging a sidebar node into a room appends that node to the target parent's `childIds` and removes it from `unplacedNodes`
+- Nodes cannot be dragged back from a room into the sidebar; changing parents is done by dragging between rooms
 
-## ノードの削除
+## Node Deletion
 
-- ノードを削除すると、そのノード以下のサブツリー全体が連鎖削除される
-- 削除されたノードは `childIds` および `unplacedNodes` から除外される
-- root ノードは削除できない
+- Deleting a node recursively deletes its entire subtree
+- Deleted nodes are removed from both `childIds` and `unplacedNodes`
+- The root node cannot be deleted
 
-## 部屋モデル
+## Room Model
 
-各 paper node は「部屋」を持ち、その中に子 paper たちが空間的にレイアウトされる。
+Each paper node owns a "room" in which child papers are laid out spatially.
 
-- 部屋は grid に分割される
-- 子 paper たちは grid 上に配置される
-- ユーザーはドラッグで子の配置を変更できる
+- The room is divided into a grid
+- Child papers are placed on that grid
+- Users can reposition children by dragging them
 
-paper node の content と展開された子 paper node は同時に表示される。
+The paper node's content and its expanded child papers are displayed at the same time.
 
-- content（テキスト）は常に表示されたままになる
-- 子が展開されると、content と並んで子 paper が表示される
-- 読者は文脈を保ちながら子の内容を参照できる
+- The content text remains visible at all times
+- When a child expands, it appears alongside the content
+- Readers can inspect child content without losing the current context
 
-閉じている子ノードは title のみを表示するコンパクトなカードとして部屋に表示される。
+Collapsed child nodes are shown inside the room as compact cards that display only the title.
 
-- カードをクリックすると、そのノードが展開される
-- カードをホバーすると description がポップアップで表示される
-- カードはドラッグで部屋内の位置を変更できる
+- Clicking a card expands that node
+- Hovering over a card shows its description in a popup
+- Cards can be dragged to change their position within the room
 
-## 展開状態モデル
+## Expansion State Model
 
-展開状態は parent ごとに管理する。
+Expansion state is managed per parent.
 
-各 parent は以下の状態を持てる:
+Each parent may hold:
 
-- `openChildIds`: 現在展開されている子ノードの集合
+- `openChildIds`: the set of currently expanded child nodes
 
-グローバルな状態:
+Global state:
 
-- `focusedNodeId`: 最後に操作されたノードの id
+- `focusedNodeId`: the id of the most recently operated node
 
-挙動:
+Behavior:
 
-- 子ノードを展開すると、`openChildIds` にその子が追加される
-- 子ノードを展開すると、`focusedNodeId` がその子に更新される
-- 子ノードを閉じると、`openChildIds` からその子が除外される
-- 閉じた子以下のサブツリーの展開状態はすべて消去される
-- ドラッグ完了時、`focusedNodeId` が移動したノードに更新される
+- Expanding a child adds it to `openChildIds`
+- Expanding a child updates `focusedNodeId` to that child
+- Collapsing a child removes it from `openChildIds`
+- Collapsing a child clears the expansion state of its entire subtree
+- When a drag operation completes, `focusedNodeId` is updated to the moved node
 
-## サイズ伝播モデル
+## Size Propagation Model
 
-各 paper node のサイズは派生値であり、権威的な状態として持たない。
+The size of each paper node is a derived value, not authoritative state.
 
-- leaf node のサイズはコンテンツ量によって決まる
-- 親 node のサイズは、部屋の中の子たちのレイアウト結果によって決まる
+- A leaf node's size is determined by the amount of content it contains
+- A parent node's size is determined by the layout result of its children inside the room
 
-伝播の挙動:
+Propagation behavior:
 
-- 子ノードが展開されると、そのサイズが増加する
-- 子のサイズ増加は親の部屋へのスペース要求として伝播する
-- この要求は root 方向に向かって祖先を辿り伝播する
+- Expanding a child node increases its size
+- That size increase propagates upward as a space requirement for the parent's room
+- The requirement then continues upward through the ancestor chain toward the root
 
-## アクセス時刻
+## Access Timestamps
 
-アクセス時刻は展開状態とは別に管理する。
+Access timestamps are managed separately from expansion state.
 
-挙動:
+Behavior:
 
-- ノードを展開すると、そのノードのアクセス時刻が更新される
+- Expanding a node updates that node's access timestamp
 
-## スペース管理（自動縮小）
+## Space Management (Automatic Collapse)
 
-圧迫の判断はレイアウトエンジンに委ねる。
+The layout engine decides when a room is under pressure.
 
-部屋内のスペースが圧迫された場合:
+When space becomes constrained inside a room:
 
-- アクセス時刻の古い子ノードから順に縮小する
-- 縮小とは、そのノードを閉じること（展開状態を解除すること）である
+- Child nodes are collapsed in ascending order of recency, starting from the least recently accessed
+- To collapse a node means to close it by clearing its expansion state
 
-## パンくずリスト操作
+## Breadcrumb Behavior
 
-パンくずリストは、`focusedNodeId` から root までの祖先列を `root / A / A1` の形式で表示する。
+Breadcrumbs display the ancestor chain from `focusedNodeId` to the root in the format `root / A / A1`.
 
-- 複数のブランチが展開されていても、フォーカスしているブランチの一本道だけを表示する
-- 兄弟ノードが展開されているかどうかに関わらず表示は変わらない
+- Even when multiple branches are expanded, only the currently focused branch is shown
+- The display does not change based on whether sibling nodes are expanded
 
-挙動:
+Behavior:
 
-- index `i` のパンくずをクリックすると、そのパンくず直下の branch を閉じる
-- パンくずをクリックすると、クリックしたノードが `focusedNodeId` になる
+- Clicking the breadcrumb at index `i` closes the branch below that breadcrumb
+- Clicking a breadcrumb sets `focusedNodeId` to the clicked node
 
-例:
+Example:
 
-- `focusedNodeId` が `A1` のとき、crumbs は `root / A / A1` と表示される
-- `A` をクリックすると `A1` が閉じ、`focusedNodeId` が `A` になる
-- `root` をクリックすると `A` が閉じ、`focusedNodeId` が `root` になる
+- If `focusedNodeId` is `A1`, the breadcrumbs display `root / A / A1`
+- Clicking `A` closes `A1` and updates `focusedNodeId` to `A`
+- Clicking `root` closes `A` and updates `focusedNodeId` to `root`
 
-## ドラッグ：部屋内の位置変更
+## Drag: Repositioning Within a Room
 
-同じ親を持つ子ノードを、部屋の中で自由に配置換えできる。open・closed どちらの子ノードもドラッグ可能である。
+Child nodes with the same parent can be freely rearranged inside that room. Both open and closed child nodes are draggable.
 
-- tree 構造は変化しない
-- grid 上の位置だけが変わる
+- The tree structure does not change
+- Only the position within the grid changes
 
-indicator:
+Indicators:
 
-- ドロップ先の grid 位置をハイライトする
-- 挿入位置を示す線を表示する
+- Highlight the target grid position
+- Show a line indicating the insertion position
 
-### content 内リンクからのドラッグ
+### Dragging From a Content Link
 
-content 内の `data-paper-id` リンクをドラッグして、部屋の grid 上にドロップできる。
+A `data-paper-id` link inside the content can be dragged and dropped onto a room's grid.
 
-- iframe が `dragstart` イベントを `postMessage` で親に通知する
-- 親が room の grid 上でドロップ先を表示する
-- ドロップ後、該当ノードは指定位置に配置され、展開される（`openChildIds` に追加）
+- The iframe notifies the parent of a `dragstart` event via `postMessage`
+- The parent shows the drop target on the room grid
+- After drop, the target node is placed at the specified position and expanded by adding it to `openChildIds`
 
-## ドラッグ：親の変更
+## Drag: Changing Parent
 
-ノードを別の親の部屋に移すことができる。これは tree 構造の変更である。
+A node may be moved into another parent's room. This is a tree-structure change.
 
-- root ではないノードだけが移動可能である
-- 移動したノードの `parentId` は新しい親に更新される
-- source parent の `childIds` からそのノードを除外する
-- target parent の `childIds` にそのノードを追加する
-- 同じタイトルのノードが複数存在してもよい（id で識別するため）
+- Only non-root nodes may be moved
+- The moved node's `parentId` is updated to the new parent
+- The node is removed from the source parent's `childIds`
+- The node is appended to the target parent's `childIds`
+- Multiple nodes may still share the same title because identity is based on `id`
 
-indicator:
+Indicators:
 
-- ドラッグ中に移動先の部屋をハイライトする
+- Highlight the destination room while dragging
 
-移動に伴う展開状態の挙動:
+Expansion behavior during a move:
 
-- 移動したノードが source parent で展開されていた場合、source parent の `openChildIds` から除外される
-- 移動したノードのサブツリーの展開状態はそのまま保持される
+- If the moved node was expanded under the source parent, it is removed from the source parent's `openChildIds`
+- The expansion state of the moved node's subtree is preserved
 
-## 再構築の指針
+## Reconstruction Guidelines
 
-- tree state は外部から制御できるべきである
-- expansion state も外部から制御できるべきである
-- サイズは派生値であるべきで、権威的状態であってはならない
-- drag の hit test は tree state の所有者であってはならない
-- スペース要求の伝播ロジックは各ノードが独立して持つべきである
+- Tree state should be controllable from outside the component
+- Expansion state should also be externally controllable
+- Size should remain a derived value and must not become authoritative state
+- Drag hit testing should not own tree state
+- Each node should own its own space-propagation logic independently
 
-関連文書:
+Related documents:
 
-- [React 実装に関する考察](./react-architecture-considerations.md)
-- [レイアウト仕様](./layout-spec.md)
+- [React Architecture Considerations](./react-architecture-considerations.md)
+- [Layout Specification](./layout-spec.md)

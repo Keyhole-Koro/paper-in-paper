@@ -1,30 +1,30 @@
-# Paper in Paper React / TypeScript 実装指針
+# Paper in Paper React / TypeScript Implementation Guidelines
 
-この文書は、[挙動仕様](./behavior-spec.md) と [レイアウト仕様](./layout-spec.md) を React + TypeScript で実装する際の責務分割を定義する。
+This document defines the responsibility split for implementing the [Behavior Specification](./behavior-spec.md) and [Layout Specification](./layout-spec.md) in React and TypeScript.
 
-目的は次の 3 点である。
+The document has three goals:
 
-- tree / expansion / layout / drag を混ぜずに実装できるようにする
-- 派生値と権威的状態を明確に分離する
-- ライブラリとして外部制御可能な API を維持する
+- Make it possible to implement tree, expansion, layout, and drag logic without mixing concerns
+- Clearly separate derived values from authoritative state
+- Preserve an externally controllable API suitable for a reusable library
 
-## 実装メモ
+## Implementation Notes
 
-- 初期実装は React + TypeScript を主軸に進める
-- パフォーマンス改善のための Rust/WASM 導入は、実装後に profiler でボトルネックを確認してから判断する
-- Rust/WASM を使う場合も対象は UI 全体ではなく、importance 計算、grid 配置、pressure 判定、auto close 候補選定のような pure function 群を優先する
+- The initial implementation should be centered on React and TypeScript
+- Introduce Rust/WASM for performance only after profiling identifies real bottlenecks
+- If Rust/WASM is introduced, prioritize pure functions such as importance calculation, grid placement, pressure evaluation, and auto-close candidate selection rather than moving the whole UI
 
-## 実装原則
+## Implementation Principles
 
-- tree state は権威的状態として保持する
-- expansion state は tree state とは独立に保持する
-- サイズ、grid span、圧迫判定に使う値は派生値として計算する
-- iframe 内イベントは DOM 直結ではなく adapter を通して React 側に渡す
-- drag hit test は一時状態として扱い、tree state の reducer に持ち込まない
-- UI コンポーネントは reducer を直接知らず、command 経由で操作する
-- reducer 内で `Map` を更新する際は必ず `new Map(...)` で新しいインスタンスを返す（React は参照の等値比較で変更を検知するため、既存 Map の mutate は再レンダリングを引き起こさない）
+- Keep tree state as authoritative state
+- Keep expansion state independent from tree state
+- Compute size, grid spans, and pressure decisions as derived values
+- Pass iframe events into React through an adapter instead of coupling directly to DOM handlers
+- Treat drag hit testing as transient state and keep it out of the tree-state reducer
+- UI components should act through commands rather than depending directly on reducer details
+- When updating a `Map` in a reducer, always return a new instance with `new Map(...)` because React detects changes by reference equality and mutating an existing `Map` will not trigger rerendering
 
-## 推奨ディレクトリ構成
+## Recommended Directory Structure
 
 ```text
 src/
@@ -64,11 +64,11 @@ src/
         autoClose.ts
 ```
 
-`core` は React 非依存に保つ。`react` は描画、イベント接続、DOM 計測だけを担当する。
+Keep `core` independent from React. The `react` layer should handle rendering, event wiring, and DOM measurement only.
 
-## 型設計
+## Type Design
 
-最小の権威的モデルは次で十分である。
+The following is enough for the minimum authoritative model.
 
 ```ts
 export type PaperId = string;
@@ -108,7 +108,7 @@ export interface ManualPlacement {
 export type PlacementMap = Map<PaperId, ManualPlacement>;
 ```
 
-補助状態として次を持つ。
+The following auxiliary state should also exist:
 
 - `focusedNodeId`
 - `unplacedNodeIds`
@@ -117,11 +117,11 @@ export type PlacementMap = Map<PaperId, ManualPlacement>;
 - `contentHeightMap`
 - `protectedUntilMap`
 
-`contentHeightMap` と `protectedUntilMap` は UI 都合に見えるが、レイアウトと自動縮小の決定に使うため store 側で保持した方がよい。
+`contentHeightMap` and `protectedUntilMap` may look UI-specific, but they should live in the store because they are used for layout and automatic collapse decisions.
 
-## Store 設計
+## Store Design
 
-推奨する store 形は `useReducer` + Context、または外部制御を見据えて reducer を公開する構成である。
+The recommended store shape is `useReducer` plus Context, or an architecture that exposes reducers to support external control.
 
 ```ts
 export interface PaperViewState {
@@ -137,7 +137,7 @@ export interface PaperViewState {
 }
 ```
 
-action は UI イベントではなく意味単位で切る。
+Actions should be defined by semantic intent rather than raw UI events.
 
 - `CREATE_UNPLACED_NODE`
 - `DELETE_NODE`
@@ -145,17 +145,17 @@ action は UI イベントではなく意味単位で切る。
 - `CLOSE_NODE`
 - `FOCUS_NODE`
 - `MOVE_NODE`
-- `REORDER_WITHIN_PARENT` (payload: `{ parentId, paperId, position: GridPosition }`)
+- `REORDER_WITHIN_PARENT` with payload `{ parentId, paperId, position: GridPosition }`
 - `ATTACH_UNPLACED_NODE`
 - `REPORT_CONTENT_HEIGHT`
 - `TICK_IMPORTANCE`
 - `AUTO_CLOSE_NODE`
 
-drag 中の hover 位置やポインタ座標は reducer に入れない。これは毎フレーム変わる一時状態であり、React state か ref に閉じ込める。
+Hover positions and pointer coordinates during drag should not enter the reducer. They change every frame and should remain inside React state or refs.
 
-## reducer の責務分離
+## Separation of Reducer Responsibilities
 
-Reducer は 1 つでもよいが、内部実装は分ける。
+One top-level reducer is acceptable, but its internal logic should still be split.
 
 1. `treeReducer`
 2. `expansionReducer`
@@ -163,20 +163,20 @@ Reducer は 1 つでもよいが、内部実装は分ける。
 4. `importanceReducer`
 5. `placementReducer`
 
-最上位 reducer では 1 action に対して各 reducer を順に適用する。
+At the top level, each action is applied to these reducers in order.
 
-この形にすると、`MOVE_NODE` で必要な副作用的更新を一箇所にまとめられる。
+This structure keeps the side-effect-like updates required by `MOVE_NODE` in one place:
 
-- source parent の `childIds` から除外
-- target parent の `childIds` に挿入
-- `parentId` 更新
-- source parent の `openChildIds` から除外
-- moved node の subtree expansion は保持
-- `focusedNodeId` 更新
+- Remove the node from the source parent's `childIds`
+- Insert the node into the target parent's `childIds`
+- Update `parentId`
+- Remove the node from the source parent's `openChildIds`
+- Preserve the moved node's subtree expansion state
+- Update `focusedNodeId`
 
-## 派生セレクタ
+## Derived Selectors
 
-描画前に毎回計算する値は selector に寄せる。
+Values that are recalculated before rendering should live in selectors.
 
 - `selectRootId`
 - `selectBreadcrumbs(focusedNodeId)`
@@ -185,23 +185,23 @@ Reducer は 1 つでもよいが、内部実装は分ける。
 - `selectVisibleChildren(parentId)`
 - `selectNodeImportance(nodeId)`
 - `selectNodeSize(nodeId)`
-- `selectRoomLayout(parentId, roomRect)` （`roomRect` は `ResizeObserver` + `useLayoutEffect` で取得する）
+- `selectRoomLayout(parentId, roomRect)` where `roomRect` is measured with `ResizeObserver` plus `useLayoutEffect`
 - `selectAutoCloseCandidates(parentId)`
 
-`Map` を直接 UI に渡すのではなく、selector で `PaperNodeViewModel` に変換した方が再帰描画が単純になる。
+Instead of passing raw `Map` instances directly into the UI, convert them into a `PaperNodeViewModel` through selectors so recursive rendering stays simple.
 
-## コンポーネント責務
+## Component Responsibilities
 
 ### `PaperCanvas`
 
-ライブラリの公開入口。責務は次の通り。
+This is the public entry point of the library. Its responsibilities are:
 
-- 外部 props を内部 store に接続する
-- root node を描画する
-- sidebar、floating layer、breadcrumbs を配置する
-- controlled / uncontrolled の両方を吸収する
+- Connect external props to the internal store
+- Render the root node
+- Place the sidebar, floating layer, and breadcrumbs
+- Support both controlled and uncontrolled usage
 
-公開 props は少なく保つ。
+Keep the public props minimal.
 
 ```ts
 interface PaperCanvasProps {
@@ -218,30 +218,30 @@ interface PaperCanvasProps {
 }
 ```
 
-`behavior-spec.md` の「外部から制御できるべき」を満たすため、少なくとも tree と expansion は controlled 対応にする。
+To satisfy the requirement in `behavior-spec.md` that the system be externally controllable, at minimum the tree and expansion states should support controlled usage.
 
 ### `PaperNode`
 
-再帰コンポーネント。責務は 1 node の枠だけに限定する。
+This is the recursive component. Limit its responsibility to one node boundary.
 
-- header 描画
-- content iframe 描画
-- room 内 children の描画
-- node 単位の drag source / drop target 接続
-- 自身の descendants に必要な props の伝播
+- Render the header
+- Render the content iframe
+- Render the children inside the room
+- Connect drag source and drop target behavior for that node
+- Pass the required props down to descendants
 
-`PaperNode` は自分で global state を再構築しない。必要な情報は selector と command hook から受ける。
+`PaperNode` must not reconstruct global state by itself. It should receive the required information through selectors and command hooks.
 
 ### `PaperContentFrame`
 
-iframe 専用の adapter。責務は次の通り。
+This is the iframe-specific adapter. Its responsibilities are:
 
-- `srcDoc` または document 書き込みで content を注入
-- iframe 内の `data-paper-id` 要素にイベント委譲を設定
-- `MutationObserver` / `ResizeObserver` で高さ変化を監視
-- `postMessage` を受けて親に正規化イベントを渡す
+- Inject content via `srcDoc` or document writing
+- Set up event delegation for `data-paper-id` elements inside the iframe
+- Watch height changes with `MutationObserver` and `ResizeObserver`
+- Normalize iframe events and pass them back to the parent
 
-iframe と React コンポーネントを密結合させないため、イベントは次の union に揃える。
+To avoid tightly coupling the iframe to React components, normalize events into the following union.
 
 ```ts
 type PaperContentEvent =
@@ -252,58 +252,58 @@ type PaperContentEvent =
 
 ### `PaperRoom`
 
-children の grid 配置だけを担当する。
+This component is responsible only for grid placement of children.
 
-- open child の expanded node 描画
-- closed child の compact card 描画
-- drop indicator 描画
-- room 単位の hit test
+- Render expanded child nodes
+- Render collapsed child nodes as compact cards
+- Render drop indicators
+- Perform hit testing at the room level
 
-room は tree を変更しない。drop が確定したときだけ command を呼ぶ。
+The room must not change the tree on its own. It should call commands only after a drop is confirmed.
 
 ### `Sidebar`
 
-未配置ノード専用。責務は単純でよい。
+This component is dedicated to unplaced nodes. Its responsibilities can stay simple:
 
-- `unplacedNodeIds` の一覧表示
-- 作成ボタン
-- sidebar から room への drag source
+- Render the `unplacedNodeIds` list
+- Render the create button
+- Provide the drag source from the sidebar into a room
 
-部屋から sidebar へ戻せないという制約は command 側でも検証する。
+The rule that nodes cannot be moved back from a room to the sidebar should also be enforced on the command side.
 
 ### `Breadcrumbs`
 
-`focusedNodeId` から祖先列を引く pure component にする。
+Keep this as a pure component that derives the ancestor chain from `focusedNodeId`.
 
-- 表示対象はフォーカス branch のみ
-- crumb click で対象ノードより下の branch を閉じる
-- click 後に `focusedNodeId` を更新する
+- Show only the focused branch
+- Close the branch below the clicked node when a breadcrumb is clicked
+- Update `focusedNodeId` after the click
 
-## iframe 連携
+## Iframe Integration
 
-content は任意 HTML/CSS を許すので、iframe 分離は妥当である。実装では次を固定する。
+Because content allows arbitrary HTML and CSS, isolating it in an iframe is appropriate. The implementation should fix the following:
 
-1. React 側が `srcDoc` を生成する
-2. iframe 内 bootstrap script が `data-paper-id` リンクに委譲する
-3. 親子通信は `postMessage` に限定する
+1. React generates `srcDoc`
+2. A bootstrap script inside the iframe delegates interactions on `data-paper-id` links
+3. Parent-child communication is limited to `postMessage`
 
-iframe からの message は必ず検証する。
+Messages from the iframe must always be validated.
 
 - `event.source === iframe.contentWindow`
-- `event.data` が想定 union である
-- `paperId` が現在 node の `childIds` または既知ノードに存在する
+- `event.data` matches the expected union
+- `paperId` exists either in the current node's `childIds` or in the known node set
 
-content 内リンクは参照でしかないため、未知の `data-paper-id` を受けたら無視してよい。
+Since content links are only references, it is acceptable to ignore unknown `data-paper-id` values.
 
-## drag and drop 設計
+## Drag and Drop Design
 
-HTML5 DnD より pointer event ベースの独自実装を推奨する。理由は次の通り。
+Prefer a custom pointer-event-based implementation over HTML5 drag and drop for the following reasons:
 
-- iframe 由来の drag 開始を吸収しやすい
-- gap / surface indicator を細かく制御しやすい
-- touch 対応しやすい
+- It is easier to absorb drag starts originating from the iframe
+- Gap and surface indicators can be controlled more precisely
+- Touch support is easier
 
-drag session は次の形で十分である。
+The following drag session model is sufficient.
 
 ```ts
 interface DragSession {
@@ -319,22 +319,22 @@ interface DragSession {
 }
 ```
 
-hit test は room DOM rect と各 child rect を使って都度計算する。結果だけを `FloatingLayer` に渡す。
+Hit testing should be computed from the room DOM rect and each child rect on demand. Pass only the result into `FloatingLayer`.
 
-### content-link drag の橋渡し
+### Bridging Content-Link Drag
 
-iframe 内の pointer event は親ドキュメントにバブルしないため、`content-link` drag は次の手順で処理する。
+Pointer events inside the iframe do not bubble into the parent document, so `content-link` drag should follow this flow:
 
-1. iframe 内で `data-paper-id` 要素の pointerdown を検知
-2. `postMessage({ type: 'dragstart', paperId, clientX, clientY })` を親に送信
-3. 親の `useIframeBridge` が message を受け取り、`DragContext` に drag session を開始する
-4. 以降は通常の pointer event ベース DnD と同じフローで処理する
+1. Detect `pointerdown` on a `data-paper-id` element inside the iframe
+2. Send `postMessage({ type: 'dragstart', paperId, clientX, clientY })` to the parent
+3. The parent's `useIframeBridge` receives the message and starts a drag session in `DragContext`
+4. Continue with the normal pointer-event-based drag-and-drop flow
 
-drag 開始後のポインタ追跡は親ドキュメントの `pointermove` / `pointerup` で行うため、iframe の境界を気にする必要はない。
+After drag start, pointer tracking runs on the parent document's `pointermove` and `pointerup`, so iframe boundaries no longer matter.
 
-## レイアウトエンジンの置き方
+## Layout Engine Placement
 
-レイアウトは React component の `useMemo` で済ませず、pure function 群として切り出す。
+Do not leave layout inside a React component's `useMemo`. Extract it into a set of pure functions.
 
 - `computeImportance`
 - `decayImportance`
@@ -343,43 +343,43 @@ drag 開始後のポインタ追跡は親ドキュメントの `pointermove` / `
 - `placeChildren`
 - `resolvePressure`
 
-推奨フロー:
+Recommended flow:
 
-1. `contentHeightMap` から leaf の基準高さを得る
-2. `importanceMap` と open 状態から見かけの重要度を計算する
-3. open child を重要度順に並べる
-4. manual placement がある child を先に確定する
-5. 残りを auto layout で grid に詰める
-6. 収まらなければ `resolvePressure` で自動縮小候補を返す
+1. Read leaf baseline heights from `contentHeightMap`
+2. Compute effective importance from `importanceMap` plus open state
+3. Sort open children by importance
+4. Lock in manually placed children first
+5. Pack the rest into the grid with auto layout
+6. If they do not fit, return auto-collapse candidates from `resolvePressure`
 
-自動縮小の実行自体は layout 関数ではなく command 層が行う。
+The layout functions should not execute the actual automatic collapse. That belongs in the command layer.
 
-## 重要度と自動縮小
+## Importance and Automatic Collapse
 
-`layout-spec.md` の importance モデルは access 時刻だけでは足りないので、実装では次の二層に分ける。
+The importance model in `layout-spec.md` needs more than access timestamps alone, so the implementation should split it into two layers:
 
-- `accessMap`: LRU 判断用
-- `importanceMap`: サイズ比率計算用
+- `accessMap` for LRU decisions
+- `importanceMap` for size ratio calculations
 
-更新ルール:
+Update rules:
 
-- `OPEN_NODE` で importance を加算
-- `FOCUS_NODE` で importance を加算
-- 一定周期で `TICK_IMPORTANCE`
-- 親の importance は selector で子から合算
+- Increase importance on `OPEN_NODE`
+- Increase importance on `FOCUS_NODE`
+- Run `TICK_IMPORTANCE` periodically
+- Aggregate parent importance from children in selectors
 
-### TICK_IMPORTANCE と再レンダリング
+### `TICK_IMPORTANCE` and Rerendering
 
-`TICK_IMPORTANCE` は全ノードの `importanceMap` を更新するため、`importanceMap` の参照が変わり全ツリーの再レンダリングが起きるリスクがある。
+Because `TICK_IMPORTANCE` updates the entire `importanceMap`, it risks changing the map reference and rerendering the whole tree.
 
-これを防ぐため:
+To avoid that:
 
-- tick では変化のなかったノードのエントリを再生成しない（同じ値なら同じ参照を維持する）
-- importance を購読するコンポーネントはノード単位の selector を経由し、`importanceMap` 全体を受け取らない
+- Do not recreate entries for nodes whose values did not change during a tick
+- Components that depend on importance should subscribe through node-level selectors instead of receiving the whole `importanceMap`
 
-### AUTO_CLOSE_NODE の発火タイミング
+### When to Fire `AUTO_CLOSE_NODE`
 
-`resolvePressure` が候補を返した後、`useEffect` で layout 結果を監視して `AUTO_CLOSE_NODE` を dispatch する。render 中に dispatch するとループになるため、必ず `useEffect` 内で行う。
+After `resolvePressure` returns candidates, watch layout results in `useEffect` and dispatch `AUTO_CLOSE_NODE` there. Dispatching during render would create a loop.
 
 ```ts
 useEffect(() => {
@@ -388,91 +388,91 @@ useEffect(() => {
 }, [layoutResult]);
 ```
 
-自動縮小候補は次で決める。
+Choose automatic collapse candidates using the following rules:
 
-1. `protectedUntilMap` が未来のノードは除外
-2. open child だけを対象にする
-3. importance が低い順、同率なら access が古い順
-4. close して圧迫が解消するまで繰り返す
+1. Exclude nodes whose `protectedUntilMap` timestamp is still in the future
+2. Consider only open children
+3. Sort by ascending importance, then by oldest access when tied
+4. Repeat until closing nodes resolves the pressure
 
-ユーザーが手動で開いた直後のノードは一定時間 protect する。
+Nodes that the user has just opened manually should remain protected for a fixed period.
 
-## 閉じるときの subtree 扱い
+## Subtree Handling on Close
 
-仕様上、子ノードを閉じたらその下の subtree expansion は消去する必要がある。
+By specification, closing a child node must also clear the expansion state of the subtree below it.
 
-したがって `CLOSE_NODE(parentId, childId)` は単なる `openChildIds` 更新ではなく、`childId` 配下を DFS して descendants の expansion state を削除する。
+Therefore, `CLOSE_NODE(parentId, childId)` is not just an `openChildIds` update. It must DFS through the descendants under `childId` and remove their expansion state as well.
 
-一方、`MOVE_NODE` では moved node 配下の expansion state は保持する。
+By contrast, `MOVE_NODE` must preserve the expansion state below the moved node.
 
-この差は reducer で明示的に分けるべきである。
+Reducers should encode this difference explicitly.
 
-## controlled / uncontrolled API
+## Controlled / Uncontrolled API
 
-ライブラリとしては uncontrolled をデフォルトにしつつ、外部制御を許す。
+The library should default to uncontrolled behavior while still allowing external control.
 
-- `paperMap` と `onPaperMapChange`
-- `expansionMap` と `onExpansionMapChange`
-- `focusedNodeId` と `onFocusedNodeIdChange`
-- `unplacedNodeIds` と `onUnplacedNodeIdsChange`
+- `paperMap` and `onPaperMapChange`
+- `expansionMap` and `onExpansionMapChange`
+- `focusedNodeId` and `onFocusedNodeIdChange`
+- `unplacedNodeIds` and `onUnplacedNodeIdsChange`
 
-内部 store は `useControllableState` 相当の薄い adapter を通して扱う。
+The internal store should sit behind a thin adapter equivalent to `useControllableState`.
 
-これによりアプリ側で永続化、undo/redo、collaboration を後から載せやすい。
+This makes it easier for applications to add persistence, undo/redo, or collaboration later.
 
-## パフォーマンス方針
+## Performance Policy
 
-- `PaperNode` は `React.memo` 前提にする
-- selector は node 単位で購読できる形にする
-- drag 中の pointer 座標は ref に置き、全 tree を再 render しない
-- iframe の resize 通知は `requestAnimationFrame` で間引く
-- `contentHeightMap` 更新は変化量が閾値未満なら無視する
+- `PaperNode` should assume `React.memo`
+- Selectors should support node-level subscriptions
+- Keep pointer coordinates for drag in refs so the whole tree does not rerender
+- Throttle iframe resize notifications with `requestAnimationFrame`
+- Ignore `contentHeightMap` updates when the delta is below a threshold
 
-ツリーが深いので、「store 全体変更で全ノードが再 render」になる実装は避ける。
+Because trees can become deep, avoid implementations in which changing the whole store rerenders every node.
 
-## テスト方針
+## Testing Policy
 
-`core` はユニットテスト、`react` は統合テストで分ける。
+Test `core` with unit tests and `react` with integration tests.
 
-core で最低限必要なケース:
+Minimum required `core` cases:
 
-- root 一意性と parent-child 整合性
-- open / close での subtree expansion 削除
-- move parent での subtree expansion 維持
-- unplaced から attach
-- delete の連鎖削除
-- importance 減衰
-- pressure 解消のための auto close 順序
+- Root uniqueness and parent-child consistency
+- Subtree expansion removal on open and close transitions
+- Subtree expansion preservation on parent moves
+- Attach from unplaced state
+- Cascading deletion
+- Importance decay
+- Auto-close ordering used to resolve pressure
 
-react で最低限必要なケース:
+Minimum required `react` cases:
 
-- iframe 内リンク click で open
-- iframe resize 通知で高さ更新
-- breadcrumbs click で branch close
-- child card drag で reorder
-- node drag で親変更
-- sidebar から room への attach
+- Open on link click inside an iframe
+- Height updates on iframe resize notifications
+- Branch close on breadcrumb click
+- Reorder via child-card drag
+- Parent change via node drag
+- Attach from sidebar to room
 
-## 実装順序
+## Implementation Order
 
-最初から全部を同時実装しない方がよい。順序は次を推奨する。
+Do not implement everything at once. The recommended sequence is:
 
 1. `core/types.ts`, `tree.ts`, `expansion.ts`, `commands.ts`
-2. uncontrolled `PaperCanvas` + 再帰 `PaperNode`
-3. `PaperContentFrame` と iframe bridge
-4. sidebar と unplaced node
-5. pointer ベース D&D
-6. importance / layout / auto close
-7. controlled API と永続化境界
+2. Uncontrolled `PaperCanvas` plus recursive `PaperNode`
+3. `PaperContentFrame` and the iframe bridge
+4. Sidebar and unplaced-node support
+5. Pointer-based drag and drop
+6. Importance, layout, and auto-close
+7. Controlled API and persistence boundary
 
-## 判断基準
+## Decision Criteria
 
-設計判断で迷ったら次を優先する。
+When a design decision is unclear, prioritize the following:
 
-- tree を壊さないこと
-- close と move で subtree expansion の扱いを混同しないこと
-- サイズを state に保存しないこと
-- iframe と React の責務を混ぜないこと
-- drag の一時情報を store に入れないこと
+- Do not break the tree
+- Do not confuse subtree handling between close and move operations
+- Do not store size in state
+- Do not mix iframe responsibilities with React responsibilities
+- Do not put transient drag information into the store
 
-この条件を守れば、実装詳細が変わっても仕様の中核は維持できる。
+If these conditions are preserved, the core behavior will remain stable even if implementation details change.

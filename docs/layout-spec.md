@@ -1,81 +1,81 @@
-# Paper in Paper レイアウト仕様
+# Paper in Paper Layout Specification
 
-この文書は、paper node の空間レイアウトを決定するエンジンの仕様を定義する。
+This document defines the layout engine specification that determines the spatial layout of paper nodes.
 
-## 設計方針
+## Design Principles
 
-- ユーザーの操作を最優先とする
-- 放置されたノードは徐々に縮小する
-- スペースが圧迫された場合は、重要度の低いノードから縮小する
-- レイアウトの計算はサイズを派生値として扱い、重要度から決定する
+- Prioritize direct user actions above automatic layout behavior
+- Gradually shrink nodes that are left unused
+- When space becomes constrained, shrink lower-importance nodes first
+- Treat layout size as a derived value computed from importance
 
-## 重要度モデル
+## Importance Model
 
-重要度は用途によって2つの状態に分離して管理する。
+Importance is managed as two separate state layers because it serves two different purposes.
 
-- `accessMap`: 最終アクセス時刻（LRU判断・自動縮小の候補選定に使う）
-- `importanceMap`: 重要度スコア（サイズ比率の計算に使う）
+- `accessMap`: last access timestamps, used for LRU decisions and auto-collapse candidate selection
+- `importanceMap`: importance scores, used for display size ratios
 
-各 paper node は `importance` スコアを持つ。
+Each paper node has an `importance` score.
 
-### 初期値
+### Initial Value
 
-- ノードが作成されたとき、`importance` は高い初期値から始まる
-- 作成直後は大きく表示され、使われないほど縮小していく
+- When a node is created, its `importance` starts at a high initial value
+- Newly created nodes appear large and shrink over time if they are not used
 
-### 更新ルール
+### Update Rules
 
-- ノードを展開すると、そのノードの `importance` が増加する
-- ノードがフォーカスされると、そのノードの `importance` が増加する
-- 時間経過とともに `importance` は減衰する（最初は緩やか、時間が経つほど加速する二乗則：`importance *= (1 - decay_rate * t²)`）
-- 親ノードの `importance` は子ノードの `importance` の合計である
+- Expanding a node increases that node's `importance`
+- Focusing a node increases that node's `importance`
+- `importance` decays over time, initially slowly and then faster according to a quadratic rule: `importance *= (1 - decay_rate * t^2)`
+- A parent's `importance` is the sum of the `importance` values of its children
 
-### 最小サイズ
+### Minimum Size
 
-- `importance` が閾値を下回ると、自動縮小（展開を閉じる）が発火する
-- 最小サイズは closed card（title のみ表示）のサイズである
-- `importance` がゼロになってもノード自体は消えない
+- When `importance` falls below a threshold, automatic collapse is triggered
+- The minimum size is the closed-card size that displays only the title
+- Even when `importance` reaches zero, the node itself does not disappear
 
-### 親ノードの importance
+### Parent Importance
 
-```
+```text
 importance(node) =
-  自身の importance
+  self importance
   + sum(importance(child) for child in openChildIds)
 ```
 
-親の重要度は子の活発さを反映する。深くネストされた活発なサブツリーは、祖先の重要度も押し上げる。
+Parent importance reflects how active its children are. A deeply nested active subtree therefore raises the importance of its ancestors as well.
 
-## サイズ決定
+## Size Determination
 
-各ノードの表示サイズは重要度から派生する。
+The display size of each node is derived from importance.
 
+```text
+size(node) = importance(node) / importance(parent) * size(parent)
 ```
-size(node) = importance(node) / importance(parent) × size(parent)
-```
 
-- 重要度の高いノードほど大きく表示される
-- 全体のサイズは再帰的に決定される
-- サイズは権威的な状態ではなく、重要度から毎回計算される派生値である
-- leaf node の基準サイズは iframe から報告されたコンテンツ高さを用いる
+- Higher-importance nodes are displayed larger
+- Overall size is determined recursively
+- Size is not authoritative state; it is recalculated from importance every time
+- For leaf nodes, the base size comes from the content height reported by the iframe
 
-## Grid レイアウト
+## Grid Layout
 
-各部屋の内部は grid に分割され、子ノードが配置される。
+Each room is divided into a grid and child nodes are placed inside it.
 
-- 子ノードのサイズは重要度の比率に基づき grid セル数として表現される
-- ユーザーが手動でドラッグした位置は優先される
-- 手動配置がない場合、重要度の高い順に配置する
+- Child node size is represented as a number of grid cells based on relative importance
+- Positions manually assigned by the user take precedence
+- If there is no manual placement, children are placed in descending order of importance
 
-## スペース管理
+## Space Management
 
-部屋内のスペースが圧迫された場合（レイアウトエンジンが判断）:
+When room space becomes constrained, as determined by the layout engine:
 
-- 重要度の低い子ノードから縮小する
-- 縮小とは展開状態を閉じること（`openChildIds` から除外）である
-- 縮小後も重要度スコア自体は保持される（再展開時に参照できる）
+- Lower-importance child nodes are collapsed first
+- Collapsing a node means closing its expansion state by removing it from `openChildIds`
+- Importance scores themselves are preserved after collapse so they are still available when the node is reopened
 
-## ユーザー操作の優先
+## User Action Priority
 
-- ユーザーが手動でノードを展開した場合、自動縮小の対象から一定期間除外する
-- ユーザーが手動で配置した位置は、自動レイアウトで上書きしない
+- If the user manually opens a node, exclude it from automatic collapse for a fixed period
+- If the user manually places a node, automatic layout must not overwrite that position
