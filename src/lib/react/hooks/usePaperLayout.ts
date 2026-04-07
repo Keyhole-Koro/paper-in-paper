@@ -60,6 +60,16 @@ export function usePaperLayout(
       };
     }
 
+    // Check if content has data-paper-id links
+    const hasDataPaperLinks = parent.content.includes('data-paper-id=');
+
+    // If no links, only show the "last" child (the one with highest access time or last in array)
+    let activeChildIds = openChildIds;
+    if (!hasDataPaperLinks && openChildIds.length > 1) {
+      const lastChildId = openChildIds[openChildIds.length - 1];
+      activeChildIds = [lastChildId];
+    }
+
     const effectiveMap = buildEffectiveImportanceMap(
       nodeId,
       state.paperMap,
@@ -67,7 +77,7 @@ export function usePaperLayout(
       state.importanceMap,
     );
 
-    const childPriority = [...openChildIds].sort((a, b) => {
+    const childPriority = [...activeChildIds].sort((a, b) => {
       const ia = effectiveMap.get(a) ?? CONTENT_IMPORTANCE;
       const ib = effectiveMap.get(b) ?? CONTENT_IMPORTANCE;
       if (ia !== ib) return ia - ib;
@@ -76,14 +86,15 @@ export function usePaperLayout(
       return ta - tb;
     });
 
-    const childWeights = new Map(openChildIds.map((id) => [
+    const childWeights = new Map(activeChildIds.map((id) => [
       id,
       (effectiveMap.get(id) ?? CHILD_BASE_WEIGHT),
     ]));
+
     let rects = computeRoomLayout(
       [
         { id: CONTENT_ID, weight: CONTENT_IMPORTANCE },
-        ...openChildIds.map((id) => ({ id, weight: childWeights.get(id) ?? CHILD_BASE_WEIGHT })),
+        ...activeChildIds.map((id) => ({ id, weight: childWeights.get(id) ?? CHILD_BASE_WEIGHT })),
       ],
       w,
       h,
@@ -107,7 +118,7 @@ export function usePaperLayout(
       rects = computeRoomLayout(
         [
           { id: CONTENT_ID, weight: CONTENT_IMPORTANCE },
-          ...openChildIds.map((id) => ({ id, weight: childWeights.get(id) ?? CHILD_BASE_WEIGHT })),
+          ...activeChildIds.map((id) => ({ id, weight: childWeights.get(id) ?? CHILD_BASE_WEIGHT })),
         ],
         w,
         h,
