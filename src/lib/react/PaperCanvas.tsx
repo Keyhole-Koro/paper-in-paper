@@ -20,9 +20,9 @@ export interface PaperCanvasProps {
   onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
 }
 
-function PaperCanvasInner() {
+function PaperCanvasInner({ rootId: explicitRootId }: { rootId?: PaperId }) {
   const { state, dispatch } = usePaperStore();
-  const rootId = getRootId(state.paperMap);
+  const rootId = explicitRootId ?? getRootId(state.paperMap);
 
   function handleDrop(session: DragSession, target: InsertTarget) {
     if (session.mode === 'move-parent' || session.mode === 'content-link') {
@@ -38,7 +38,7 @@ function PaperCanvasInner() {
 
   return (
     <DragProvider onDrop={handleDrop}>
-      <div style={{ height: '100vh', overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
         <PaperNode nodeId={rootId} parentId={null} />
       </div>
       <FloatingLayer />
@@ -48,6 +48,7 @@ function PaperCanvasInner() {
 
 export function PaperCanvas({
   paperMap,
+  rootId,
   expansionMap,
   focusedNodeId,
   debug = false,
@@ -67,7 +68,7 @@ export function PaperCanvas({
       onExpansionMapChange={onExpansionMapChange}
       onFocusedNodeIdChange={onFocusedNodeIdChange}
     >
-      <PaperCanvasInner />
+      <PaperCanvasInner rootId={rootId} />
     </PaperStoreProvider>
     </CreateChildContext.Provider>
     </DebugContext.Provider>

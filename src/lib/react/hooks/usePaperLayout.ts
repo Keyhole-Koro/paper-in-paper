@@ -61,7 +61,8 @@ export function usePaperLayout(
     }
 
     // Check if content has data-paper-id links
-    const hasDataPaperLinks = parent.content.includes('data-paper-id=');
+    const hasDataPaperLinks =
+      typeof parent.content === 'string' && parent.content.includes('data-paper-id=');
 
     // If no links, only show the "last" child (the one with highest access time or last in array)
     let activeChildIds = openChildIds;

@@ -15,6 +15,21 @@ export interface RoomLayoutResult {
   rects: LayoutRect[];
 }
 
+function clampRect(rect: LayoutRect, containerWidth: number, containerHeight: number): LayoutRect {
+  const x = Math.max(0, Math.min(rect.x, containerWidth));
+  const y = Math.max(0, Math.min(rect.y, containerHeight));
+  const maxWidth = Math.max(0, containerWidth - x);
+  const maxHeight = Math.max(0, containerHeight - y);
+
+  return {
+    ...rect,
+    x,
+    y,
+    width: Math.max(0, Math.min(rect.width, maxWidth)),
+    height: Math.max(0, Math.min(rect.height, maxHeight)),
+  };
+}
+
 /**
  * 行に items を並べたときの worst-case アスペクト比を返す。
  * AR = max(w/h, h/w) なので、1 に近いほど正方形に近い。
@@ -126,8 +141,14 @@ export function computeRoomLayout(
   // 転置した場合は x↔y, width↔height を戻す
   if (useColumns) {
     return {
-      rects: rects.map(r => ({ id: r.id, x: r.y, y: r.x, width: r.height, height: r.width })),
+      rects: rects.map((r) =>
+        clampRect(
+          { id: r.id, x: r.y, y: r.x, width: r.height, height: r.width },
+          containerWidth,
+          containerHeight,
+        ),
+      ),
     };
   }
-  return { rects };
+  return { rects: rects.map((r) => clampRect(r, containerWidth, containerHeight)) };
 }

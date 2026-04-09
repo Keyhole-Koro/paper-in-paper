@@ -165,6 +165,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
           position: 'relative',
           flex: 1,
           minHeight: 0,
+          overflow: 'hidden',
           outline: isDragTarget ? `2px dashed ${tone.accent}` : '2px dashed transparent',
           transition: 'outline 0.1s',
         }}
