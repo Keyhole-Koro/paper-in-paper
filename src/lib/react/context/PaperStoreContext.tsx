@@ -33,9 +33,10 @@ export function PaperStoreProvider({
     createInitialState(paperMap),
   );
 
-  // controlled props → sync into internal state when they change
-  // Use refs to track last synced value so internal state changes don't trigger re-sync
   const lastSyncedPaperMapRef = useRef(paperMap);
+  const lastSyncedExpansionMapRef = useRef(expansionMap);
+  const lastSyncedFocusedNodeIdRef = useRef(focusedNodeId);
+
   useEffect(() => {
     if (paperMap !== lastSyncedPaperMapRef.current) {
       lastSyncedPaperMapRef.current = paperMap;
@@ -44,14 +45,16 @@ export function PaperStoreProvider({
   }, [paperMap]);
 
   useEffect(() => {
-    if (expansionMap !== undefined && expansionMap !== state.expansionMap) {
-      rawDispatch({ type: '__SYNC_EXPANSION' as never, expansionMap } as never);
+    if (expansionMap !== undefined && expansionMap !== lastSyncedExpansionMapRef.current) {
+      lastSyncedExpansionMapRef.current = expansionMap;
+      rawDispatch({ type: '__SYNC_EXPANSION', expansionMap });
     }
   }, [expansionMap]);
 
   useEffect(() => {
-    if (focusedNodeId !== undefined && focusedNodeId !== state.focusedNodeId) {
-      rawDispatch({ type: '__SYNC_FOCUSED' as never, focusedNodeId } as never);
+    if (focusedNodeId !== undefined && focusedNodeId !== lastSyncedFocusedNodeIdRef.current) {
+      lastSyncedFocusedNodeIdRef.current = focusedNodeId;
+      rawDispatch({ type: '__SYNC_FOCUSED', focusedNodeId });
     }
   }, [focusedNodeId]);
 
@@ -65,16 +68,22 @@ export function PaperStoreProvider({
 
   // fire callbacks when relevant state slices change
   useEffect(() => {
-    onPaperMapChange?.(state.paperMap);
-  }, [state.paperMap]);
+    if (!onPaperMapChange || state.paperMap === lastSyncedPaperMapRef.current) return;
+    lastSyncedPaperMapRef.current = state.paperMap;
+    onPaperMapChange(state.paperMap);
+  }, [state.paperMap, onPaperMapChange]);
 
   useEffect(() => {
-    onExpansionMapChange?.(state.expansionMap);
-  }, [state.expansionMap]);
+    if (!onExpansionMapChange || state.expansionMap === lastSyncedExpansionMapRef.current) return;
+    lastSyncedExpansionMapRef.current = state.expansionMap;
+    onExpansionMapChange(state.expansionMap);
+  }, [state.expansionMap, onExpansionMapChange]);
 
   useEffect(() => {
-    onFocusedNodeIdChange?.(state.focusedNodeId);
-  }, [state.focusedNodeId]);
+    if (!onFocusedNodeIdChange || state.focusedNodeId === lastSyncedFocusedNodeIdRef.current) return;
+    lastSyncedFocusedNodeIdRef.current = state.focusedNodeId;
+    onFocusedNodeIdChange(state.focusedNodeId);
+  }, [state.focusedNodeId, onFocusedNodeIdChange]);
 
   return (
     <PaperStoreContext value={{ state, dispatch }}>

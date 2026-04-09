@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PaperContent, PaperId } from '../../core/types';
+import type { ContentNode, PaperContent, PaperId } from '../../core/types';
 import type { PaperContentEvent } from '../internal/iframeBridge';
 import { useIframeBridge } from '../hooks/useIframeBridge';
 import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
+import { PaperContentNodes } from './PaperContentNodes';
 
-interface PaperContentTheme {
+export interface PaperContentTheme {
   surface: string;
   surfaceAlt: string;
   surfaceRaised: string;
@@ -55,14 +56,45 @@ export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameP
     [nodeId, dispatch, startDrag, state.paperMap],
   );
 
+  // ContentNode[] path
+  if (Array.isArray(content)) {
+    return (
+      <PaperContentStructured
+        nodeId={nodeId}
+        nodes={content as ContentNode[]}
+        theme={theme}
+        onOpen={(paperId) => {
+          dispatch({ type: 'OPEN_NODE', parentId: nodeId, childId: paperId });
+          dispatch({ type: 'FOCUS_NODE', nodeId: paperId });
+        }}
+      />
+    );
+  }
+
+  // ReactNode path
   if (typeof content !== 'string') {
     return <PaperContentReact nodeId={nodeId} content={content} theme={theme} />;
   }
 
-  const plainText = content.replace(/<[^>]+>/g, '');
+  // HTML string path — append unmentioned children as "Related" links
+  let finalContent = content;
+  const paper = state.paperMap.get(nodeId);
+  if (paper) {
+    const unmentioned = paper.childIds.filter((id) => !finalContent.includes(`data-paper-id="${id}"`));
+    if (unmentioned.length > 0) {
+      const links = unmentioned.map((id) => {
+        const childPaper = state.paperMap.get(id);
+        const title = childPaper ? childPaper.title : id;
+        return `<a data-paper-id="${id}">${title}</a>`;
+      });
+      finalContent += `<hr/><div style="margin-top: 16px;"><p class="eyebrow">Related</p><p style="display: flex; flex-wrap: wrap; gap: 8px;">${links.join('')}</p></div>`;
+    }
+  }
+
+  const plainText = finalContent.replace(/<[^>]+>/g, '');
   const fontSize = calcContentFontSize(plainText.length);
 
-  const { iframeRef, srcDoc } = useIframeBridge({ content, theme, fontSize, onEvent: handleEvent });
+  const { iframeRef, srcDoc } = useIframeBridge({ content: finalContent, theme, fontSize, onEvent: handleEvent });
 
   return (
     <iframe
@@ -81,15 +113,56 @@ export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameP
   );
 }
 
+// --- ContentNode[] renderer ---
+
+interface PaperContentStructuredProps {
+  nodeId: PaperId;
+  nodes: ContentNode[];
+  theme: PaperContentTheme;
+  onOpen: (paperId: PaperId) => void;
+}
+
+function PaperContentStructured({ nodeId, nodes, theme, onOpen }: PaperContentStructuredProps) {
+  const { dispatch } = usePaperStore();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastHeightRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    function reportHeight() {
+      const nextEl = containerRef.current;
+      if (!nextEl) return;
+      const nextHeight = nextEl.scrollHeight;
+      if (lastHeightRef.current === nextHeight) return;
+      lastHeightRef.current = nextHeight;
+      dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: nextHeight });
+    }
+    const observer = new ResizeObserver(reportHeight);
+    observer.observe(el);
+    reportHeight();
+    return () => observer.disconnect();
+  }, [dispatch, nodeId]);
+
+  return (
+    <div ref={containerRef}>
+      <PaperContentNodes nodes={nodes} theme={theme} onOpen={onOpen} />
+    </div>
+  );
+}
+
+// --- ReactNode renderer ---
+
 interface PaperContentReactProps {
   nodeId: PaperId;
-  content: Exclude<PaperContent, string>;
+  content: Exclude<PaperContent, string | ContentNode[]>;
   theme: PaperContentTheme;
 }
 
 function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
   const { dispatch } = usePaperStore();
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastHeightRef = useRef<number | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -98,7 +171,10 @@ function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
     function reportHeight() {
       const nextEl = containerRef.current;
       if (!nextEl) return;
-      dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: nextEl.scrollHeight });
+      const nextHeight = nextEl.scrollHeight;
+      if (lastHeightRef.current === nextHeight) return;
+      lastHeightRef.current = nextHeight;
+      dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: nextHeight });
     }
 
     const observer = new ResizeObserver(reportHeight);

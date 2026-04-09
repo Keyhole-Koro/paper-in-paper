@@ -2,7 +2,22 @@ import type { ReactNode } from 'react';
 
 export type PaperId = string;
 
-export type PaperContent = string | ReactNode;
+// --- Structured content nodes (LLM-friendly, JSON-serializable) ---
+
+export type ContentNode =
+  | { type: 'text';       value: string }
+  | { type: 'paragraph';  children: ContentNode[] }
+  | { type: 'bold';       children: ContentNode[] }
+  | { type: 'paper-link'; paperId: PaperId; label: string }
+  | { type: 'card';       paperId: PaperId; title: string; description: string }
+  | { type: 'section';    title?: string; children: ContentNode[] }
+  | { type: 'list';       items: ContentNode[][] }
+  | { type: 'table';      headers: string[]; rows: string[][] }
+  | { type: 'callout';    children: ContentNode[] }
+
+// ---------------------------------------------------------------
+
+export type PaperContent = string | ReactNode | ContentNode[];
 
 export interface Paper {
   id: PaperId;

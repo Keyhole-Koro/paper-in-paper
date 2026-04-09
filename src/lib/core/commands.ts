@@ -17,6 +17,8 @@ export type Command =
   | { type: 'TICK_IMPORTANCE'; now: number }
   | { type: 'AUTO_CLOSE_NODE'; nodeId: PaperId }
   | { type: '__SYNC_PAPER_MAP'; paperMap: PaperViewState['paperMap'] }
+  | { type: '__SYNC_EXPANSION'; expansionMap: PaperViewState['expansionMap'] }
+  | { type: '__SYNC_FOCUSED'; focusedNodeId: PaperViewState['focusedNodeId'] }
   | { type: '__SYNC_UNPLACED'; unplacedNodeIds: PaperViewState['unplacedNodeIds'] };
 
 const IMPORTANCE_INITIAL = 100;
@@ -248,10 +250,22 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
     }
 
     case '__SYNC_PAPER_MAP': {
+      if (command.paperMap === state.paperMap) return state;
       return { ...state, paperMap: command.paperMap };
     }
 
+    case '__SYNC_EXPANSION': {
+      if (command.expansionMap === state.expansionMap) return state;
+      return { ...state, expansionMap: command.expansionMap };
+    }
+
+    case '__SYNC_FOCUSED': {
+      if (command.focusedNodeId === state.focusedNodeId) return state;
+      return { ...state, focusedNodeId: command.focusedNodeId };
+    }
+
     case '__SYNC_UNPLACED': {
+      if (command.unplacedNodeIds === state.unplacedNodeIds) return state;
       return { ...state, unplacedNodeIds: command.unplacedNodeIds };
     }
 
