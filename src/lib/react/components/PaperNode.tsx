@@ -5,8 +5,8 @@ import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
 import { useDebug } from '../context/DebugContext';
 import { useCreateChild } from '../context/CreateChildContext';
-import { usePaperLayout } from '../hooks/usePaperLayout';
-import { useRoomSize } from '../hooks/useRoomSize';
+import { useLayoutContext } from '../context/LayoutContext';
+import type { RoomLayout } from '../hooks/usePaperLayout';
 import {
   getPaperTone,
   resolvePaperColorContext,
@@ -20,6 +20,12 @@ const HEADER_HEIGHT = 37;
 
 const SPRING = { type: 'spring' as const, stiffness: 300, damping: 30, mass: 0.8 };
 
+const FALLBACK_LAYOUT: RoomLayout = {
+  contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 },
+  childRects: new Map(),
+  closedChildIds: [],
+};
+
 interface PaperNodeProps {
   nodeId: PaperId;
   parentId: PaperId | null;
@@ -29,20 +35,23 @@ interface PaperNodeProps {
 export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNodeProps) {
   const { state, dispatch } = usePaperStore();
   const { session, insertTarget, startDrag, registerRoom } = useDrag();
-  const [roomRef, roomSize] = useRoomSize();
+  const roomRef = useRef<HTMLDivElement>(null);
   const debug = useDebug();
   const onCreateChild = useCreateChild();
+
+  const layoutMap = useLayoutContext();
+  const entry = layoutMap.get(nodeId);
+  const layout = entry?.roomLayout ?? FALLBACK_LAYOUT;
+  const allocatedHeight = entry?.allocatedRect.height ?? 0;
+  const roomHeight = Math.max(0, allocatedHeight - HEADER_HEIGHT);
 
   const paper = state.paperMap.get(nodeId);
   const isRoot = parentId === null;
 
-  const roomHeight = Math.max(0, roomSize.height - HEADER_HEIGHT);
-  const layout = usePaperLayout(nodeId, roomSize.width, roomHeight);
-
   useEffect(() => {
     registerRoom(nodeId, roomRef.current);
     return () => registerRoom(nodeId, null);
-  }, [nodeId, registerRoom, roomRef]);
+  }, [nodeId, registerRoom]);
 
   // header drag state
   const headerPointerDown = useRef<{ x: number; y: number } | null>(null);
@@ -102,14 +111,17 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
   return (
     <div
       style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         border: `1px solid ${isFocused ? tone.accent : tone.border}`,
         borderRadius: 8,
         overflow: 'hidden',
         background: tone.background,
         display: 'flex',
         flexDirection: 'column',
-        width: '100%',
-        height: '100%',
         boxSizing: 'border-box',
       }}
     >
@@ -128,13 +140,28 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
           flexShrink: 0,
           boxSizing: 'border-box',
           touchAction: 'none',
+          minWidth: 0, // Ensure flex child can shrink
         }}
         onPointerDown={handleHeaderPointerDown}
         onPointerMove={handleHeaderPointerMove}
         onPointerUp={handleHeaderPointerUp}
       >
-        <span style={{ fontWeight: 600, fontSize: 14, color: tone.title }}>{paper.title}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span
+          style={{
+            fontWeight: 600,
+            fontSize: 14,
+            color: tone.title,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: 'block',
+            minWidth: 0,
+            flex: 1,
+          }}
+        >
+          {paper.title}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {onCreateChild && (
             <button
               type="button"
@@ -188,6 +215,8 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
             boxSizing: 'border-box',
             padding: 10,
             color: tone.text,
+            scrollbarWidth: 'thin',
+            scrollbarColor: `${tone.divider} transparent`,
           }}
         >
           <PaperContentFrame
@@ -273,7 +302,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
             }}
           >
             {`id: ${nodeId}
-room: ${roomSize.width}×${roomSize.height} (inner h: ${roomHeight})
+allocated: ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} (inner h: ${roomHeight})
 content: x${layout.contentRect.x} y${layout.contentRect.y} ${layout.contentRect.width}×${layout.contentRect.height}
 contentHeight(reported): ${state.contentHeightMap.get(nodeId) ?? 'none'}
 importance: ${Math.round(state.importanceMap.get(nodeId) ?? 0)}

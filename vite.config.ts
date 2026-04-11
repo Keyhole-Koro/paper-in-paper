@@ -13,7 +13,7 @@ export default defineConfig({
       fileName: (format) => `index.${format === 'es' ? 'mjs' : 'cjs'}`,
     },
     rollupOptions: {
-      external: ['react', 'react/jsx-runtime', 'framer-motion'],
+      external: ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', 'framer-motion'],
       output: {
         globals: {
           react: 'React',

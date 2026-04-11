@@ -6,13 +6,14 @@
   "description": "React library for hierarchical paper tree visualization with drag-and-drop",
   "exports": {
     ".": {
-      "import": "./src/lib/index.ts",
-      "types": "./src/lib/index.ts"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "types": "./dist/types/index.d.ts"
     }
   },
-  "main": "./src/lib/index.ts",
-  "module": "./src/lib/index.ts",
-  "types": "./src/lib/index.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/types/index.d.ts",
   "files": [
     "dist"
   ],

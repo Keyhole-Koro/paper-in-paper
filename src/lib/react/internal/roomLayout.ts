@@ -15,7 +15,7 @@ export interface RoomLayoutResult {
   rects: LayoutRect[];
 }
 
-function clampRect(rect: LayoutRect, containerWidth: number, containerHeight: number): LayoutRect {
+export function clampRect(rect: LayoutRect, containerWidth: number, containerHeight: number): LayoutRect {
   const x = Math.max(0, Math.min(rect.x, containerWidth));
   const y = Math.max(0, Math.min(rect.y, containerHeight));
   const maxWidth = Math.max(0, containerWidth - x);
@@ -67,8 +67,8 @@ export function computeRoomLayout(
   items: LayoutItem[],
   containerWidth: number,
   containerHeight: number,
-  minAR: number,
-  maxAR: number,
+  _minAR: number,
+  _maxAR: number,
 ): RoomLayoutResult {
   if (items.length === 0 || containerWidth <= 0 || containerHeight <= 0) {
     return { rects: [] };
@@ -124,15 +124,7 @@ export function computeRoomLayout(
       const width = (item.weight / rowWeight) * w;
       const height = rowHeight;
 
-      // AR 制約に引っかかる場合はクランプ（レイアウトが歪むより見切れる方がまし）
-      const ar = Math.max(width, 1) > 0 ? height / width : 1;
-      const clampedHeight = ar < minAR
-        ? width * minAR
-        : ar > maxAR
-          ? width * maxAR
-          : height;
-
-      rects.push({ id: item.id, x, y, width, height: clampedHeight });
+      rects.push({ id: item.id, x, y, width, height });
       x += width;
     }
     y += rowHeight;
@@ -141,14 +133,8 @@ export function computeRoomLayout(
   // 転置した場合は x↔y, width↔height を戻す
   if (useColumns) {
     return {
-      rects: rects.map((r) =>
-        clampRect(
-          { id: r.id, x: r.y, y: r.x, width: r.height, height: r.width },
-          containerWidth,
-          containerHeight,
-        ),
-      ),
+      rects: rects.map((r) => ({ id: r.id, x: r.y, y: r.x, width: r.height, height: r.width })),
     };
   }
-  return { rects: rects.map((r) => clampRect(r, containerWidth, containerHeight)) };
+  return { rects };
 }
