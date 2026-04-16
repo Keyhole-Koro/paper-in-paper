@@ -183,9 +183,22 @@ function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
     return () => observer.disconnect();
   }, [dispatch, nodeId, content]);
 
+  const handlePaperOpen = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
+    if (e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') return;
+    const target = (e.target as Element).closest('[data-paper-id]');
+    if (!target) return;
+    const paperId = target.getAttribute('data-paper-id');
+    if (!paperId) return;
+    e.preventDefault();
+    dispatch({ type: 'OPEN_NODE', parentId: nodeId, childId: paperId });
+    dispatch({ type: 'FOCUS_NODE', nodeId: paperId });
+  }, [dispatch, nodeId]);
+
   return (
     <div
       ref={containerRef}
+      onClick={handlePaperOpen}
+      onKeyDown={handlePaperOpen}
       style={{
         ['--surface' as string]: theme.surface,
         ['--surface-alt' as string]: theme.surfaceAlt,
@@ -193,6 +206,8 @@ function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
         ['--text' as string]: theme.text,
         ['--muted' as string]: theme.mutedText,
         ['--line' as string]: theme.divider,
+        ['--link-bg' as string]: theme.linkBackground,
+        ['--link-border' as string]: theme.linkBorder,
         ['--soft-line' as string]: `color-mix(in srgb, ${theme.divider} 55%, white)`,
         ['--panel' as string]: `color-mix(in srgb, ${theme.surfaceRaised} 88%, white)`,
         ['--quote' as string]: `color-mix(in srgb, ${theme.linkBackground} 45%, white)`,
