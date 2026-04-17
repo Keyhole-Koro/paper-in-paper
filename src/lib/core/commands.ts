@@ -1,12 +1,13 @@
-import type { GridPosition, PaperContent, PaperId, PaperViewState } from './types';
+import type { GridPosition, PaperContent, PaperId, PaperViewState, Paper } from './types';
 import { openChild, closeChild, removeNodeFromExpansion } from './expansion';
-import { addChild, moveNode, removeNode } from './tree';
+import { addChild, moveNode, removeNode, type RemoveMode } from './tree';
 import { nanoid } from './nanoid';
 
 export type Command =
   | { type: 'CREATE_UNPLACED_NODE'; title: string; description: string; content: PaperContent }
   | { type: 'CREATE_CHILD_NODE'; parentId: PaperId; title: string; description: string; content: PaperContent; hue?: number }
-  | { type: 'DELETE_NODE'; nodeId: PaperId }
+  | { type: 'DELETE_NODE'; nodeId: PaperId; mode?: RemoveMode }
+  | { type: 'PATCH_NODE'; nodeId: PaperId; patch: Partial<Omit<Paper, 'id' | 'parentId' | 'childIds'>> }
   | { type: 'OPEN_NODE'; parentId: PaperId; childId: PaperId }
   | { type: 'CLOSE_NODE'; parentId: PaperId; childId: PaperId }
   | { type: 'FOCUS_NODE'; nodeId: PaperId }
@@ -86,11 +87,19 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
       };
     }
 
+    case 'PATCH_NODE': {
+      const node = state.paperMap.get(command.nodeId);
+      if (!node) return state;
+      const paperMap = new Map(state.paperMap);
+      paperMap.set(command.nodeId, { ...node, ...command.patch });
+      return { ...state, paperMap };
+    }
+
     case 'DELETE_NODE': {
       const node = state.paperMap.get(command.nodeId);
       if (!node || node.parentId === null) return state; // root cannot be deleted
 
-      const paperMap = removeNode(state.paperMap, command.nodeId);
+      const paperMap = removeNode(state.paperMap, command.nodeId, command.mode ?? 'cascade');
 
       // clean up expansion for deleted subtree
       let expansionMap = new Map(state.expansionMap);

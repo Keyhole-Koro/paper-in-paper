@@ -51,23 +51,40 @@ export function addChild(
   return next;
 }
 
-export function removeNode(paperMap: PaperMap, nodeId: PaperId): PaperMap {
+export type RemoveMode = 'cascade' | 'lift';
+
+export function removeNode(paperMap: PaperMap, nodeId: PaperId, mode: RemoveMode = 'cascade'): PaperMap {
   const node = paperMap.get(nodeId);
   if (!node) return paperMap;
 
-  const descendants = getDescendantIds(paperMap, nodeId);
-  const toDelete = new Set([nodeId, ...descendants]);
-
   const next = new Map(paperMap);
-  for (const id of toDelete) next.delete(id);
+
+  if (mode === 'cascade') {
+    const descendants = getDescendantIds(paperMap, nodeId);
+    for (const id of [nodeId, ...descendants]) next.delete(id);
+  } else {
+    // lift: promote children to parent
+    next.delete(nodeId);
+    if (node.parentId !== null) {
+      for (const childId of node.childIds) {
+        const child = next.get(childId);
+        if (child) next.set(childId, { ...child, parentId: node.parentId });
+      }
+    }
+  }
 
   if (node.parentId !== null) {
     const parent = next.get(node.parentId);
     if (parent) {
-      next.set(node.parentId, {
-        ...parent,
-        childIds: parent.childIds.filter((id) => id !== nodeId),
-      });
+      const newChildIds = mode === 'lift'
+        ? (() => {
+            const arr = [...parent.childIds];
+            const idx = arr.indexOf(nodeId);
+            arr.splice(idx === -1 ? arr.length : idx, 1, ...node.childIds);
+            return arr;
+          })()
+        : parent.childIds.filter((id) => id !== nodeId);
+      next.set(node.parentId, { ...parent, childIds: newChildIds });
     }
   }
 

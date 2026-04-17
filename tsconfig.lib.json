@@ -6,6 +6,7 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "declaration": true,
+    "rootDir": "src/lib",
     "declarationDir": "dist/types",
     "emitDeclarationOnly": true,
     "strict": true,
