@@ -7,9 +7,11 @@ export interface PaperStoreProviderProps {
   paperMap: PaperMap;
   expansionMap?: ExpansionMap;
   focusedNodeId?: PaperId | null;
+  spotlightNodeId?: PaperId | null;
   onPaperMapChange?: (paperMap: PaperMap) => void;
   onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
   onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
+  onSpotlightNodeIdChange?: (paperId: PaperId | null) => void;
   children: ReactNode;
 }
 
@@ -24,9 +26,11 @@ export function PaperStoreProvider({
   paperMap,
   expansionMap,
   focusedNodeId,
+  spotlightNodeId,
   onPaperMapChange,
   onExpansionMapChange,
   onFocusedNodeIdChange,
+  onSpotlightNodeIdChange,
   children,
 }: PaperStoreProviderProps) {
   const [state, rawDispatch] = useReducer(reduce, undefined, () =>
@@ -36,6 +40,7 @@ export function PaperStoreProvider({
   const lastSyncedPaperMapRef = useRef(paperMap);
   const lastSyncedExpansionMapRef = useRef(expansionMap);
   const lastSyncedFocusedNodeIdRef = useRef(focusedNodeId);
+  const lastSyncedSpotlightNodeIdRef = useRef(spotlightNodeId);
 
   useEffect(() => {
     if (paperMap !== lastSyncedPaperMapRef.current) {
@@ -57,6 +62,17 @@ export function PaperStoreProvider({
       rawDispatch({ type: '__SYNC_FOCUSED', focusedNodeId });
     }
   }, [focusedNodeId]);
+
+  useEffect(() => {
+    if (spotlightNodeId !== undefined && spotlightNodeId !== lastSyncedSpotlightNodeIdRef.current) {
+      lastSyncedSpotlightNodeIdRef.current = spotlightNodeId;
+      if (spotlightNodeId === null) {
+        rawDispatch({ type: 'EXIT_SPOTLIGHT' });
+      } else {
+        rawDispatch({ type: 'SPOTLIGHT_NODE', nodeId: spotlightNodeId });
+      }
+    }
+  }, [spotlightNodeId]);
 
   // wrap dispatch to fire callbacks after each command
   const dispatch = useCallback(
@@ -84,6 +100,12 @@ export function PaperStoreProvider({
     lastSyncedFocusedNodeIdRef.current = state.focusedNodeId;
     onFocusedNodeIdChange(state.focusedNodeId);
   }, [state.focusedNodeId, onFocusedNodeIdChange]);
+
+  useEffect(() => {
+    if (!onSpotlightNodeIdChange || state.spotlightNodeId === lastSyncedSpotlightNodeIdRef.current) return;
+    lastSyncedSpotlightNodeIdRef.current = state.spotlightNodeId;
+    onSpotlightNodeIdChange(state.spotlightNodeId);
+  }, [state.spotlightNodeId, onSpotlightNodeIdChange]);
 
   return (
     <PaperStoreContext value={{ state, dispatch }}>

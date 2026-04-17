@@ -59,6 +59,7 @@ export interface PaperViewState {
   expansionMap: ExpansionMap;
   unplacedNodeIds: PaperId[];
   focusedNodeId: PaperId | null;
+  spotlightNodeId: PaperId | null;
   accessMap: AccessMap;
   importanceMap: ImportanceMap;
   manualPlacementMap: PlacementMap;

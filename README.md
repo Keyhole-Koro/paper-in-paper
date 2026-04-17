@@ -6,6 +6,7 @@
 
 まず読むべき文書:
 
+- [コマンドリファレンス](./docs/commands.md)
 - [現行挙動仕様](./docs/current-behavior-spec.md)
 - [React 実装に関する考察](./docs/react-architecture-considerations.md)
 - [ライブラリ API ドラフト](./docs/library-api.md)

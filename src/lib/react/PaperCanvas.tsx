@@ -20,11 +20,13 @@ export interface PaperCanvasProps {
   rootId?: PaperId;
   expansionMap?: ExpansionMap;
   focusedNodeId?: PaperId | null;
+  spotlightNodeId?: PaperId | null;
   debug?: boolean;
   onCreateChild?: OnCreateChild;
   onPaperMapChange?: (paperMap: PaperMap) => void;
   onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
   onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
+  onSpotlightNodeIdChange?: (paperId: PaperId | null) => void;
 }
 
 const HEADER_HEIGHT = 37;
@@ -69,7 +71,11 @@ function computeRecursiveLayout(
 
 function PaperCanvasInner({ rootId: explicitRootId }: { rootId?: PaperId }) {
   const { state, dispatch } = usePaperStore();
-  const rootId = explicitRootId ?? getRootId(state.paperMap);
+  const naturalRootId = explicitRootId ?? getRootId(state.paperMap);
+  const rootId = state.spotlightNodeId ?? naturalRootId;
+  const isSpotlit = state.spotlightNodeId !== null;
+  const spotlitParentId = isSpotlit ? (state.paperMap.get(state.spotlightNodeId!)?.parentId ?? null) : null;
+  const spotlitParentTitle = spotlitParentId ? (state.paperMap.get(spotlitParentId)?.title ?? '') : '';
   const [canvasRef, canvasSize] = useRoomSize();
   const debug = useDebug();
 
@@ -115,6 +121,31 @@ function PaperCanvasInner({ rootId: explicitRootId }: { rootId?: PaperId }) {
       <LayoutContextProvider layoutMap={layoutMap}>
         <div ref={canvasRef} style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
           <PaperNode nodeId={rootId} parentId={null} />
+          {isSpotlit && (
+            <button
+              onClick={() => dispatch({ type: 'EXIT_SPOTLIGHT' })}
+              style={{
+                position: 'absolute',
+                top: 8,
+                left: 8,
+                zIndex: 100,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '4px 10px',
+                background: 'rgba(0,0,0,0.55)',
+                color: '#fff',
+                fontSize: 12,
+                fontFamily: 'inherit',
+                border: 'none',
+                borderRadius: 6,
+                cursor: 'pointer',
+                backdropFilter: 'blur(4px)',
+              }}
+            >
+              ← {spotlitParentTitle || '戻る'}
+            </button>
+          )}
         </div>
         <FloatingLayer />
         {debug && createPortal(
@@ -149,11 +180,13 @@ export function PaperCanvas({
   rootId,
   expansionMap,
   focusedNodeId,
+  spotlightNodeId,
   debug = false,
   onCreateChild,
   onPaperMapChange,
   onExpansionMapChange,
   onFocusedNodeIdChange,
+  onSpotlightNodeIdChange,
 }: PaperCanvasProps) {
   return (
     <DebugContext.Provider value={debug}>
@@ -162,9 +195,11 @@ export function PaperCanvas({
       paperMap={paperMap}
       expansionMap={expansionMap}
       focusedNodeId={focusedNodeId}
+      spotlightNodeId={spotlightNodeId}
       onPaperMapChange={onPaperMapChange}
       onExpansionMapChange={onExpansionMapChange}
       onFocusedNodeIdChange={onFocusedNodeIdChange}
+      onSpotlightNodeIdChange={onSpotlightNodeIdChange}
     >
       <PaperCanvasInner rootId={rootId} />
     </PaperStoreProvider>
