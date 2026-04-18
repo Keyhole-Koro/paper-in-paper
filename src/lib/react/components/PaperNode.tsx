@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PaperId } from '../../core/types';
 import { usePaperStore } from '../context/PaperStoreContext';
@@ -47,6 +47,16 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
 
   const paper = state.paperMap.get(nodeId);
   const isRoot = parentId === null;
+
+  const breadcrumbs = useMemo(() => {
+    if (isRoot || !parentId) return [];
+    const parentPaper = state.paperMap.get(parentId);
+    if (!parentPaper) return [];
+    return [
+      { id: parentId, title: parentPaper.title },
+      { id: nodeId, title: paper?.title ?? '' },
+    ];
+  }, [isRoot, parentId, nodeId, state.paperMap, paper?.title]);
 
   useEffect(() => {
     registerRoom(nodeId, roomRef.current);
@@ -146,21 +156,76 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
         onPointerMove={handleHeaderPointerMove}
         onPointerUp={handleHeaderPointerUp}
       >
-        <span
-          style={{
-            fontWeight: 600,
-            fontSize: 14,
-            color: tone.title,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: 'block',
-            minWidth: 0,
-            flex: 1,
-          }}
-        >
-          {paper.title}
-        </span>
+        {breadcrumbs.length > 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            {breadcrumbs.map((crumb, i) => {
+              const isLast = i === breadcrumbs.length - 1;
+              const isClickable = !isLast;
+              return (
+                <span key={crumb.id} style={{ display: 'flex', alignItems: 'center', flexShrink: isLast ? 1 : 0 }}>
+                  {i > 0 && (
+                    <span style={{ margin: '0 3px', color: tone.mutedText, fontSize: 11, flexShrink: 0 }}>/</span>
+                  )}
+                  <button
+                    onPointerDown={e => e.stopPropagation()}
+                    onPointerUp={e => e.stopPropagation()}
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (!isClickable) return;
+                      dispatch({ type: 'FOCUS_NODE', nodeId: crumb.id });
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: isLast ? tone.title : tone.mutedText,
+                      fontFamily: 'inherit',
+                      fontSize: 13,
+                      fontWeight: isLast ? 600 : 400,
+                      padding: '0 2px',
+                      borderRadius: 3,
+                      cursor: isClickable ? 'pointer' : 'default',
+                      whiteSpace: 'nowrap',
+                      overflow: isLast ? 'hidden' : 'visible',
+                      textOverflow: isLast ? 'ellipsis' : 'clip',
+                      textDecoration: 'none',
+                      transition: 'color 0.15s, text-decoration-color 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                      if (!isClickable) return;
+                      const el = e.currentTarget;
+                      el.style.color = tone.title;
+                      el.style.textDecoration = 'underline';
+                    }}
+                    onMouseLeave={e => {
+                      if (!isClickable) return;
+                      const el = e.currentTarget;
+                      el.style.color = tone.mutedText;
+                      el.style.textDecoration = 'none';
+                    }}
+                  >
+                    {crumb.title}
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        ) : (
+          <span
+            style={{
+              fontWeight: 600,
+              fontSize: 14,
+              color: tone.title,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              display: 'block',
+              minWidth: 0,
+              flex: 1,
+            }}
+          >
+            {paper.title}
+          </span>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {onCreateChild && (
             <button

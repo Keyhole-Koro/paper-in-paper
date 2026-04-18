@@ -20,9 +20,7 @@ export type Command =
   | { type: '__SYNC_PAPER_MAP'; paperMap: PaperViewState['paperMap'] }
   | { type: '__SYNC_EXPANSION'; expansionMap: PaperViewState['expansionMap'] }
   | { type: '__SYNC_FOCUSED'; focusedNodeId: PaperViewState['focusedNodeId'] }
-  | { type: '__SYNC_UNPLACED'; unplacedNodeIds: PaperViewState['unplacedNodeIds'] }
-  | { type: 'SPOTLIGHT_NODE'; nodeId: PaperId }
-  | { type: 'EXIT_SPOTLIGHT' };
+  | { type: '__SYNC_UNPLACED'; unplacedNodeIds: PaperViewState['unplacedNodeIds'] };
 
 const IMPORTANCE_INITIAL = 100;
 const IMPORTANCE_OPEN_BONUS = 30;
@@ -280,16 +278,6 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
       return { ...state, unplacedNodeIds: command.unplacedNodeIds };
     }
 
-    case 'SPOTLIGHT_NODE': {
-      if (command.nodeId === state.spotlightNodeId) return state;
-      return { ...state, spotlightNodeId: command.nodeId };
-    }
-
-    case 'EXIT_SPOTLIGHT': {
-      if (state.spotlightNodeId === null) return state;
-      return { ...state, spotlightNodeId: null };
-    }
-
     default:
       return state;
   }
@@ -313,7 +301,6 @@ export function createInitialState(
     expansionMap: new Map(),
     unplacedNodeIds,
     focusedNodeId: null,
-    spotlightNodeId: null,
     accessMap,
     importanceMap,
     manualPlacementMap: new Map(),

@@ -7,17 +7,19 @@ export interface PaperStoreProviderProps {
   paperMap: PaperMap;
   expansionMap?: ExpansionMap;
   focusedNodeId?: PaperId | null;
-  spotlightNodeId?: PaperId | null;
+  isFullscreen?: boolean;
   onPaperMapChange?: (paperMap: PaperMap) => void;
   onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
   onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
-  onSpotlightNodeIdChange?: (paperId: PaperId | null) => void;
+  onFullscreenChange?: (fullscreen: boolean) => void;
   children: ReactNode;
 }
 
 interface PaperStoreContextValue {
   state: PaperViewState;
   dispatch: (command: Command) => void;
+  isFullscreen: boolean;
+  onFullscreenChange?: (fullscreen: boolean) => void;
 }
 
 const PaperStoreContext = createContext<PaperStoreContextValue | null>(null);
@@ -26,11 +28,11 @@ export function PaperStoreProvider({
   paperMap,
   expansionMap,
   focusedNodeId,
-  spotlightNodeId,
+  isFullscreen,
   onPaperMapChange,
   onExpansionMapChange,
   onFocusedNodeIdChange,
-  onSpotlightNodeIdChange,
+  onFullscreenChange,
   children,
 }: PaperStoreProviderProps) {
   const [state, rawDispatch] = useReducer(reduce, undefined, () =>
@@ -40,7 +42,6 @@ export function PaperStoreProvider({
   const lastSyncedPaperMapRef = useRef(paperMap);
   const lastSyncedExpansionMapRef = useRef(expansionMap);
   const lastSyncedFocusedNodeIdRef = useRef(focusedNodeId);
-  const lastSyncedSpotlightNodeIdRef = useRef(spotlightNodeId);
 
   useEffect(() => {
     if (paperMap !== lastSyncedPaperMapRef.current) {
@@ -63,16 +64,6 @@ export function PaperStoreProvider({
     }
   }, [focusedNodeId]);
 
-  useEffect(() => {
-    if (spotlightNodeId !== undefined && spotlightNodeId !== lastSyncedSpotlightNodeIdRef.current) {
-      lastSyncedSpotlightNodeIdRef.current = spotlightNodeId;
-      if (spotlightNodeId === null) {
-        rawDispatch({ type: 'EXIT_SPOTLIGHT' });
-      } else {
-        rawDispatch({ type: 'SPOTLIGHT_NODE', nodeId: spotlightNodeId });
-      }
-    }
-  }, [spotlightNodeId]);
 
   // wrap dispatch to fire callbacks after each command
   const dispatch = useCallback(
@@ -101,14 +92,8 @@ export function PaperStoreProvider({
     onFocusedNodeIdChange(state.focusedNodeId);
   }, [state.focusedNodeId, onFocusedNodeIdChange]);
 
-  useEffect(() => {
-    if (!onSpotlightNodeIdChange || state.spotlightNodeId === lastSyncedSpotlightNodeIdRef.current) return;
-    lastSyncedSpotlightNodeIdRef.current = state.spotlightNodeId;
-    onSpotlightNodeIdChange(state.spotlightNodeId);
-  }, [state.spotlightNodeId, onSpotlightNodeIdChange]);
-
   return (
-    <PaperStoreContext value={{ state, dispatch }}>
+    <PaperStoreContext value={{ state, dispatch, isFullscreen: isFullscreen ?? false, onFullscreenChange }}>
       {children}
     </PaperStoreContext>
   );

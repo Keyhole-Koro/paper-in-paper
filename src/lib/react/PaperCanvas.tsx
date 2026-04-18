@@ -20,13 +20,13 @@ export interface PaperCanvasProps {
   rootId?: PaperId;
   expansionMap?: ExpansionMap;
   focusedNodeId?: PaperId | null;
-  spotlightNodeId?: PaperId | null;
+  isFullscreen?: boolean;
   debug?: boolean;
   onCreateChild?: OnCreateChild;
   onPaperMapChange?: (paperMap: PaperMap) => void;
   onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
   onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
-  onSpotlightNodeIdChange?: (paperId: PaperId | null) => void;
+  onFullscreenChange?: (fullscreen: boolean) => void;
 }
 
 const HEADER_HEIGHT = 37;
@@ -70,12 +70,8 @@ function computeRecursiveLayout(
 }
 
 function PaperCanvasInner({ rootId: explicitRootId }: { rootId?: PaperId }) {
-  const { state, dispatch } = usePaperStore();
-  const naturalRootId = explicitRootId ?? getRootId(state.paperMap);
-  const rootId = state.spotlightNodeId ?? naturalRootId;
-  const isSpotlit = state.spotlightNodeId !== null;
-  const spotlitParentId = isSpotlit ? (state.paperMap.get(state.spotlightNodeId!)?.parentId ?? null) : null;
-  const spotlitParentTitle = spotlitParentId ? (state.paperMap.get(spotlitParentId)?.title ?? '') : '';
+  const { state, dispatch, isFullscreen, onFullscreenChange } = usePaperStore();
+  const rootId = explicitRootId ?? getRootId(state.paperMap);
   const [canvasRef, canvasSize] = useRoomSize();
   const debug = useDebug();
 
@@ -121,29 +117,26 @@ function PaperCanvasInner({ rootId: explicitRootId }: { rootId?: PaperId }) {
       <LayoutContextProvider layoutMap={layoutMap}>
         <div ref={canvasRef} style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
           <PaperNode nodeId={rootId} parentId={null} />
-          {isSpotlit && (
+          {onFullscreenChange && (
             <button
-              onClick={() => dispatch({ type: 'EXIT_SPOTLIGHT' })}
+              onClick={() => onFullscreenChange(!isFullscreen)}
               style={{
-                position: 'absolute',
-                top: 8,
-                left: 8,
-                zIndex: 100,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '4px 10px',
-                background: 'rgba(0,0,0,0.55)',
-                color: '#fff',
-                fontSize: 12,
-                fontFamily: 'inherit',
-                border: 'none',
-                borderRadius: 6,
-                cursor: 'pointer',
-                backdropFilter: 'blur(4px)',
+                position: 'absolute', right: 8, top: 8, zIndex: 100,
+                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(4px)',
+                border: 'none', borderRadius: 6, cursor: 'pointer', color: '#555',
               }}
+              title={isFullscreen ? '縮小' : '全画面'}
             >
-              ← {spotlitParentTitle || '戻る'}
+              {isFullscreen ? (
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5M15 15l5.25 5.25M9 15H4.5M9 15v4.5M9 15l-5.25 5.25" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                </svg>
+              )}
             </button>
           )}
         </div>
@@ -180,13 +173,13 @@ export function PaperCanvas({
   rootId,
   expansionMap,
   focusedNodeId,
-  spotlightNodeId,
+  isFullscreen,
   debug = false,
   onCreateChild,
   onPaperMapChange,
   onExpansionMapChange,
   onFocusedNodeIdChange,
-  onSpotlightNodeIdChange,
+  onFullscreenChange,
 }: PaperCanvasProps) {
   return (
     <DebugContext.Provider value={debug}>
@@ -195,11 +188,11 @@ export function PaperCanvas({
       paperMap={paperMap}
       expansionMap={expansionMap}
       focusedNodeId={focusedNodeId}
-      spotlightNodeId={spotlightNodeId}
+      isFullscreen={isFullscreen}
       onPaperMapChange={onPaperMapChange}
       onExpansionMapChange={onExpansionMapChange}
       onFocusedNodeIdChange={onFocusedNodeIdChange}
-      onSpotlightNodeIdChange={onSpotlightNodeIdChange}
+      onFullscreenChange={onFullscreenChange}
     >
       <PaperCanvasInner rootId={rootId} />
     </PaperStoreProvider>
