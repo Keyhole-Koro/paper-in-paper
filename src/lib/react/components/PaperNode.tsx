@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PaperId } from '../../core/types';
+import { walkHiddenChain } from '../../core/expansion';
+import { applyRules, ruleBreakChainAt } from '../../core/expansionRules';
 import { usePaperStore } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
 import { useDebug } from '../context/DebugContext';
@@ -24,6 +26,7 @@ const FALLBACK_LAYOUT: RoomLayout = {
   contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 },
   childRects: new Map(),
   closedChildIds: [],
+  contentHidden: false,
 };
 
 interface PaperNodeProps {
@@ -52,11 +55,12 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
     if (isRoot || !parentId) return [];
     const parentPaper = state.paperMap.get(parentId);
     if (!parentPaper) return [];
-    return [
-      { id: parentId, title: parentPaper.title },
-      { id: nodeId, title: paper?.title ?? '' },
-    ];
-  }, [isRoot, parentId, nodeId, state.paperMap, paper?.title]);
+    const hiddenIds = walkHiddenChain(parentId, nodeId, state.expansionMap, layoutMap);
+    return [parentId, ...hiddenIds, nodeId].map(id => ({
+      id,
+      title: state.paperMap.get(id)?.title ?? '',
+    }));
+  }, [isRoot, parentId, nodeId, state.paperMap, state.expansionMap, paper?.title, layoutMap]);
 
   useEffect(() => {
     registerRoom(nodeId, roomRef.current);
@@ -67,6 +71,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
   const headerPointerDown = useRef<{ x: number; y: number } | null>(null);
   const headerDidDrag = useRef(false);
 
+  if (entry?.hidden) return null;
   if (!paper) return null;
 
   const isFocused = state.focusedNodeId === nodeId;
@@ -172,6 +177,8 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
                     onClick={e => {
                       e.stopPropagation();
                       if (!isClickable) return;
+                      const next = applyRules(state.expansionMap, state.paperMap, crumb.id, ruleBreakChainAt);
+                      dispatch({ type: '__SYNC_EXPANSION', expansionMap: next });
                       dispatch({ type: 'FOCUS_NODE', nodeId: crumb.id });
                     }}
                     style={{
@@ -267,8 +274,8 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
           animate={{
             x: layout.contentRect.x,
             y: layout.contentRect.y,
-            width: layout.contentRect.width,
-            height: layout.contentRect.height,
+            width: layout.contentHidden ? 0 : layout.contentRect.width,
+            height: layout.contentHidden ? 0 : layout.contentRect.height,
           }}
           transition={SPRING}
           style={{

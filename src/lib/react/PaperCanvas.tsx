@@ -49,7 +49,6 @@ function computeRecursiveLayout(
   result.set(nodeId, { allocatedRect, roomLayout });
 
   for (const [childId, childRect] of roomLayout.childRects) {
-    // Account for the border added by the motion.div wrapper inside PaperNode.tsx
     const borderLeft = 1;
     const borderTop = childRect.y > 0 ? 1 : 0;
 
@@ -70,7 +69,7 @@ function computeRecursiveLayout(
 }
 
 function PaperCanvasInner({ rootId: explicitRootId }: { rootId?: PaperId }) {
-  const { state, dispatch, isFullscreen, onFullscreenChange } = usePaperStore();
+  const { state, dispatch } = usePaperStore();
   const rootId = explicitRootId ?? getRootId(state.paperMap);
   const [canvasRef, canvasSize] = useRoomSize();
   const debug = useDebug();
@@ -117,28 +116,6 @@ function PaperCanvasInner({ rootId: explicitRootId }: { rootId?: PaperId }) {
       <LayoutContextProvider layoutMap={layoutMap}>
         <div ref={canvasRef} style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
           <PaperNode nodeId={rootId} parentId={null} />
-          {onFullscreenChange && (
-            <button
-              onClick={() => onFullscreenChange(!isFullscreen)}
-              style={{
-                position: 'absolute', right: 8, top: 8, zIndex: 100,
-                width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(4px)',
-                border: 'none', borderRadius: 6, cursor: 'pointer', color: '#555',
-              }}
-              title={isFullscreen ? '縮小' : '全画面'}
-            >
-              {isFullscreen ? (
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5M15 15l5.25 5.25M9 15H4.5M9 15v4.5M9 15l-5.25 5.25" />
-                </svg>
-              ) : (
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-                </svg>
-              )}
-            </button>
-          )}
         </div>
         <FloatingLayer />
         {debug && createPortal(

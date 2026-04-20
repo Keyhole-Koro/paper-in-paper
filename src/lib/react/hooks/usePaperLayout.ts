@@ -9,6 +9,7 @@ export interface RoomLayout {
   contentRect: LayoutRect;
   childRects: Map<PaperId, LayoutRect>;
   closedChildIds: PaperId[];
+  contentHidden: boolean;
 }
 
 const DEFAULT_MIN_AR = 0.25;
@@ -46,7 +47,7 @@ export function computeNodeLayout(
   
   const parent = paperMap.get(nodeId);
   if (!parent) {
-    return { contentRect: fallback, childRects: new Map(), closedChildIds: [] };
+    return { contentRect: fallback, childRects: new Map(), closedChildIds: [], contentHidden: false };
   }
 
   const openChildIds = getOpenChildIds(expansionMap, nodeId);
@@ -58,6 +59,7 @@ export function computeNodeLayout(
       contentRect: fallback,
       childRects: new Map(),
       closedChildIds,
+      contentHidden: false,
     };
   }
 
@@ -126,7 +128,7 @@ export function computeNodeLayout(
     rects.filter((r) => r.id !== CONTENT_ID).map((r) => [r.id, r]),
   );
 
-  return { contentRect, childRects, closedChildIds };
+  return { contentRect, childRects, closedChildIds, contentHidden: false };
 }
 
 export function usePaperLayout(

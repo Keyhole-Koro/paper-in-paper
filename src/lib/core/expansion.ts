@@ -60,6 +60,28 @@ export function removeNodeFromExpansion(
   return next;
 }
 
+export function walkHiddenChain(
+  fromId: PaperId,
+  toId: PaperId,
+  expansionMap: ExpansionMap,
+  layoutMap: Map<PaperId, { hidden?: boolean }>,
+): PaperId[] {
+  const chain: PaperId[] = [];
+  let cur = fromId;
+  const visited = new Set([fromId]);
+  while (true) {
+    const openIds = expansionMap.get(cur)?.openChildIds ?? [];
+    if (openIds.length !== 1) break;
+    const next = openIds[0];
+    if (visited.has(next) || next === toId) break;
+    if (!layoutMap.get(next)?.hidden) break;
+    chain.push(next);
+    visited.add(next);
+    cur = next;
+  }
+  return chain;
+}
+
 export function getOpenChildIds(expansionMap: ExpansionMap, parentId: PaperId): PaperId[] {
   return expansionMap.get(parentId)?.openChildIds ?? [];
 }

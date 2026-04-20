@@ -7,6 +7,7 @@ import type { RoomLayout } from '../hooks/usePaperLayout';
 export interface NodeLayoutEntry {
   allocatedRect: LayoutRect;
   roomLayout: RoomLayout;
+  hidden?: boolean;
 }
 
 const LayoutContext = createContext<Map<PaperId, NodeLayoutEntry>>(new Map());

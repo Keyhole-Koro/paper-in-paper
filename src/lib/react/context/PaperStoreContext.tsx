@@ -40,7 +40,12 @@ export function PaperStoreProvider({
   );
 
   const lastSyncedPaperMapRef = useRef(paperMap);
-  const lastSyncedExpansionMapRef = useRef(expansionMap);
+  // Tracks the last expansionMap received from outside (inbound prop).
+  // Prevents re-dispatching a value we already synced from the parent.
+  const lastInboundExpansionMapRef = useRef(expansionMap);
+  // Tracks the last expansionMap we sent outward via onExpansionMapChange.
+  // When the parent echoes it back as a prop, we skip the inbound sync to avoid an echo loop.
+  const lastOutboundExpansionMapRef = useRef<ExpansionMap | undefined>(undefined);
   const lastSyncedFocusedNodeIdRef = useRef(focusedNodeId);
 
   useEffect(() => {
@@ -51,10 +56,11 @@ export function PaperStoreProvider({
   }, [paperMap]);
 
   useEffect(() => {
-    if (expansionMap !== undefined && expansionMap !== lastSyncedExpansionMapRef.current) {
-      lastSyncedExpansionMapRef.current = expansionMap;
-      rawDispatch({ type: '__SYNC_EXPANSION', expansionMap });
-    }
+    if (expansionMap === undefined) return; // not a controlled prop
+    if (expansionMap === lastOutboundExpansionMapRef.current) return; // echo from our own outbound update
+    if (expansionMap === lastInboundExpansionMapRef.current) return; // no change
+    lastInboundExpansionMapRef.current = expansionMap;
+    rawDispatch({ type: '__SYNC_EXPANSION', expansionMap });
   }, [expansionMap]);
 
   useEffect(() => {
@@ -81,8 +87,9 @@ export function PaperStoreProvider({
   }, [state.paperMap, onPaperMapChange]);
 
   useEffect(() => {
-    if (!onExpansionMapChange || state.expansionMap === lastSyncedExpansionMapRef.current) return;
-    lastSyncedExpansionMapRef.current = state.expansionMap;
+    if (!onExpansionMapChange || state.expansionMap === lastOutboundExpansionMapRef.current) return;
+    lastOutboundExpansionMapRef.current = state.expansionMap;
+    lastInboundExpansionMapRef.current = state.expansionMap;
     onExpansionMapChange(state.expansionMap);
   }, [state.expansionMap, onExpansionMapChange]);
 
