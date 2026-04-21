@@ -26,7 +26,6 @@ const FALLBACK_LAYOUT: RoomLayout = {
   contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 },
   childRects: new Map(),
   closedChildIds: [],
-  contentHidden: false,
 };
 
 interface PaperNodeProps {
@@ -115,12 +114,16 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
   function handleHeaderPointerUp() {
     if (!headerDidDrag.current) {
       dispatch({ type: 'FOCUS_NODE', nodeId });
-      if (!isRoot) {
-        dispatch({ type: 'CLOSE_NODE', parentId: parentId!, childId: nodeId });
-      }
     }
     headerPointerDown.current = null;
     headerDidDrag.current = false;
+  }
+
+  function handleClose(e: React.MouseEvent | React.PointerEvent) {
+    e.stopPropagation();
+    if (isRoot || !parentId) return;
+    dispatch({ type: 'FOCUS_NODE', nodeId: parentId });
+    dispatch({ type: 'CLOSE_NODE', parentId, childId: nodeId });
   }
 
   return (
@@ -253,7 +256,26 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
               +
             </button>
           )}
-          {!isRoot && <span style={{ fontSize: 11, color: tone.mutedText }}>✕</span>}
+          {!isRoot && (
+            <button
+              type="button"
+              aria-label="Close node"
+              onPointerDown={stopHeaderPointerEvent}
+              onPointerUp={stopHeaderPointerEvent}
+              onClick={handleClose}
+              style={{
+                fontSize: 11,
+                color: tone.mutedText,
+                cursor: 'pointer',
+                lineHeight: 1,
+                padding: '0 2px',
+                border: 'none',
+                background: 'transparent',
+              }}
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
@@ -274,8 +296,8 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null }: PaperNode
           animate={{
             x: layout.contentRect.x,
             y: layout.contentRect.y,
-            width: layout.contentHidden ? 0 : layout.contentRect.width,
-            height: layout.contentHidden ? 0 : layout.contentRect.height,
+            width: layout.contentRect.width,
+            height: layout.contentRect.height,
           }}
           transition={SPRING}
           style={{
