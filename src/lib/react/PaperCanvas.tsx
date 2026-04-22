@@ -1,6 +1,7 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useImperativeHandle, useMemo } from 'react';
+import type { Ref } from 'react';
 import { createPortal } from 'react-dom';
-import type { ExpansionMap, PaperId, PaperMap, PaperViewState } from '../core/types';
+import type { ExpansionMap, Paper, PaperId, PaperMap, PaperViewState } from '../core/types';
 import { getRootId } from '../core/tree';
 import { PaperStoreProvider, usePaperStore } from './context/PaperStoreContext';
 import { DragProvider, type DragSession } from './context/DragContext';
@@ -14,6 +15,11 @@ import { useRoomSize } from './hooks/useRoomSize';
 import { useDebug } from './context/DebugContext';
 import { computeNodeLayout } from './hooks/usePaperLayout';
 import type { LayoutRect } from './internal/roomLayout';
+
+export interface PaperCanvasHandle {
+  upsertPapers: (papers: Paper[]) => void;
+  removePaper: (id: PaperId) => void;
+}
 
 export interface PaperCanvasProps {
   paperMap: PaperMap;
@@ -68,8 +74,13 @@ function computeRecursiveLayout(
   return result;
 }
 
-function PaperCanvasInner({ rootId: explicitRootId }: { rootId?: PaperId }) {
+function PaperCanvasInner({ rootId: explicitRootId, ref }: { rootId?: PaperId; ref?: Ref<PaperCanvasHandle> }) {
   const { state, dispatch } = usePaperStore();
+
+  useImperativeHandle(ref, () => ({
+    upsertPapers: (papers) => dispatch({ type: 'UPSERT_PAPERS', papers }),
+    removePaper: (id) => dispatch({ type: 'DELETE_NODE', nodeId: id }),
+  }), [dispatch]);
   const rootId = explicitRootId ?? getRootId(state.paperMap);
   const [canvasRef, canvasSize] = useRoomSize();
   const debug = useDebug();
@@ -157,7 +168,8 @@ export function PaperCanvas({
   onExpansionMapChange,
   onFocusedNodeIdChange,
   onFullscreenChange,
-}: PaperCanvasProps) {
+  ref,
+}: PaperCanvasProps & { ref?: Ref<PaperCanvasHandle> }) {
   return (
     <DebugContext.Provider value={debug}>
     <CreateChildContext.Provider value={onCreateChild ?? null}>
@@ -171,7 +183,7 @@ export function PaperCanvas({
       onFocusedNodeIdChange={onFocusedNodeIdChange}
       onFullscreenChange={onFullscreenChange}
     >
-      <PaperCanvasInner rootId={rootId} />
+      <PaperCanvasInner rootId={rootId} ref={ref} />
     </PaperStoreProvider>
     </CreateChildContext.Provider>
     </DebugContext.Provider>

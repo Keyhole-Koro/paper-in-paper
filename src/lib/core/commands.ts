@@ -8,6 +8,7 @@ export type Command =
   | { type: 'CREATE_CHILD_NODE'; parentId: PaperId; title: string; description: string; content: PaperContent; hue?: number }
   | { type: 'DELETE_NODE'; nodeId: PaperId; mode?: RemoveMode }
   | { type: 'PATCH_NODE'; nodeId: PaperId; patch: Partial<Omit<Paper, 'id' | 'parentId' | 'childIds'>> }
+  | { type: 'UPSERT_PAPERS'; papers: Paper[] }
   | { type: 'OPEN_NODE'; parentId: PaperId; childId: PaperId }
   | { type: 'CLOSE_NODE'; parentId: PaperId; childId: PaperId }
   | { type: 'FOCUS_NODE'; nodeId: PaperId }
@@ -93,6 +94,22 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
       const paperMap = new Map(state.paperMap);
       paperMap.set(command.nodeId, { ...node, ...command.patch });
       return { ...state, paperMap };
+    }
+
+    case 'UPSERT_PAPERS': {
+      const paperMap = new Map(state.paperMap);
+      const importanceMap = new Map(state.importanceMap);
+      const accessMap = new Map(state.accessMap);
+      const now = Date.now();
+      for (const paper of command.papers) {
+        const isNew = !paperMap.has(paper.id);
+        paperMap.set(paper.id, paper);
+        if (isNew) {
+          importanceMap.set(paper.id, IMPORTANCE_INITIAL);
+          accessMap.set(paper.id, now);
+        }
+      }
+      return { ...state, paperMap, importanceMap, accessMap };
     }
 
     case 'DELETE_NODE': {
