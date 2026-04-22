@@ -18,6 +18,7 @@ import type { LayoutRect } from './internal/roomLayout';
 
 export interface PaperCanvasHandle {
   upsertPapers: (papers: Paper[]) => void;
+  mergePapers: (papers: Paper[]) => void;
   removePaper: (id: PaperId) => void;
 }
 
@@ -79,6 +80,7 @@ function PaperCanvasInner({ rootId: explicitRootId, ref }: { rootId?: PaperId; r
 
   useImperativeHandle(ref, () => ({
     upsertPapers: (papers) => dispatch({ type: 'UPSERT_PAPERS', papers }),
+    mergePapers: (papers) => dispatch({ type: 'MERGE_PAPERS', papers }),
     removePaper: (id) => dispatch({ type: 'DELETE_NODE', nodeId: id }),
   }), [dispatch]);
   const rootId = explicitRootId ?? getRootId(state.paperMap);

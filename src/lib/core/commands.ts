@@ -9,6 +9,7 @@ export type Command =
   | { type: 'DELETE_NODE'; nodeId: PaperId; mode?: RemoveMode }
   | { type: 'PATCH_NODE'; nodeId: PaperId; patch: Partial<Omit<Paper, 'id' | 'parentId' | 'childIds'>> }
   | { type: 'UPSERT_PAPERS'; papers: Paper[] }
+  | { type: 'MERGE_PAPERS'; papers: Paper[] }
   | { type: 'OPEN_NODE'; parentId: PaperId; childId: PaperId }
   | { type: 'CLOSE_NODE'; parentId: PaperId; childId: PaperId }
   | { type: 'FOCUS_NODE'; nodeId: PaperId }
@@ -105,6 +106,29 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
         const isNew = !paperMap.has(paper.id);
         paperMap.set(paper.id, paper);
         if (isNew) {
+          importanceMap.set(paper.id, IMPORTANCE_INITIAL);
+          accessMap.set(paper.id, now);
+        }
+      }
+      return { ...state, paperMap, importanceMap, accessMap };
+    }
+
+    case 'MERGE_PAPERS': {
+      const paperMap = new Map(state.paperMap);
+      const importanceMap = new Map(state.importanceMap);
+      const accessMap = new Map(state.accessMap);
+      const now = Date.now();
+      for (const paper of command.papers) {
+        const existing = paperMap.get(paper.id);
+        if (existing) {
+          paperMap.set(paper.id, {
+            ...existing,
+            ...paper,
+            childIds: Array.from(new Set([...existing.childIds, ...paper.childIds])),
+            parentId: paper.parentId ?? existing.parentId,
+          });
+        } else {
+          paperMap.set(paper.id, paper);
           importanceMap.set(paper.id, IMPORTANCE_INITIAL);
           accessMap.set(paper.id, now);
         }
