@@ -18,6 +18,10 @@ export type PaperContentEvent =
   | { type: 'dragstart'; paperId: PaperId; clientX: number; clientY: number }
   | { type: 'resize'; height: number };
 
+function escapeInlineStyleText(css: string): string {
+  return css.replace(/<\/style/gi, '<\\/style');
+}
+
 const BOOTSTRAP_SCRIPT = `
 (function () {
   var DRAG_THRESHOLD = 5;
@@ -76,10 +80,24 @@ const BOOTSTRAP_SCRIPT = `
     downEl = null;
     didDrag = false;
   });
+
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'setOpenIds') return;
+    console.log('[iframe] setOpenIds received', e.data.openIds);
+    var ids = e.data.openIds;
+    document.querySelectorAll('a[data-paper-id]').forEach(function (el) {
+      if (ids.indexOf(el.getAttribute('data-paper-id')) !== -1) {
+        el.setAttribute('data-open', '');
+      } else {
+        el.removeAttribute('data-open');
+      }
+    });
+  });
 })();
 `;
 
-export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: number): string {
+export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: number, overrideCss?: string): string {
+  const injectedCss = overrideCss ? `\n<style data-paper-override-css>\n${escapeInlineStyleText(overrideCss)}\n</style>` : '';
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -291,6 +309,21 @@ export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: numbe
     font-size: 0.82em;
     opacity: 0.72;
   }
+  a[data-paper-id][data-open] {
+    background: ${theme.linkText};
+    border-color: ${theme.linkText};
+    color: ${theme.surface};
+    box-shadow: none;
+  }
+  a[data-paper-id][data-open]::after {
+    content: '✓';
+    opacity: 0.9;
+  }
+  a[data-paper-id][data-open]:hover {
+    background: ${theme.linkText};
+    transform: none;
+    box-shadow: none;
+  }
   a[data-paper-id]:hover {
     background: ${theme.linkBackgroundHover};
     transform: translateY(-1px);
@@ -328,6 +361,7 @@ export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: numbe
     user-select: none;
   }
 </style>
+${injectedCss}
 </head>
 <body>
 ${content}

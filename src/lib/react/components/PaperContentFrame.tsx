@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ContentNode, PaperContent, PaperId } from '../../core/types';
 import type { PaperContentEvent } from '../internal/iframeBridge';
 import { useIframeBridge } from '../hooks/useIframeBridge';
@@ -23,6 +23,7 @@ interface PaperContentFrameProps {
   nodeId: PaperId;
   content: PaperContent;
   theme: PaperContentTheme;
+  overrideCss?: string;
 }
 
 function calcContentFontSize(charCount: number): number {
@@ -31,10 +32,43 @@ function calcContentFontSize(charCount: number): number {
   return Math.min(MAX, Math.max(MIN, MIN + 2 * Math.log10(charCount)));
 }
 
-export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameProps) {
+function appendRelatedLinks(content: string, nodeId: PaperId, paperMap: Map<PaperId, { title: string; childIds: PaperId[] }>): string {
+  const paper = paperMap.get(nodeId);
+  if (!paper) return content;
+
+  const unmentioned = paper.childIds.filter((id) => !content.includes(`data-paper-id="${id}"`));
+  if (unmentioned.length === 0) return content;
+
+  const links = unmentioned.map((id) => {
+    const childPaper = paperMap.get(id);
+    const title = childPaper ? childPaper.title : id;
+    return `<a data-paper-id="${id}">${title}</a>`;
+  });
+
+  return `${content}<hr/><div style="margin-top: 16px;"><p class="eyebrow">Related</p><p style="display: flex; flex-wrap: wrap; gap: 8px;">${links.join('')}</p></div>`;
+}
+
+function deriveHtmlPresentation(content: string, nodeId: PaperId, paperMap: Map<PaperId, { title: string; childIds: PaperId[] }>) {
+  const finalContent = appendRelatedLinks(content, nodeId, paperMap);
+  // HTMLタグを除去してテキスト文字数をフォントサイズ計算に使う
+  const plainText = finalContent.replace(/<[^>]+>/g, '');
+  const fontSize = calcContentFontSize(plainText.length);
+  return { finalContent, fontSize };
+}
+
+export function PaperContentFrame({ nodeId, content, theme, overrideCss }: PaperContentFrameProps) {
   const { dispatch, state } = usePaperStore();
   const { startDrag, isDragging } = useDrag();
   const [height, setHeight] = useState(60);
+  const isStructured = Array.isArray(content);
+  const isHtmlString = typeof content === 'string';
+
+  const htmlPresentation = useMemo(() => {
+    if (!isHtmlString) {
+      return { finalContent: '', fontSize: calcContentFontSize(0) };
+    }
+    return deriveHtmlPresentation(content, nodeId, state.paperMap as Map<PaperId, { title: string; childIds: PaperId[] }>);
+  }, [content, isHtmlString, nodeId, state.paperMap]);
 
   const handleEvent = useCallback(
     (event: PaperContentEvent) => {
@@ -56,8 +90,19 @@ export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameP
     [nodeId, dispatch, startDrag, state.paperMap],
   );
 
+  const openIds = state.expansionMap.get(nodeId)?.openChildIds ?? [];
+
+  const { iframeRef, srcDoc } = useIframeBridge({
+    content: htmlPresentation.finalContent,
+    theme,
+    fontSize: htmlPresentation.fontSize,
+    overrideCss,
+    openIds,
+    onEvent: handleEvent,
+  });
+
   // ContentNode[] path
-  if (Array.isArray(content)) {
+  if (isStructured) {
     return (
       <PaperContentStructured
         nodeId={nodeId}
@@ -72,29 +117,9 @@ export function PaperContentFrame({ nodeId, content, theme }: PaperContentFrameP
   }
 
   // ReactNode path
-  if (typeof content !== 'string') {
+  if (!isHtmlString) {
     return <PaperContentReact nodeId={nodeId} content={content} theme={theme} />;
   }
-
-  // HTML string path — append unmentioned children as "Related" links
-  let finalContent = content;
-  const paper = state.paperMap.get(nodeId);
-  if (paper) {
-    const unmentioned = paper.childIds.filter((id) => !finalContent.includes(`data-paper-id="${id}"`));
-    if (unmentioned.length > 0) {
-      const links = unmentioned.map((id) => {
-        const childPaper = state.paperMap.get(id);
-        const title = childPaper ? childPaper.title : id;
-        return `<a data-paper-id="${id}">${title}</a>`;
-      });
-      finalContent += `<hr/><div style="margin-top: 16px;"><p class="eyebrow">Related</p><p style="display: flex; flex-wrap: wrap; gap: 8px;">${links.join('')}</p></div>`;
-    }
-  }
-
-  const plainText = finalContent.replace(/<[^>]+>/g, '');
-  const fontSize = calcContentFontSize(plainText.length);
-
-  const { iframeRef, srcDoc } = useIframeBridge({ content: finalContent, theme, fontSize, onEvent: handleEvent });
 
   return (
     <iframe

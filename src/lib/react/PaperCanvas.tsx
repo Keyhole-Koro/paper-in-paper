@@ -29,6 +29,7 @@ export interface PaperCanvasProps {
   focusedNodeId?: PaperId | null;
   isFullscreen?: boolean;
   debug?: boolean;
+  overrideCss?: string;
   onCreateChild?: OnCreateChild;
   onPaperMapChange?: (paperMap: PaperMap) => void;
   onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
@@ -75,7 +76,15 @@ function computeRecursiveLayout(
   return result;
 }
 
-function PaperCanvasInner({ rootId: explicitRootId, ref }: { rootId?: PaperId; ref?: Ref<PaperCanvasHandle> }) {
+function PaperCanvasInner({
+  rootId: explicitRootId,
+  overrideCss,
+  ref,
+}: {
+  rootId?: PaperId;
+  overrideCss?: string;
+  ref?: Ref<PaperCanvasHandle>;
+}) {
   const { state, dispatch } = usePaperStore();
 
   useImperativeHandle(ref, () => ({
@@ -128,7 +137,7 @@ function PaperCanvasInner({ rootId: explicitRootId, ref }: { rootId?: PaperId; r
     <DragProvider onDrop={handleDrop}>
       <LayoutContextProvider layoutMap={layoutMap}>
         <div ref={canvasRef} style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
-          <PaperNode nodeId={rootId} parentId={null} />
+          <PaperNode nodeId={rootId} parentId={null} overrideCss={overrideCss} />
         </div>
         <FloatingLayer />
         {debug && createPortal(
@@ -165,6 +174,7 @@ export function PaperCanvas({
   focusedNodeId,
   isFullscreen,
   debug = false,
+  overrideCss,
   onCreateChild,
   onPaperMapChange,
   onExpansionMapChange,
@@ -185,7 +195,7 @@ export function PaperCanvas({
       onFocusedNodeIdChange={onFocusedNodeIdChange}
       onFullscreenChange={onFullscreenChange}
     >
-      <PaperCanvasInner rootId={rootId} ref={ref} />
+      <PaperCanvasInner rootId={rootId} overrideCss={overrideCss} ref={ref} />
     </PaperStoreProvider>
     </CreateChildContext.Provider>
     </DebugContext.Provider>
