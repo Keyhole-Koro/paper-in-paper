@@ -102,6 +102,9 @@ export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: numbe
 <html>
 <head>
 <meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet" />
 <style>
   :root {
     color-scheme: light;
@@ -120,7 +123,7 @@ export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: numbe
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     font-size: ${fontSize}px;
     line-height: 1.7;
     color: var(--text);
@@ -138,7 +141,7 @@ export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: numbe
     display: block;
   }
   h1, h2, h3 {
-    font-family: "Trebuchet MS", "Avenir Next", Arial, sans-serif;
+    font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     line-height: 1.15;
     letter-spacing: -0.02em;
     color: color-mix(in srgb, var(--text) 85%, black);
@@ -191,7 +194,7 @@ export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: numbe
   }
   .stat-card strong {
     display: block;
-    font-family: "Trebuchet MS", Arial, sans-serif;
+    font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     margin-bottom: 4px;
   }
   .stat-card span,
@@ -234,7 +237,7 @@ export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: numbe
     border-bottom: 1px solid var(--soft-line);
   }
   th {
-    font-family: "Trebuchet MS", Arial, sans-serif;
+    font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     font-size: 0.82em;
     text-transform: uppercase;
     letter-spacing: 0.05em;
