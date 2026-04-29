@@ -61,6 +61,7 @@ export function computeNodeLayout(
     };
   }
 
+  const contentWeight = parent.contentImportance ?? CONTENT_IMPORTANCE;
   const effectiveMap = buildEffectiveImportanceMap(
     nodeId,
     paperMap,
@@ -71,8 +72,8 @@ export function computeNodeLayout(
   const activeChildIds = openChildIds;
 
   const childPriority = [...activeChildIds].sort((a, b) => {
-    const ia = effectiveMap.get(a) ?? CONTENT_IMPORTANCE;
-    const ib = effectiveMap.get(b) ?? CONTENT_IMPORTANCE;
+    const ia = effectiveMap.get(a) ?? contentWeight;
+    const ib = effectiveMap.get(b) ?? contentWeight;
     if (ia !== ib) return ia - ib;
     const ta = accessMap.get(a) ?? 0;
     const tb = accessMap.get(b) ?? 0;
@@ -86,7 +87,7 @@ export function computeNodeLayout(
 
   let rects = computeRoomLayout(
     [
-      { id: CONTENT_ID, weight: CONTENT_IMPORTANCE },
+      { id: CONTENT_ID, weight: contentWeight },
       ...activeChildIds.map((id) => ({ id, weight: childWeights.get(id) ?? CHILD_BASE_WEIGHT })),
     ],
     w,
@@ -110,7 +111,7 @@ export function computeNodeLayout(
     if (!changed) break;
     rects = computeRoomLayout(
       [
-        { id: CONTENT_ID, weight: CONTENT_IMPORTANCE },
+        { id: CONTENT_ID, weight: contentWeight },
         ...activeChildIds.map((id) => ({ id, weight: childWeights.get(id) ?? CHILD_BASE_WEIGHT })),
       ],
       w,

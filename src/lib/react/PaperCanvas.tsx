@@ -106,20 +106,40 @@ function PaperCanvasInner({
   }, [rootId, canvasSize, state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap]);
 
   const copyDebugInfo = useCallback(() => {
+    const formatPercent = (part: number, whole: number) => {
+      if (whole <= 0) return '0.0%';
+      return `${((part / whole) * 100).toFixed(1)}%`;
+    };
+
     const lines: string[] = [`canvas: ${canvasSize.width}×${canvasSize.height}`, ''];
     for (const [id, entry] of layoutMap) {
       const { allocatedRect: a, roomLayout: r } = entry;
+      const roomArea = Math.max(0, a.width - PAPER_NODE_BORDER) * Math.max(0, a.height - HEADER_HEIGHT - PAPER_NODE_BORDER);
+      const contentArea = r.contentRect.width * r.contentRect.height;
       lines.push(`[${id}]`);
       lines.push(`  allocated: ${a.width}×${a.height} @ (${a.x}, ${a.y})`);
-      lines.push(`  content:   ${r.contentRect.width}×${r.contentRect.height} @ (${r.contentRect.x}, ${r.contentRect.y})`);
+      lines.push(`  content:   ${r.contentRect.width}×${r.contentRect.height} @ (${r.contentRect.x}, ${r.contentRect.y}) ${formatPercent(contentArea, roomArea)}`);
       lines.push(`  children open: ${r.childRects.size}, closed: ${r.closedChildIds.length}`);
       for (const [cid, cr] of r.childRects) {
-        lines.push(`    child[${cid}]: ${cr.width}×${cr.height} @ (${cr.x}, ${cr.y})`);
+        const childArea = cr.width * cr.height;
+        lines.push(`    child[${cid}]: ${cr.width}×${cr.height} @ (${cr.x}, ${cr.y}) ${formatPercent(childArea, roomArea)}`);
       }
       lines.push('');
     }
     navigator.clipboard.writeText(lines.join('\n'));
   }, [canvasSize, layoutMap]);
+
+  const focusedDebugEntry = state.focusedNodeId ? layoutMap.get(state.focusedNodeId) : undefined;
+  const focusedPaper = state.focusedNodeId ? state.paperMap.get(state.focusedNodeId) : undefined;
+  const focusedRoomArea =
+    focusedDebugEntry == null
+      ? 0
+      : Math.max(0, focusedDebugEntry.allocatedRect.width - PAPER_NODE_BORDER) *
+        Math.max(0, focusedDebugEntry.allocatedRect.height - HEADER_HEIGHT - PAPER_NODE_BORDER);
+  const focusedContentArea =
+    focusedDebugEntry == null
+      ? 0
+      : focusedDebugEntry.roomLayout.contentRect.width * focusedDebugEntry.roomLayout.contentRect.height;
 
   function handleDrop(session: DragSession, target: InsertTarget) {
     if (session.mode === 'move-parent' || session.mode === 'content-link') {
@@ -141,25 +161,70 @@ function PaperCanvasInner({
         </div>
         <FloatingLayer />
         {debug && createPortal(
-          <button
-            onClick={copyDebugInfo}
+          <div
             style={{
               position: 'fixed',
-              bottom: 16,
               right: 16,
+              bottom: 16,
               zIndex: 99999,
-              padding: '4px 10px',
-              background: 'rgba(0,0,0,0.72)',
+              width: 320,
+              maxWidth: 'calc(100vw - 32px)',
+              background: 'rgba(0,0,0,0.78)',
               color: '#0f0',
               fontFamily: 'monospace',
               fontSize: 11,
+              lineHeight: 1.5,
               border: '1px solid #0f0',
-              borderRadius: 4,
-              cursor: 'pointer',
+              borderRadius: 6,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
+              overflow: 'hidden',
             }}
           >
-            copy debug
-          </button>,
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '8px 10px',
+                borderBottom: '1px solid rgba(0,255,0,0.25)',
+              }}
+            >
+              <strong style={{ fontSize: 11 }}>debug</strong>
+              <button
+                onClick={copyDebugInfo}
+                style={{
+                  padding: '3px 8px',
+                  background: 'transparent',
+                  color: '#0f0',
+                  fontFamily: 'inherit',
+                  fontSize: 11,
+                  border: '1px solid rgba(0,255,0,0.5)',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+              >
+                copy
+              </button>
+            </div>
+            <div style={{ padding: '10px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {focusedDebugEntry && focusedPaper ? (
+                [
+                  `focused: ${state.focusedNodeId}`,
+                  `title: ${focusedPaper.title}`,
+                  `allocated: ${focusedDebugEntry.allocatedRect.width}×${focusedDebugEntry.allocatedRect.height} @ (${focusedDebugEntry.allocatedRect.x}, ${focusedDebugEntry.allocatedRect.y})`,
+                  `content: ${focusedDebugEntry.roomLayout.contentRect.width}×${focusedDebugEntry.roomLayout.contentRect.height} @ (${focusedDebugEntry.roomLayout.contentRect.x}, ${focusedDebugEntry.roomLayout.contentRect.y}) ${focusedRoomArea > 0 ? `${((focusedContentArea / focusedRoomArea) * 100).toFixed(1)}%` : '0.0%'}`,
+                  `importance: ${Math.round(state.importanceMap.get(state.focusedNodeId ?? '') ?? 0)}`,
+                  `children: ${focusedDebugEntry.roomLayout.childRects.size} open / ${focusedDebugEntry.roomLayout.closedChildIds.length} closed`,
+                  ...Array.from(focusedDebugEntry.roomLayout.childRects.entries()).map(([childId, rect]) => {
+                    const childArea = rect.width * rect.height;
+                    const pct = focusedRoomArea > 0 ? `${((childArea / focusedRoomArea) * 100).toFixed(1)}%` : '0.0%';
+                    return `child[${childId}]: ${rect.width}×${rect.height} @ (${rect.x}, ${rect.y}) ${pct}`;
+                  }),
+                ].join('\n')
+              ) : 'no focused node'}
+            </div>
+          </div>,
           document.body,
         )}
       </LayoutContextProvider>

@@ -12,7 +12,7 @@ import {
   type PaperColorContext,
 } from '../internal/paperColors';
 import { PaperContentFrame } from './PaperContentFrame';
-import { PaperHeader, HEADER_HEIGHT } from './PaperHeader';
+import { PaperHeader } from './PaperHeader';
 
 const SPRING = { type: 'spring' as const, stiffness: 300, damping: 30, mass: 0.8 };
 
@@ -38,9 +38,6 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
   const layoutMap = useLayoutContext();
   const entry = layoutMap.get(nodeId);
   const layout = entry?.roomLayout ?? FALLBACK_LAYOUT;
-  const allocatedHeight = entry?.allocatedRect.height ?? 0;
-  const roomHeight = Math.max(0, allocatedHeight - HEADER_HEIGHT);
-
   const paper = state.paperMap.get(nodeId);
   const isRoot = parentId === null;
 
@@ -174,31 +171,29 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
           );
         })()}
 
-        {/* debug overlay */}
+        {/* debug badge */}
         {debug && (
           <div
             style={{
               position: 'absolute',
-              bottom: 4,
-              right: 4,
-              zIndex: 9999,
+              top: 4,
+              left: 4,
+              zIndex: 20,
               background: 'rgba(0,0,0,0.72)',
               color: '#0f0',
               fontFamily: 'monospace',
               fontSize: 10,
-              lineHeight: 1.6,
-              padding: '4px 6px',
+              lineHeight: 1.3,
+              padding: '2px 5px',
               borderRadius: 4,
               pointerEvents: 'none',
-              whiteSpace: 'pre',
+              whiteSpace: 'nowrap',
+              maxWidth: 'calc(100% - 8px)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}
           >
-            {`id: ${nodeId}
-allocated: ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} (inner h: ${roomHeight})
-content: x${layout.contentRect.x} y${layout.contentRect.y} ${layout.contentRect.width}×${layout.contentRect.height}
-contentHeight(reported): ${state.contentHeightMap.get(nodeId) ?? 'none'}
-importance: ${Math.round(state.importanceMap.get(nodeId) ?? 0)}
-children: ${layout.childRects.size} open / ${layout.closedChildIds.length} closed`}
+            {`${nodeId} • imp ${Math.round(state.importanceMap.get(nodeId) ?? 0)} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0}`}
           </div>
         )}
       </div>

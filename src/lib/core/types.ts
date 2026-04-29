@@ -25,6 +25,8 @@ export interface Paper {
   description: string;
   content: PaperContent;
   hue?: number;
+  importance?: number;
+  contentImportance?: number;
   parentId: PaperId | null;
   childIds: PaperId[];
 }

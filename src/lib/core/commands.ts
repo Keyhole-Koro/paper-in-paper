@@ -30,6 +30,10 @@ const IMPORTANCE_FOCUS_BONUS = 20;
 const PROTECT_DURATION_MS = 10_000;
 const DECAY_RATE = 0.00001;
 
+function resolveInitialImportance(paper: Paper) {
+  return paper.importance ?? IMPORTANCE_INITIAL;
+}
+
 export function reduce(state: PaperViewState, command: Command): PaperViewState {
   switch (command.type) {
     case 'CREATE_UNPLACED_NODE': {
@@ -106,8 +110,10 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
         const isNew = !paperMap.has(paper.id);
         paperMap.set(paper.id, paper);
         if (isNew) {
-          importanceMap.set(paper.id, IMPORTANCE_INITIAL);
+          importanceMap.set(paper.id, resolveInitialImportance(paper));
           accessMap.set(paper.id, now);
+        } else if (paper.importance !== undefined) {
+          importanceMap.set(paper.id, paper.importance);
         }
       }
       return { ...state, paperMap, importanceMap, accessMap };
@@ -127,9 +133,12 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
             childIds: Array.from(new Set([...existing.childIds, ...paper.childIds])),
             parentId: paper.parentId ?? existing.parentId,
           });
+          if (paper.importance !== undefined) {
+            importanceMap.set(paper.id, paper.importance);
+          }
         } else {
           paperMap.set(paper.id, paper);
-          importanceMap.set(paper.id, IMPORTANCE_INITIAL);
+          importanceMap.set(paper.id, resolveInitialImportance(paper));
           accessMap.set(paper.id, now);
         }
       }
@@ -301,7 +310,17 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
 
     case '__SYNC_PAPER_MAP': {
       if (command.paperMap === state.paperMap) return state;
-      return { ...state, paperMap: command.paperMap };
+      const importanceMap = new Map(state.importanceMap);
+      for (const [id, paper] of command.paperMap) {
+        if (!importanceMap.has(id)) {
+          importanceMap.set(id, resolveInitialImportance(paper));
+          continue;
+        }
+        if (paper.importance !== undefined) {
+          importanceMap.set(id, paper.importance);
+        }
+      }
+      return { ...state, paperMap: command.paperMap, importanceMap };
     }
 
     case '__SYNC_EXPANSION': {
@@ -329,8 +348,8 @@ export function createInitialState(
   unplacedNodeIds: PaperViewState['unplacedNodeIds'] = [],
 ): PaperViewState {
   const importanceMap = new Map<string, number>();
-  for (const id of paperMap.keys()) {
-    importanceMap.set(id, IMPORTANCE_INITIAL);
+  for (const [id, paper] of paperMap) {
+    importanceMap.set(id, resolveInitialImportance(paper));
   }
   const accessMap = new Map<string, number>();
   const now = Date.now();
