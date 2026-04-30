@@ -110,7 +110,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
           <PaperContentFrame
             nodeId={nodeId}
             content={paper.content}
-            overrideCss={overrideCss}
+            overrideCss={paper.overrideCss ?? overrideCss}
             theme={{
               surface: tone.background,
               surfaceAlt: tone.backgroundHover,

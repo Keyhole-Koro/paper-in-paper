@@ -29,6 +29,7 @@ export interface Paper {
   contentImportance?: number;
   parentId: PaperId | null;
   childIds: PaperId[];
+  overrideCss?: string;
 }
 
 export type PaperMap = Map<PaperId, Paper>;
