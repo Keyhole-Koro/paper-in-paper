@@ -1,17 +1,17 @@
 import type { ImportanceMap, PaperId, PaperMap } from './types';
+import type { ImportanceConfig } from '../config/paperCanvasConfig';
 import { getOpenChildIds } from './expansion';
 import type { ExpansionMap } from './types';
-
-const DECAY_RATE = 0.00001;
 
 /** ノード自身の importance を時間経過で減衰させる（二乗則） */
 export function decayImportance(
   importance: number,
   lastAccessMs: number,
   nowMs: number,
+  config: ImportanceConfig,
 ): number {
   const t = (nowMs - lastAccessMs) / 1000;
-  return Math.max(0, importance * (1 - DECAY_RATE * t * t));
+  return Math.max(0, importance * (1 - config.decayRate * t * t));
 }
 
 /**

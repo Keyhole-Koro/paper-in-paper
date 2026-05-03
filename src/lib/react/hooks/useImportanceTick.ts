@@ -3,12 +3,8 @@ import { usePaperStore } from '../context/PaperStoreContext';
 import { selectAutoCloseCandidates } from '../internal/autoClose';
 import { getOpenChildIds } from '../../core/expansion';
 
-const TICK_INTERVAL_MS = 5000;
-/** importance がこの値を下回った open child は自動縮小候補になる */
-const AUTO_CLOSE_THRESHOLD = 5;
-
 export function useImportanceTick() {
-  const { state, dispatch } = usePaperStore();
+  const { config, state, dispatch } = usePaperStore();
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -27,13 +23,13 @@ export function useImportanceTick() {
         const candidates = selectAutoCloseCandidates(s, parentId, now);
         for (const nodeId of candidates) {
           const importance = s.importanceMap.get(nodeId) ?? 0;
-          if (importance < AUTO_CLOSE_THRESHOLD) {
+          if (importance < config.importance.autoCloseThreshold) {
             dispatch({ type: 'AUTO_CLOSE_NODE', nodeId });
           }
         }
       }
-    }, TICK_INTERVAL_MS);
+    }, config.importance.tickIntervalMs);
 
     return () => clearInterval(id);
-  }, [dispatch]);
+  }, [config, dispatch]);
 }

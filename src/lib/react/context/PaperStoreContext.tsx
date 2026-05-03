@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useReducer, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { ExpansionMap, PaperId, PaperMap, PaperViewState } from '../../core/types';
+import type { PaperCanvasConfig } from '../../config/paperCanvasConfig';
 import { type Command, createInitialState, reduce } from '../../core/commands';
 
 export interface PaperStoreProviderProps {
+  config: PaperCanvasConfig;
   paperMap: PaperMap;
   expansionMap?: ExpansionMap;
   focusedNodeId?: PaperId | null;
@@ -16,6 +18,7 @@ export interface PaperStoreProviderProps {
 }
 
 interface PaperStoreContextValue {
+  config: PaperCanvasConfig;
   state: PaperViewState;
   dispatch: (command: Command) => void;
   isFullscreen: boolean;
@@ -25,6 +28,7 @@ interface PaperStoreContextValue {
 const PaperStoreContext = createContext<PaperStoreContextValue | null>(null);
 
 export function PaperStoreProvider({
+  config,
   paperMap,
   expansionMap,
   focusedNodeId,
@@ -35,14 +39,17 @@ export function PaperStoreProvider({
   onFullscreenChange,
   children,
 }: PaperStoreProviderProps) {
-  const [state, rawDispatch] = useReducer(reduce, undefined, () =>
-    createInitialState(paperMap),
+  const [state, rawDispatch] = useReducer(
+    (currentState: PaperViewState, command: Command) => reduce(currentState, command, config),
+    undefined,
+    () => createInitialState(paperMap, config),
   );
 
   const lastSyncedPaperMapRef = useRef(paperMap);
   // Tracks the last expansionMap received from outside (inbound prop).
   // Prevents re-dispatching a value we already synced from the parent.
-  const lastInboundExpansionMapRef = useRef(expansionMap);
+  // Initialized as undefined (not the initial prop) so the first value is always dispatched.
+  const lastInboundExpansionMapRef = useRef<ExpansionMap | undefined>(undefined);
   // Tracks the last expansionMap we sent outward via onExpansionMapChange.
   // When the parent echoes it back as a prop, we skip the inbound sync to avoid an echo loop.
   const lastOutboundExpansionMapRef = useRef<ExpansionMap | undefined>(undefined);
@@ -100,7 +107,7 @@ export function PaperStoreProvider({
   }, [state.focusedNodeId, onFocusedNodeIdChange]);
 
   return (
-    <PaperStoreContext value={{ state, dispatch, isFullscreen: isFullscreen ?? false, onFullscreenChange }}>
+    <PaperStoreContext value={{ config, state, dispatch, isFullscreen: isFullscreen ?? false, onFullscreenChange }}>
       {children}
     </PaperStoreContext>
   );
