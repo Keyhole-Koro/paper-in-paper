@@ -1,9 +1,6 @@
 export interface PaperNodeConfig {
   headerHeight: number;
   borderWidth: number;
-  collapseContentWidthThreshold: number;
-  collapseContentHeightThreshold: number;
-  collapseContentAreaRatioThreshold: number;
 }
 
 export interface ImportanceConfig {
@@ -12,8 +9,7 @@ export interface ImportanceConfig {
   focusBonus: number;
   labelClickBoost: number;
   protectDurationMs: number;
-  decayRate: number;
-  tickIntervalMs: number;
+  commandDecayRate: number;
   autoCloseThreshold: number;
 }
 
@@ -31,9 +27,6 @@ export const defaultPaperCanvasConfig: PaperCanvasConfig = {
   paperNode: {
     headerHeight: 37,
     borderWidth: 2,
-    collapseContentWidthThreshold: 160,
-    collapseContentHeightThreshold: 100,
-    collapseContentAreaRatioThreshold: 0.12,
   },
   importance: {
     initial: 100,
@@ -41,8 +34,7 @@ export const defaultPaperCanvasConfig: PaperCanvasConfig = {
     focusBonus: 20,
     labelClickBoost: 50,
     protectDurationMs: 10_000,
-    decayRate: 0.00001,
-    tickIntervalMs: 5000,
+    commandDecayRate: 0.05,
     autoCloseThreshold: 5,
   },
 };

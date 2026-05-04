@@ -11,7 +11,6 @@ import {
   resolvePaperColorContext,
   type PaperColorContext,
 } from '../internal/paperColors';
-import { CollapsedPaperNode } from './CollapsedPaperNode';
 import { PaperNodeFrame } from './PaperNodeFrame';
 
 const FALLBACK_LAYOUT: RoomLayout = {
@@ -62,10 +61,6 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
   const isFocusedView = view.interactionMode === 'focused';
   const isDragTargetView = view.interactionMode === 'drag-target';
   const tone = getPaperTone(color, { isRoot, isFocused: isFocusedView });
-
-  if (view.visibilityMode === 'collapsed') {
-    return <CollapsedPaperNode tone={tone} />;
-  }
 
   const insertBeforeRect = isDragTarget && insertTarget?.insertBeforeId && layout.childRects.has(insertTarget.insertBeforeId)
     ? (() => {

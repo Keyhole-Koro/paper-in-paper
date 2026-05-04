@@ -18,7 +18,7 @@ import { useRoomSize } from './hooks/useRoomSize';
 import { useDebug } from './context/DebugContext';
 import { derivePaperVisibilityMode } from './internal/paperNodeView';
 import { computeNodeLayout } from './hooks/usePaperLayout';
-import type { LayoutRect } from './internal/roomLayout';
+import type { LayoutRect } from '../core/layout';
 
 export interface PaperCanvasHandle {
   upsertPapers: (papers: Paper[]) => void;
@@ -119,7 +119,7 @@ function PaperCanvasInner({
         entry,
         config: config.paperNode,
       });
-      if (visibilityMode === 'collapsed') {
+      if (visibilityMode === 'hidden') {
         const cx = entry.allocatedRect.x + entry.allocatedRect.width / 2;
         const cy = entry.allocatedRect.y + entry.allocatedRect.height / 2;
         result.push({ id, title: paper.title, side: 'left', centerX: cx, centerY: cy });

@@ -4,6 +4,27 @@ import { openChild, closeChild, removeNodeFromExpansion } from './expansion';
 import { addChild, moveNode, removeNode, type RemoveMode } from './tree';
 import { nanoid } from './nanoid';
 
+const USER_ACTION_COMMANDS = new Set([
+  'CREATE_CHILD_NODE',
+  'OPEN_NODE',
+  'CLOSE_NODE',
+  'FOCUS_NODE',
+  'LABEL_CLICK_BOOST',
+]);
+
+function applyCommandDecay(state: PaperViewState, rate: number): PaperViewState {
+  const importanceMap = new Map(state.importanceMap);
+  let changed = false;
+  for (const [id, importance] of importanceMap) {
+    const next = Math.max(0, importance * (1 - rate));
+    if (Math.abs(next - importance) > 0.001) {
+      importanceMap.set(id, next);
+      changed = true;
+    }
+  }
+  return changed ? { ...state, importanceMap } : state;
+}
+
 export type Command =
   | { type: 'CREATE_UNPLACED_NODE'; title: string; description: string; content: PaperContent }
   | { type: 'CREATE_CHILD_NODE'; parentId: PaperId; title: string; description: string; content: PaperContent; hue?: number }
@@ -18,7 +39,6 @@ export type Command =
   | { type: 'REORDER_WITHIN_PARENT'; parentId: PaperId; paperId: PaperId; position: GridPosition }
   | { type: 'ATTACH_UNPLACED_NODE'; nodeId: PaperId; targetParentId: PaperId; insertBeforeId: PaperId | null }
   | { type: 'REPORT_CONTENT_HEIGHT'; nodeId: PaperId; height: number }
-  | { type: 'TICK_IMPORTANCE'; now: number }
   | { type: 'AUTO_CLOSE_NODE'; nodeId: PaperId }
   | { type: 'LABEL_CLICK_BOOST'; nodeId: PaperId }
   | { type: '__SYNC_PAPER_MAP'; paperMap: PaperViewState['paperMap'] }
@@ -30,7 +50,7 @@ function resolveInitialImportance(paper: Paper, config: PaperCanvasConfig) {
   return paper.importance ?? config.importance.initial;
 }
 
-export function reduce(state: PaperViewState, command: Command, config: PaperCanvasConfig): PaperViewState {
+function reduceCore(state: PaperViewState, command: Command, config: PaperCanvasConfig): PaperViewState {
   switch (command.type) {
     case 'CREATE_UNPLACED_NODE': {
       const id = nanoid();
@@ -285,22 +305,6 @@ export function reduce(state: PaperViewState, command: Command, config: PaperCan
       return { ...state, contentHeightMap };
     }
 
-    case 'TICK_IMPORTANCE': {
-      const importanceMap = new Map(state.importanceMap);
-      let changed = false;
-      for (const [id, importance] of importanceMap) {
-        const lastAccess = state.accessMap.get(id) ?? command.now;
-        const t = (command.now - lastAccess) / 1000;
-        const decayed = importance * (1 - config.importance.decayRate * t * t);
-        const next = Math.max(0, decayed);
-        if (Math.abs(next - importance) > 0.01) {
-          importanceMap.set(id, next);
-          changed = true;
-        }
-      }
-      return changed ? { ...state, importanceMap } : state;
-    }
-
     case 'AUTO_CLOSE_NODE': {
       const node = state.paperMap.get(command.nodeId);
       if (!node || node.parentId === null) return state;
@@ -346,6 +350,14 @@ export function reduce(state: PaperViewState, command: Command, config: PaperCan
     default:
       return state;
   }
+}
+
+export function reduce(state: PaperViewState, command: Command, config: PaperCanvasConfig): PaperViewState {
+  const next = reduceCore(state, command, config);
+  if (USER_ACTION_COMMANDS.has(command.type)) {
+    return applyCommandDecay(next, config.importance.commandDecayRate);
+  }
+  return next;
 }
 
 export function createInitialState(

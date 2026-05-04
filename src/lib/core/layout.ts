@@ -1,3 +1,44 @@
+import type { ImportanceMap, PaperId, ExpansionMap } from './types';
+import { getOpenChildIds } from './expansion';
+
+// --- Room weight ---
+
+function computeRoomWeight(
+  nodeId: PaperId,
+  expansionMap: ExpansionMap,
+  importanceMap: ImportanceMap,
+  resultMap: Map<PaperId, number>,
+): number {
+  const cached = resultMap.get(nodeId);
+  if (cached !== undefined) return cached;
+
+  const self = importanceMap.get(nodeId) ?? 0;
+  const openChildIds = getOpenChildIds(expansionMap, nodeId);
+
+  const childSum = openChildIds.reduce((sum, childId) => {
+    return sum + computeRoomWeight(childId, expansionMap, importanceMap, resultMap);
+  }, 0);
+
+  const total = self + childSum;
+  resultMap.set(nodeId, total);
+  return total;
+}
+
+export function buildRoomWeightMap(
+  parentId: PaperId,
+  expansionMap: ExpansionMap,
+  importanceMap: ImportanceMap,
+): Map<PaperId, number> {
+  const resultMap = new Map<PaperId, number>();
+  const openChildIds = getOpenChildIds(expansionMap, parentId);
+  for (const childId of openChildIds) {
+    computeRoomWeight(childId, expansionMap, importanceMap, resultMap);
+  }
+  return resultMap;
+}
+
+// --- Room layout ---
+
 export interface LayoutItem {
   id: string;
   weight: number;
@@ -15,25 +56,6 @@ export interface RoomLayoutResult {
   rects: LayoutRect[];
 }
 
-export function clampRect(rect: LayoutRect, containerWidth: number, containerHeight: number): LayoutRect {
-  const x = Math.max(0, Math.min(rect.x, containerWidth));
-  const y = Math.max(0, Math.min(rect.y, containerHeight));
-  const maxWidth = Math.max(0, containerWidth - x);
-  const maxHeight = Math.max(0, containerHeight - y);
-
-  return {
-    ...rect,
-    x,
-    y,
-    width: Math.max(0, Math.min(rect.width, maxWidth)),
-    height: Math.max(0, Math.min(rect.height, maxHeight)),
-  };
-}
-
-/**
- * 行に items を並べたときの worst-case アスペクト比を返す。
- * AR = max(w/h, h/w) なので、1 に近いほど正方形に近い。
- */
 function worstAspectRatio(
   rowItems: LayoutItem[],
   rowWeight: number,
@@ -41,7 +63,6 @@ function worstAspectRatio(
   containerWidth: number,
   containerHeight: number,
 ): number {
-  // この行が占める高さ = (rowWeight / totalWeight) * containerHeight
   const rowHeight = (rowWeight / totalWeight) * containerHeight;
   if (rowHeight <= 0) return Infinity;
 
@@ -55,14 +76,6 @@ function worstAspectRatio(
   return worst;
 }
 
-/**
- * 与えられた containerWidth × containerHeight の空間を
- * importance の比率に従って水平に行詰めで分割する。
- *
- * - 各アイテムの面積 ∝ weight
- * - アスペクト比が悪化するなら行を折り返す（squarified treemap 的貪欲法）
- * - コンテナサイズが決まっているので item 追加で全体が縮むことはない
- */
 export function computeRoomLayout(
   items: LayoutItem[],
   containerWidth: number,
@@ -74,14 +87,12 @@ export function computeRoomLayout(
     return { rects: [] };
   }
 
-  // 横長コンテナは転置して「縦に列詰め→右に積む」に切り替え、最後に戻す
   const useColumns = containerWidth > containerHeight;
   const w = useColumns ? containerHeight : containerWidth;
   const h = useColumns ? containerWidth : containerHeight;
 
   const totalWeight = items.reduce((s, i) => s + i.weight, 0);
 
-  // 貪欲行詰め: worst AR が改善する間は同じ行に追加
   const rows: LayoutItem[][] = [];
   let currentRow: LayoutItem[] = [];
   let currentRowWeight = 0;
@@ -99,11 +110,9 @@ export function computeRoomLayout(
     const nextWorst = worstAspectRatio(nextRow, nextWeight, totalWeight, w, h);
 
     if (nextWorst <= prevWorst) {
-      // AR が改善 or 維持 → 同じ行に追加
       currentRow.push(item);
       currentRowWeight += item.weight;
     } else {
-      // AR が悪化 → 行を確定して次の行へ
       rows.push(currentRow);
       currentRow = [item];
       currentRowWeight = item.weight;
@@ -111,7 +120,6 @@ export function computeRoomLayout(
   }
   if (currentRow.length > 0) rows.push(currentRow);
 
-  // 各行の rect を計算
   const rects: LayoutRect[] = [];
   let y = 0;
 
@@ -123,14 +131,12 @@ export function computeRoomLayout(
     for (const item of row) {
       const width = (item.weight / rowWeight) * w;
       const height = rowHeight;
-
       rects.push({ id: item.id, x, y, width, height });
       x += width;
     }
     y += rowHeight;
   }
 
-  // 転置した場合は x↔y, width↔height を戻す
   if (useColumns) {
     return {
       rects: rects.map((r) => ({ id: r.id, x: r.y, y: r.x, width: r.height, height: r.width })),
