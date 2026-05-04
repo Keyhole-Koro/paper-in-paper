@@ -10,6 +10,7 @@ const USER_ACTION_COMMANDS = new Set([
   'CLOSE_NODE',
   'FOCUS_NODE',
   'LABEL_CLICK_BOOST',
+  'UNINDEX_NODE',
 ]);
 
 function applyCommandDecay(state: PaperViewState, rate: number): PaperViewState {
@@ -40,6 +41,8 @@ export type Command =
   | { type: 'ATTACH_UNPLACED_NODE'; nodeId: PaperId; targetParentId: PaperId; insertBeforeId: PaperId | null }
   | { type: 'REPORT_CONTENT_HEIGHT'; nodeId: PaperId; height: number }
   | { type: 'AUTO_CLOSE_NODE'; nodeId: PaperId }
+  | { type: 'INDEX_NODE'; nodeId: PaperId }
+  | { type: 'UNINDEX_NODE'; nodeId: PaperId }
   | { type: 'LABEL_CLICK_BOOST'; nodeId: PaperId }
   | { type: '__SYNC_PAPER_MAP'; paperMap: PaperViewState['paperMap'] }
   | { type: '__SYNC_EXPANSION'; expansionMap: PaperViewState['expansionMap'] }
@@ -181,12 +184,16 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
       importanceMap.delete(command.nodeId);
       accessMap.delete(command.nodeId);
 
+      const indexedNodeIds = new Set(state.indexedNodeIds);
+      indexedNodeIds.delete(command.nodeId);
+
       return {
         ...state,
         paperMap,
         expansionMap,
         importanceMap,
         accessMap,
+        indexedNodeIds,
         focusedNodeId:
           state.focusedNodeId === command.nodeId ? node.parentId : state.focusedNodeId,
       };
@@ -317,6 +324,25 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
       return { ...state, expansionMap };
     }
 
+    case 'INDEX_NODE': {
+      const node = state.paperMap.get(command.nodeId);
+      if (!node || node.parentId === null) return state;
+      const indexedNodeIds = new Set(state.indexedNodeIds);
+      indexedNodeIds.add(command.nodeId);
+      return { ...state, indexedNodeIds };
+    }
+
+    case 'UNINDEX_NODE': {
+      const indexedNodeIds = new Set(state.indexedNodeIds);
+      indexedNodeIds.delete(command.nodeId);
+      const importanceMap = new Map(state.importanceMap);
+      const prev = importanceMap.get(command.nodeId) ?? 0;
+      importanceMap.set(command.nodeId, prev + config.importance.openBonus);
+      const accessMap = new Map(state.accessMap);
+      accessMap.set(command.nodeId, Date.now());
+      return { ...state, indexedNodeIds, importanceMap, accessMap, focusedNodeId: command.nodeId };
+    }
+
     case '__SYNC_PAPER_MAP': {
       if (command.paperMap === state.paperMap) return state;
       const importanceMap = new Map(state.importanceMap);
@@ -377,6 +403,7 @@ export function createInitialState(
   return {
     paperMap,
     expansionMap: new Map(),
+    indexedNodeIds: new Set(),
     unplacedNodeIds,
     focusedNodeId: null,
     accessMap,

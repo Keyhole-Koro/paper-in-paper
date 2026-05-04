@@ -1,4 +1,4 @@
-import { useCallback, useImperativeHandle, useMemo } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import type { Ref } from 'react';
 import { createPortal } from 'react-dom';
 import type { ExpansionMap, Paper, PaperId, PaperMap, PaperViewState } from '../core/types';
@@ -19,6 +19,7 @@ import { useDebug } from './context/DebugContext';
 import { derivePaperVisibilityMode } from './internal/paperNodeView';
 import { computeNodeLayout } from './hooks/usePaperLayout';
 import type { LayoutRect } from '../core/layout';
+import { selectLowImportanceCandidates } from '../core/candidates';
 
 export interface PaperCanvasHandle {
   upsertPapers: (papers: Paper[]) => void;
@@ -42,6 +43,14 @@ export interface PaperCanvasProps {
   onFullscreenChange?: (fullscreen: boolean) => void;
 }
 
+const ZERO_RECT: LayoutRect = { id: '', x: 0, y: 0, width: 0, height: 0 };
+const EMPTY_ROOM_LAYOUT = {
+  contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 },
+  childRects: new Map<PaperId, LayoutRect>(),
+  closedChildIds: [] as PaperId[],
+  overflowChildCount: 0,
+};
+
 function computeRecursiveLayout(
   nodeId: PaperId,
   allocatedRect: LayoutRect,
@@ -54,6 +63,7 @@ function computeRecursiveLayout(
   const roomLayout = computeNodeLayout(
     nodeId, roomW, roomH,
     state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap,
+    state.indexedNodeIds,
   );
 
   const result = new Map<PaperId, NodeLayoutEntry>();
@@ -73,6 +83,13 @@ function computeRecursiveLayout(
     const childLayouts = computeRecursiveLayout(childId, childAllocated, state, config);
     for (const [id, entry] of childLayouts) {
       result.set(id, entry);
+    }
+  }
+
+  // indexed nodes: open in expansionMap but excluded from layout → hidden: true
+  for (const indexedId of state.indexedNodeIds) {
+    if (state.expansionMap.get(nodeId)?.openChildIds.includes(indexedId)) {
+      result.set(indexedId, { allocatedRect: { ...ZERO_RECT, id: indexedId }, roomLayout: EMPTY_ROOM_LAYOUT, hidden: true });
     }
   }
 
@@ -108,6 +125,31 @@ function PaperCanvasInner({
       config,
     );
   }, [rootId, canvasSize, state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap, config]);
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  useEffect(() => {
+    const now = Date.now();
+    for (const [parentId, entry] of layoutMap) {
+      if (entry.roomLayout.overflowChildCount === 0) continue;
+      const candidates = selectLowImportanceCandidates(stateRef.current, parentId, now);
+      if (candidates.length > 0) {
+        console.log(`[PaperCanvas] overflow in ${parentId}, closing candidate: ${candidates[0]}`);
+      } else {
+        // Space is constrained but everyone is protected
+        const openIds = stateRef.current.expansionMap.get(parentId)?.openChildIds ?? [];
+        const protectionInfo = openIds.map(id => {
+          const until = stateRef.current.protectedUntilMap.get(id) ?? 0;
+          const remaining = Math.max(0, Math.round((until - now) / 1000));
+          return `${id}(${remaining}s)`;
+        });
+        console.log(`[PaperCanvas] overflow in ${parentId} but ALL nodes are protected:`, protectionInfo.join(', '));
+      }
+      if (candidates.length === 0) continue;
+      dispatch({ type: 'INDEX_NODE', nodeId: candidates[0] });
+    }
+  }, [layoutMap, dispatch]);
 
   const collapsedNodes = useMemo((): IndexLabelNode[] => {
     const result: IndexLabelNode[] = [];
@@ -187,7 +229,7 @@ function PaperCanvasInner({
               node={n}
               canvasWidth={canvasSize.width}
               canvasHeight={canvasSize.height}
-              onClick={(nodeId) => dispatch({ type: 'LABEL_CLICK_BOOST', nodeId })}
+              onClick={(nodeId) => dispatch({ type: 'UNINDEX_NODE', nodeId })}
             />
           ))}
         </div>

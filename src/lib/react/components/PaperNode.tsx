@@ -17,6 +17,7 @@ const FALLBACK_LAYOUT: RoomLayout = {
   contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 },
   childRects: new Map(),
   closedChildIds: [],
+  overflowChildCount: 0,
 };
 
 interface PaperNodeProps {

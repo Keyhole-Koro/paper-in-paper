@@ -34,6 +34,7 @@ Each paper node has an `importance` score.
 
 - When `importance` falls below a threshold, automatic collapse is triggered
 - The minimum size is the closed-card size that displays only the title
+- (Note: Automatic collapse to `IndexLabel` via `entry.hidden` is defined in the types and UI components, but the logic to trigger it is currently NOT implemented. Nodes currently remain in `normal` visibility mode regardless of size.)
 - Even when `importance` reaches zero, the node itself does not disappear
 
 ### Parent Importance

@@ -1,7 +1,7 @@
 import type { PaperId, PaperViewState } from './types';
 import { getOpenChildIds } from './expansion';
 
-export function selectAutoCloseCandidates(
+export function selectLowImportanceCandidates(
   state: PaperViewState,
   parentId: PaperId,
   nowMs: number,

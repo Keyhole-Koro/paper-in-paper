@@ -8,6 +8,7 @@ export interface RoomLayout {
   contentRect: LayoutRect;
   childRects: Map<PaperId, LayoutRect>;
   closedChildIds: PaperId[];
+  overflowChildCount: number;
 }
 
 const DEFAULT_MIN_AR = 0.25;
@@ -36,6 +37,7 @@ export function computeNodeLayout(
   importanceMap: ImportanceMap,
   accessMap: AccessMap,
   _contentHeightMap: Map<PaperId, number>,
+  indexedNodeIds: Set<PaperId> = new Set(),
   minAR = DEFAULT_MIN_AR,
   maxAR = DEFAULT_MAX_AR,
 ): RoomLayout {
@@ -46,15 +48,16 @@ export function computeNodeLayout(
 
   const parent = paperMap.get(nodeId);
   if (!parent) {
-    return { contentRect: zeroContent, childRects: new Map(), closedChildIds: [] };
+    return { contentRect: zeroContent, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 };
   }
 
-  const openChildIds = getOpenChildIds(expansionMap, nodeId);
-  const openSet = new Set(openChildIds);
+  const allOpenChildIds = getOpenChildIds(expansionMap, nodeId);
+  const openChildIds = allOpenChildIds.filter((id) => !indexedNodeIds.has(id));
+  const openSet = new Set(allOpenChildIds);
   const closedChildIds = parent.childIds.filter((id) => !openSet.has(id));
 
   if (w === 0 || h === 0 || openChildIds.length === 0) {
-    return { contentRect: fullContent, childRects: new Map(), closedChildIds };
+    return { contentRect: fullContent, childRects: new Map(), closedChildIds, overflowChildCount: 0 };
   }
 
   // content の weight = このノード自身の rawImportance
@@ -87,6 +90,9 @@ export function computeNodeLayout(
   ).rects;
 
   let pass = 0;
+  if (roomNeedsShrink(rects, minAR, maxAR)) {
+    console.log(`[usePaperLayout] shrinking room for ${nodeId} (w:${w}, h:${h})`);
+  }
   while (roomNeedsShrink(rects, minAR, maxAR) && pass < MAX_SHRINK_PASSES) {
     let changed = false;
     for (const childId of roomPriority) {
@@ -109,12 +115,14 @@ export function computeNodeLayout(
     pass += 1;
   }
 
+  const overflowChildCount = roomNeedsShrink(rects, minAR, maxAR) ? 1 : 0;
+
   const contentRect = rects.find((r) => r.id === CONTENT_ID) ?? zeroContent;
   const childRects = new Map<PaperId, LayoutRect>(
     rects.filter((r) => r.id !== CONTENT_ID).map((r) => [r.id, r]),
   );
 
-  return { contentRect, childRects, closedChildIds };
+  return { contentRect, childRects, closedChildIds, overflowChildCount };
 }
 
 export function usePaperLayout(
@@ -130,7 +138,7 @@ export function usePaperLayout(
     return computeNodeLayout(
       nodeId, containerWidth, containerHeight,
       state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap,
-      minAR, maxAR,
+      state.indexedNodeIds, minAR, maxAR,
     );
-  }, [nodeId, containerWidth, containerHeight, minAR, maxAR, state.expansionMap, state.importanceMap, state.paperMap, state.contentHeightMap, state.accessMap]);
+  }, [nodeId, containerWidth, containerHeight, minAR, maxAR, state.expansionMap, state.importanceMap, state.paperMap, state.contentHeightMap, state.accessMap, state.indexedNodeIds]);
 }

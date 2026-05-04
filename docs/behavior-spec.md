@@ -169,9 +169,10 @@ Behavior:
 The layout engine decides when a room is under pressure.
 
 When space becomes constrained inside a room:
-
 - Child nodes are collapsed in ascending order of recency, starting from the least recently accessed
 - To collapse a node means to close it by clearing its expansion state
+- (Note: An alternative "hidden" mode that turns a node into a side tab (IndexLabel) instead of fully closing it is defined in the codebase, but the logic to trigger it is currently not implemented.)
+
 
 ## Breadcrumb Behavior
 
