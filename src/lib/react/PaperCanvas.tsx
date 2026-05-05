@@ -18,6 +18,7 @@ import { useDebug } from './context/DebugContext';
 import { computeNodeLayout } from './hooks/usePaperLayout';
 import type { LayoutRect } from '../core/layout';
 import { selectLowImportanceCandidates } from '../core/candidates';
+import { getEffectiveAttention } from '../core/attention';
 
 export interface PaperCanvasHandle {
   upsertPapers: (papers: Paper[]) => void;
@@ -52,8 +53,9 @@ function computeRecursiveLayout(
 
   const roomLayout = computeNodeLayout(
     nodeId, roomW, roomH,
-    state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap,
+    state.paperMap, state.expansionMap, state.attentionMap, state.attentionTimestampMap, state.accessMap, state.contentHeightMap,
     state.indexedContentIds,
+    config,
   );
 
   const result = new Map<PaperId, NodeLayoutEntry>();
@@ -104,10 +106,10 @@ function PaperCanvasInner({
     return computeRecursiveLayout(
       rootId,
       { id: rootId, x: 0, y: 0, width: canvasSize.width, height: canvasSize.height },
-      state,
-      config,
-    );
-  }, [rootId, canvasSize, state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap, config]);
+    state,
+    config,
+  );
+  }, [rootId, canvasSize, state.paperMap, state.expansionMap, state.attentionMap, state.attentionTimestampMap, state.accessMap, state.contentHeightMap, state.indexedContentIds, config]);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -116,7 +118,7 @@ function PaperCanvasInner({
     const now = Date.now();
     for (const [parentId, entry] of layoutMap) {
       if (entry.roomLayout.overflowChildCount === 0) continue;
-      const candidates = selectLowImportanceCandidates(stateRef.current, parentId, now);
+      const candidates = selectLowImportanceCandidates(stateRef.current, parentId, now, config);
       if (candidates.length === 0) {
         // Space is constrained but everyone is protected
         const openIds = stateRef.current.expansionMap.get(parentId)?.openChildIds ?? [];
@@ -251,7 +253,7 @@ function PaperCanvasInner({
                   `title: ${focusedPaper.title}`,
                   `allocated: ${focusedDebugEntry.allocatedRect.width}×${focusedDebugEntry.allocatedRect.height} @ (${focusedDebugEntry.allocatedRect.x}, ${focusedDebugEntry.allocatedRect.y})`,
                   `content: ${focusedDebugEntry.roomLayout.contentRect.width}×${focusedDebugEntry.roomLayout.contentRect.height} @ (${focusedDebugEntry.roomLayout.contentRect.x}, ${focusedDebugEntry.roomLayout.contentRect.y}) ${focusedRoomArea > 0 ? `${((focusedContentArea / focusedRoomArea) * 100).toFixed(1)}%` : '0.0%'}`,
-                  `importance: ${Math.round(state.importanceMap.get(state.focusedNodeId ?? '') ?? 0)}`,
+                  `attention: ${Math.round(getEffectiveAttention(state, state.focusedNodeId ?? '', config, Date.now()))}`,
                   `children: ${focusedDebugEntry.roomLayout.childRects.size} open / ${focusedDebugEntry.roomLayout.closedChildIds.length} closed`,
                   ...Array.from(focusedDebugEntry.roomLayout.childRects.entries()).map(([childId, rect]) => {
                     const childArea = rect.width * rect.height;

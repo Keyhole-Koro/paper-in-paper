@@ -3,24 +3,27 @@ export interface PaperNodeConfig {
   borderWidth: number;
 }
 
-export interface ImportanceConfig {
+export interface AttentionConfig {
   initial: number;
   openBonus: number;
   focusBonus: number;
   labelClickBoost: number;
   protectDurationMs: number;
-  commandDecayRate: number;
+  decayHalfLifeMs: number;
+  multiplierMin: number;
+  multiplierMax: number;
+  multiplierCurveK: number;
   autoCloseThreshold: number;
 }
 
 export interface PaperCanvasConfig {
   paperNode: PaperNodeConfig;
-  importance: ImportanceConfig;
+  attention: AttentionConfig;
 }
 
 export interface PaperCanvasConfigInput {
   paperNode?: Partial<PaperNodeConfig>;
-  importance?: Partial<ImportanceConfig>;
+  attention?: Partial<AttentionConfig>;
 }
 
 export const defaultPaperCanvasConfig: PaperCanvasConfig = {
@@ -28,13 +31,16 @@ export const defaultPaperCanvasConfig: PaperCanvasConfig = {
     headerHeight: 37,
     borderWidth: 2,
   },
-  importance: {
+  attention: {
     initial: 100,
     openBonus: 30,
     focusBonus: 20,
     labelClickBoost: 50,
     protectDurationMs: 10_000,
-    commandDecayRate: 0.05,
+    decayHalfLifeMs: 120_000,
+    multiplierMin: 0.35,
+    multiplierMax: 1.75,
+    multiplierCurveK: 0.018,
     autoCloseThreshold: 5,
   },
 };
@@ -47,9 +53,9 @@ export function resolvePaperCanvasConfig(
       ...defaultPaperCanvasConfig.paperNode,
       ...config?.paperNode,
     },
-    importance: {
-      ...defaultPaperCanvasConfig.importance,
-      ...config?.importance,
+    attention: {
+      ...defaultPaperCanvasConfig.attention,
+      ...config?.attention,
     },
   };
 }

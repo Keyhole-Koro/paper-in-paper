@@ -14,9 +14,11 @@ interface PaperHeaderProps {
   title: string;
   tone: PaperTone;
   isFocused: boolean;
+  isPinned: boolean;
+  currentShare?: number;
 }
 
-export function PaperHeader({ nodeId, parentId, title, tone, isFocused }: PaperHeaderProps) {
+export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned, currentShare }: PaperHeaderProps) {
   const { config, dispatch } = usePaperStore();
   const { startDrag } = useDrag();
   const onCreateChild = useCreateChild();
@@ -70,6 +72,16 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused }: PaperH
 
   function stopPointerEvent(e: React.PointerEvent) {
     e.stopPropagation();
+  }
+
+  function handlePinToggle(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (isRoot) return;
+    if (isPinned) {
+      dispatch({ type: 'UNPIN_NODE', nodeId });
+      return;
+    }
+    dispatch({ type: 'PIN_NODE', nodeId, minShare: currentShare });
   }
 
   return (
@@ -130,6 +142,27 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused }: PaperH
             }}
           >
             +
+          </button>
+        )}
+        {!isRoot && (
+          <button
+            type="button"
+            aria-label={isPinned ? 'Unpin node' : 'Pin node'}
+            onPointerDown={stopPointerEvent}
+            onPointerUp={stopPointerEvent}
+            onClick={handlePinToggle}
+            style={{
+              fontSize: 11,
+              color: isPinned ? tone.accent : tone.mutedText,
+              cursor: 'pointer',
+              lineHeight: 1,
+              padding: '0 2px',
+              border: 'none',
+              background: 'transparent',
+              fontWeight: isPinned ? 700 : 400,
+            }}
+          >
+            P
           </button>
         )}
         {!isRoot && (

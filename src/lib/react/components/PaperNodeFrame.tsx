@@ -17,6 +17,7 @@ interface PaperNodeFrameProps {
   tone: PaperTone;
   inheritedColor: PaperColorContext | null;
   overrideCss?: string;
+  currentShare?: number;
   isFocused: boolean;
   isDragTarget: boolean;
   isContentIndexed: boolean;
@@ -33,6 +34,7 @@ export function PaperNodeFrame({
   tone,
   inheritedColor,
   overrideCss,
+  currentShare,
   isFocused,
   isDragTarget,
   isContentIndexed,
@@ -57,7 +59,7 @@ export function PaperNodeFrame({
         boxSizing: 'border-box',
       }}
     >
-      <PaperHeader nodeId={nodeId} parentId={parentId} title={paper.title} tone={tone} isFocused={isFocused} />
+      <PaperHeader nodeId={nodeId} parentId={parentId} title={paper.title} tone={tone} isFocused={isFocused} isPinned={paper.pinnedLayout?.minShare !== undefined} currentShare={currentShare} />
 
       <div
         ref={roomRef}

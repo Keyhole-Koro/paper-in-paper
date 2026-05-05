@@ -19,14 +19,19 @@ export type ContentNode =
 
 export type PaperContent = string | ReactNode | ContentNode[];
 
+export interface PinnedLayout {
+  minShare?: number;
+  pinnedAt?: number;
+}
+
 export interface Paper {
   id: PaperId;
   title: string;
   description: string;
   content: PaperContent;
   hue?: number;
-  importance?: number;
-  contentImportance?: number;
+  attentionScore?: number;
+  pinnedLayout?: PinnedLayout;
   parentId: PaperId | null;
   childIds: PaperId[];
   overrideCss?: string;
@@ -44,7 +49,8 @@ export type UnplacedNodeIds = PaperId[];
 
 export type AccessMap = Map<PaperId, number>;
 
-export type ImportanceMap = Map<PaperId, number>;
+export type AttentionMap = Map<PaperId, number>;
+export type AttentionTimestampMap = Map<PaperId, number>;
 
 export interface GridPosition {
   x: number;
@@ -64,7 +70,8 @@ export interface PaperViewState {
   unplacedNodeIds: PaperId[];
   focusedNodeId: PaperId | null;
   accessMap: AccessMap;
-  importanceMap: ImportanceMap;
+  attentionMap: AttentionMap;
+  attentionTimestampMap: AttentionTimestampMap;
   manualPlacementMap: PlacementMap;
   contentHeightMap: Map<PaperId, number>;
   protectedUntilMap: Map<PaperId, number>;

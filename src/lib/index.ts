@@ -1,8 +1,8 @@
 export { PaperCanvas } from './react/PaperCanvas';
 export type { PaperCanvasProps, PaperCanvasHandle } from './react/PaperCanvas';
-export type { PaperCanvasConfig, PaperCanvasConfigInput, PaperNodeConfig, ImportanceConfig } from './config/paperCanvasConfig';
+export type { PaperCanvasConfig, PaperCanvasConfigInput, PaperNodeConfig, AttentionConfig } from './config/paperCanvasConfig';
 export { defaultPaperCanvasConfig, resolvePaperCanvasConfig } from './config/paperCanvasConfig';
-export type { Paper, PaperContent, PaperId, PaperMap, PaperViewState, ContentNode, ExpansionMap } from './core/types';
+export type { Paper, PaperContent, PaperId, PaperMap, PaperViewState, ContentNode, ExpansionMap, PinnedLayout } from './core/types';
 export { buildPaperMap } from './core/tree';
 export type { RemoveMode } from './core/tree';
 export { createInitialState, reduce } from './core/commands';

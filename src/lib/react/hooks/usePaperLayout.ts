@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
-import type { PaperId, PaperMap, ExpansionMap, ImportanceMap, AccessMap } from '../../core/types';
+import type { PaperId, PaperMap, ExpansionMap, AccessMap, AttentionMap, AttentionTimestampMap } from '../../core/types';
+import type { PaperCanvasConfig } from '../../config/paperCanvasConfig';
 import { usePaperStore } from '../context/PaperStoreContext';
+import { getEffectiveAttention } from '../../core/attention';
 import { getOpenChildIds } from '../../core/expansion';
-import { buildRoomWeightMap, computeRoomLayout, type LayoutRect } from '../../core/layout';
+import { buildRoomDemandMap, computeRoomLayout, getContentDemand, type LayoutRect } from '../../core/layout';
 
 export interface RoomLayout {
   contentRect: LayoutRect;
@@ -13,12 +15,10 @@ export interface RoomLayout {
 
 const DEFAULT_MIN_AR = 0.25;
 const DEFAULT_MAX_AR = 2.0;
-// importanceMap に値がない場合の contentWeight フォールバック
-const CONTENT_WEIGHT_FALLBACK = 100;
 const CONTENT_ID = '__content__';
 const SHRINK_STEP = 0.84;
 const MAX_SHRINK_PASSES = 24;
-const ROOM_MIN_WEIGHT = 18;
+const ROOM_MIN_WEIGHT = 1;
 
 function roomNeedsShrink(rects: LayoutRect[], minAR: number, maxAR: number) {
   return rects.some((rect) => {
@@ -28,18 +28,71 @@ function roomNeedsShrink(rects: LayoutRect[], minAR: number, maxAR: number) {
   });
 }
 
+interface ShareInput {
+  id: string;
+  demand: number;
+  minShare: number;
+}
+
+function normalizeShares(items: ShareInput[]): Map<string, number> {
+  if (items.length === 0) return new Map();
+
+  const demandTotal = items.reduce((sum, item) => sum + Math.max(0, item.demand), 0);
+  const rawShares = new Map<string, number>(
+    items.map((item) => [item.id, demandTotal > 0 ? Math.max(0, item.demand) / demandTotal : 1 / items.length]),
+  );
+
+  const mandatoryTotal = items.reduce((sum, item) => sum + Math.max(0, item.minShare), 0);
+  if (mandatoryTotal >= 1) {
+    const result = new Map<string, number>();
+    for (const item of items) {
+      result.set(item.id, Math.max(0, item.minShare) / mandatoryTotal);
+    }
+    return result;
+  }
+
+  const available = 1 - mandatoryTotal;
+  const extraBasis = new Map<string, number>();
+  let extraTotal = 0;
+  for (const item of items) {
+    const raw = rawShares.get(item.id) ?? 0;
+    const basis = item.minShare > 0 ? Math.max(0, raw - item.minShare) : raw;
+    extraBasis.set(item.id, basis);
+    extraTotal += basis;
+  }
+
+  if (extraTotal <= 0) {
+    for (const item of items) {
+      extraBasis.set(item.id, rawShares.get(item.id) ?? 0);
+    }
+    extraTotal = Array.from(extraBasis.values()).reduce((sum, value) => sum + value, 0);
+  }
+
+  const result = new Map<string, number>();
+  for (const item of items) {
+    const mandatory = Math.max(0, item.minShare);
+    const basis = extraBasis.get(item.id) ?? 0;
+    const extra = extraTotal > 0 ? available * (basis / extraTotal) : available / items.length;
+    result.set(item.id, mandatory + extra);
+  }
+  return result;
+}
+
 export function computeNodeLayout(
   nodeId: PaperId,
   containerWidth: number,
   containerHeight: number,
   paperMap: PaperMap,
   expansionMap: ExpansionMap,
-  importanceMap: ImportanceMap,
+  attentionMap: AttentionMap,
+  attentionTimestampMap: AttentionTimestampMap,
   accessMap: AccessMap,
-  _contentHeightMap: Map<PaperId, number>,
+  contentHeightMap: Map<PaperId, number>,
   indexedContentIds: Set<PaperId> = new Set(),
+  config: PaperCanvasConfig,
   minAR = DEFAULT_MIN_AR,
   maxAR = DEFAULT_MAX_AR,
+  nowMs = Date.now(),
 ): RoomLayout {
   const w = Math.max(0, containerWidth);
   const h = Math.max(0, containerHeight);
@@ -51,75 +104,87 @@ export function computeNodeLayout(
     return { contentRect: zeroContent, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 };
   }
 
-  const allOpenChildIds = getOpenChildIds(expansionMap, nodeId);
-  const openChildIds = allOpenChildIds;
-  const openSet = new Set(allOpenChildIds);
+  const openChildIds = getOpenChildIds(expansionMap, nodeId);
+  const openSet = new Set(openChildIds);
   const closedChildIds = parent.childIds.filter((id) => !openSet.has(id));
 
   if (w === 0 || h === 0 || openChildIds.length === 0) {
     return { contentRect: fullContent, childRects: new Map(), closedChildIds, overflowChildCount: 0 };
   }
 
-  // content の weight = このノード自身の rawImportance
-  // importance が decay するほど content が縮み、子により多くの room を譲る
-  // indexedContentIds に含まれる場合は weight 0 (非表示) にする
-  const contentWeight = indexedContentIds.has(nodeId)
-    ? 0
-    : (importanceMap.get(nodeId) ?? CONTENT_WEIGHT_FALLBACK);
+  const fallbackIntrinsicHeight = config.paperNode.headerHeight * 3;
+  const demandContext = {
+    paperMap,
+    expansionMap,
+    attentionMap,
+    attentionTimestampMap,
+    contentHeightMap,
+    indexedContentIds,
+    config,
+    fallbackIntrinsicHeight,
+    nowMs,
+  };
 
-  // sibling 間の room 配分 = rawImportance + Σ 子孫の roomWeight（subtree 全量加算）
-  const roomWeightMap = buildRoomWeightMap(nodeId, expansionMap, importanceMap);
+  const contentDemand = getContentDemand(nodeId, demandContext);
+  const roomDemandMap = buildRoomDemandMap(nodeId, demandContext);
+  const childDemands = new Map(openChildIds.map((id) => [id, Math.max(roomDemandMap.get(id) ?? 0, ROOM_MIN_WEIGHT)]));
 
   const roomPriority = [...openChildIds].sort((a, b) => {
-    const ra = roomWeightMap.get(a) ?? 0;
-    const rb = roomWeightMap.get(b) ?? 0;
+    const ra = getEffectiveAttention({ attentionMap, attentionTimestampMap }, a, config, nowMs);
+    const rb = getEffectiveAttention({ attentionMap, attentionTimestampMap }, b, config, nowMs);
     if (ra !== rb) return ra - rb;
     const ta = accessMap.get(a) ?? 0;
     const tb = accessMap.get(b) ?? 0;
     return ta - tb;
   });
 
-  const roomWeights = new Map(openChildIds.map((id) => [
-    id,
-    Math.max(roomWeightMap.get(id) ?? 0, 1),
-  ]));
-
-  let rects = computeRoomLayout(
-    [
-      { id: CONTENT_ID, weight: contentWeight },
-      ...openChildIds.map((id) => ({ id, weight: roomWeights.get(id) ?? 1 })),
-    ],
-    w, h, minAR, maxAR,
-  ).rects;
-
-  let pass = 0;
-  if (roomNeedsShrink(rects, minAR, maxAR)) {
-    console.log(`[usePaperLayout] shrinking room for ${nodeId} (w:${w}, h:${h})`);
+  function buildRects() {
+    const shareItems: ShareInput[] = [
+      { id: CONTENT_ID, demand: Math.max(0, contentDemand), minShare: 0 },
+      ...openChildIds.map((id) => {
+        const child = paperMap.get(id);
+        return {
+          id,
+          demand: childDemands.get(id) ?? ROOM_MIN_WEIGHT,
+          minShare: Math.max(0, child?.pinnedLayout?.minShare ?? 0),
+        };
+      }),
+    ];
+    const shares = normalizeShares(shareItems);
+    return computeRoomLayout(
+      shareItems.map((item) => ({
+        id: item.id,
+        weight: Math.max(shares.get(item.id) ?? 0, 0),
+      })),
+      w,
+      h,
+      minAR,
+      maxAR,
+    ).rects;
   }
+
+  let rects = buildRects();
+  let pass = 0;
+
   while (roomNeedsShrink(rects, minAR, maxAR) && pass < MAX_SHRINK_PASSES) {
     let changed = false;
     for (const childId of roomPriority) {
-      const current = roomWeights.get(childId) ?? 1;
+      const child = paperMap.get(childId);
+      if (child?.pinnedLayout?.minShare !== undefined) continue;
+      const current = childDemands.get(childId) ?? ROOM_MIN_WEIGHT;
       if (current <= ROOM_MIN_WEIGHT) continue;
       const next = Math.max(ROOM_MIN_WEIGHT, current * SHRINK_STEP);
       if (next < current) {
-        roomWeights.set(childId, next);
+        childDemands.set(childId, next);
         changed = true;
       }
     }
     if (!changed) break;
-    rects = computeRoomLayout(
-      [
-        { id: CONTENT_ID, weight: contentWeight },
-        ...openChildIds.map((id) => ({ id, weight: roomWeights.get(id) ?? 1 })),
-      ],
-      w, h, minAR, maxAR,
-    ).rects;
+    rects = buildRects();
     pass += 1;
   }
 
   const overflowChildCount = roomNeedsShrink(rects, minAR, maxAR) ? 1 : 0;
-
   const contentRect = rects.find((r) => r.id === CONTENT_ID) ?? zeroContent;
   const childRects = new Map<PaperId, LayoutRect>(
     rects.filter((r) => r.id !== CONTENT_ID).map((r) => [r.id, r]),
@@ -135,13 +200,38 @@ export function usePaperLayout(
   minAR = DEFAULT_MIN_AR,
   maxAR = DEFAULT_MAX_AR,
 ): RoomLayout {
-  const { state } = usePaperStore();
+  const { state, config } = usePaperStore();
 
   return useMemo(() => {
     return computeNodeLayout(
-      nodeId, containerWidth, containerHeight,
-      state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap,
-      state.indexedContentIds, minAR, maxAR,
+      nodeId,
+      containerWidth,
+      containerHeight,
+      state.paperMap,
+      state.expansionMap,
+      state.attentionMap,
+      state.attentionTimestampMap,
+      state.accessMap,
+      state.contentHeightMap,
+      state.indexedContentIds,
+      config,
+      minAR,
+      maxAR,
     );
-  }, [nodeId, containerWidth, containerHeight, minAR, maxAR, state.expansionMap, state.importanceMap, state.paperMap, state.contentHeightMap, state.accessMap, state.indexedContentIds]);
+  }, [
+    nodeId,
+    containerWidth,
+    containerHeight,
+    minAR,
+    maxAR,
+    state.expansionMap,
+    state.attentionMap,
+    state.attentionTimestampMap,
+    state.paperMap,
+    state.contentHeightMap,
+    state.accessMap,
+    state.indexedContentIds,
+    config,
+  ]);
 }
+

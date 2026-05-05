@@ -1,43 +1,7 @@
-import type { ImportanceMap, PaperId, ExpansionMap } from './types';
+import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
+import { getAttentionMultiplier, getEffectiveAttention } from './attention';
 import { getOpenChildIds } from './expansion';
-
-// --- Room weight ---
-
-function computeRoomWeight(
-  nodeId: PaperId,
-  expansionMap: ExpansionMap,
-  importanceMap: ImportanceMap,
-  resultMap: Map<PaperId, number>,
-): number {
-  const cached = resultMap.get(nodeId);
-  if (cached !== undefined) return cached;
-
-  const self = importanceMap.get(nodeId) ?? 0;
-  const openChildIds = getOpenChildIds(expansionMap, nodeId);
-
-  const childSum = openChildIds.reduce((sum, childId) => {
-    return sum + computeRoomWeight(childId, expansionMap, importanceMap, resultMap);
-  }, 0);
-
-  const total = self + childSum;
-  resultMap.set(nodeId, total);
-  return total;
-}
-
-export function buildRoomWeightMap(
-  parentId: PaperId,
-  expansionMap: ExpansionMap,
-  importanceMap: ImportanceMap,
-): Map<PaperId, number> {
-  const resultMap = new Map<PaperId, number>();
-  const openChildIds = getOpenChildIds(expansionMap, parentId);
-  for (const childId of openChildIds) {
-    computeRoomWeight(childId, expansionMap, importanceMap, resultMap);
-  }
-  return resultMap;
-}
-
-// --- Room layout ---
+import type { PaperId, PaperMap, ExpansionMap, PaperViewState } from './types';
 
 export interface LayoutItem {
   id: string;
@@ -54,6 +18,79 @@ export interface LayoutRect {
 
 export interface RoomLayoutResult {
   rects: LayoutRect[];
+}
+
+interface RoomDemandContext {
+  paperMap: PaperMap;
+  expansionMap: ExpansionMap;
+  attentionMap: PaperViewState['attentionMap'];
+  attentionTimestampMap: PaperViewState['attentionTimestampMap'];
+  contentHeightMap: PaperViewState['contentHeightMap'];
+  indexedContentIds: Set<PaperId>;
+  config: PaperCanvasConfig;
+  fallbackIntrinsicHeight: number;
+  nowMs: number;
+}
+
+export function getIntrinsicContentDemand(
+  nodeId: PaperId,
+  contentHeightMap: PaperViewState['contentHeightMap'],
+  fallbackIntrinsicHeight: number,
+): number {
+  return Math.max(contentHeightMap.get(nodeId) ?? 0, fallbackIntrinsicHeight);
+}
+
+export function getContentDemand(
+  nodeId: PaperId,
+  context: RoomDemandContext,
+): number {
+  if (context.indexedContentIds.has(nodeId)) return 0;
+  const intrinsic = getIntrinsicContentDemand(
+    nodeId,
+    context.contentHeightMap,
+    context.fallbackIntrinsicHeight,
+  );
+  const attention = getEffectiveAttention(
+    {
+      attentionMap: context.attentionMap,
+      attentionTimestampMap: context.attentionTimestampMap,
+    },
+    nodeId,
+    context.config,
+    context.nowMs,
+  );
+  return intrinsic * getAttentionMultiplier(attention, context.config);
+}
+
+function computeRoomDemand(
+  nodeId: PaperId,
+  context: RoomDemandContext,
+  resultMap: Map<PaperId, number>,
+): number {
+  const cached = resultMap.get(nodeId);
+  if (cached !== undefined) return cached;
+
+  const self = getContentDemand(nodeId, context);
+  const openChildIds = getOpenChildIds(context.expansionMap, nodeId);
+  const childSum = openChildIds.reduce((sum, childId) => {
+    return sum + computeRoomDemand(childId, context, resultMap);
+  }, 0);
+
+  const total = self + childSum;
+  resultMap.set(nodeId, total);
+  return total;
+}
+
+export function buildRoomDemandMap(
+  parentId: PaperId,
+  context: RoomDemandContext,
+): Map<PaperId, number> {
+  const resultMap = new Map<PaperId, number>();
+  const openChildIds = getOpenChildIds(context.expansionMap, parentId);
+  for (const childId of openChildIds) {
+    computeRoomDemand(childId, context, resultMap);
+  }
+  return resultMap;
 }
 
 function worstAspectRatio(
@@ -92,6 +129,9 @@ export function computeRoomLayout(
   const h = useColumns ? containerWidth : containerHeight;
 
   const totalWeight = items.reduce((s, i) => s + i.weight, 0);
+  if (totalWeight <= 0) {
+    return { rects: [] };
+  }
 
   const rows: LayoutItem[][] = [];
   let currentRow: LayoutItem[] = [];
@@ -144,3 +184,4 @@ export function computeRoomLayout(
   }
   return { rects };
 }
+

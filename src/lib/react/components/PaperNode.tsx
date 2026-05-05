@@ -12,6 +12,7 @@ import {
   type PaperColorContext,
 } from '../internal/paperColors';
 import { PaperNodeFrame } from './PaperNodeFrame';
+import { getEffectiveAttention } from '../../core/attention';
 
 const FALLBACK_LAYOUT: RoomLayout = {
   contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 },
@@ -49,6 +50,15 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
   const isFocused = state.focusedNodeId === nodeId;
   const isDragTarget = session !== null && insertTarget?.parentId === nodeId;
   const isContentIndexed = state.indexedContentIds.has(nodeId);
+  const parentEntry = parentId ? layoutMap.get(parentId) : undefined;
+  const currentRect = parentEntry?.roomLayout.childRects.get(nodeId);
+  const parentRoomArea = parentEntry
+    ? Math.max(0, parentEntry.allocatedRect.width - config.paperNode.borderWidth) *
+      Math.max(0, parentEntry.allocatedRect.height - config.paperNode.headerHeight - config.paperNode.borderWidth)
+    : 0;
+  const currentShare = currentRect && parentRoomArea > 0
+    ? (currentRect.width * currentRect.height) / parentRoomArea
+    : undefined;
   const view = derivePaperNodeViewModel({
     nodeId,
     entry,
@@ -70,7 +80,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
       })()
     : null;
   const debugBadge = debug
-    ? `${nodeId} • imp ${Math.round(state.importanceMap.get(nodeId) ?? 0)} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} • ${view.interactionMode}${isContentIndexed ? ' • indexed-content' : ''}`
+    ? `${nodeId} • att ${Math.round(getEffectiveAttention(state, nodeId, config, Date.now()))} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} • ${view.interactionMode}${isContentIndexed ? ' • indexed-content' : ''}${paper.pinnedLayout?.minShare !== undefined ? ' • pinned' : ''}`
     : null;
 
   return (
@@ -82,6 +92,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
       tone={tone}
       inheritedColor={color}
       overrideCss={overrideCss}
+      currentShare={currentShare}
       isFocused={isFocusedView}
       isDragTarget={isDragTargetView}
       isContentIndexed={isContentIndexed}
