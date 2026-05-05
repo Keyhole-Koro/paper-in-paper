@@ -60,6 +60,7 @@ export function PaperContentFrame({ nodeId, content, theme, overrideCss }: Paper
   const { dispatch, state } = usePaperStore();
   const { startDrag, isDragging } = useDrag();
   const [height, setHeight] = useState(60);
+  const lastHeightRef = useRef(60);
   const isStructured = Array.isArray(content);
   const isHtmlString = typeof content === 'string';
 
@@ -76,6 +77,8 @@ export function PaperContentFrame({ nodeId, content, theme, overrideCss }: Paper
         dispatch({ type: 'OPEN_NODE', parentId: nodeId, childId: event.paperId });
         dispatch({ type: 'FOCUS_NODE', nodeId: event.paperId });
       } else if (event.type === 'resize') {
+        if (Math.abs(lastHeightRef.current - event.height) < 8) return;
+        lastHeightRef.current = event.height;
         setHeight(event.height);
         dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: event.height });
       } else if (event.type === 'dragstart') {
@@ -155,18 +158,28 @@ function PaperContentStructured({ nodeId, nodes, theme, onOpen }: PaperContentSt
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    let raf = 0;
     function reportHeight() {
       const nextEl = containerRef.current;
       if (!nextEl) return;
       const nextHeight = nextEl.scrollHeight;
-      if (lastHeightRef.current === nextHeight) return;
+      if (lastHeightRef.current !== null && Math.abs(lastHeightRef.current - nextHeight) < 8) return;
       lastHeightRef.current = nextHeight;
       dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: nextHeight });
     }
-    const observer = new ResizeObserver(reportHeight);
+    const observer = new ResizeObserver(() => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        reportHeight();
+      });
+    });
     observer.observe(el);
     reportHeight();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [dispatch, nodeId]);
 
   return (
@@ -192,20 +205,30 @@ function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    let raf = 0;
 
     function reportHeight() {
       const nextEl = containerRef.current;
       if (!nextEl) return;
       const nextHeight = nextEl.scrollHeight;
-      if (lastHeightRef.current === nextHeight) return;
+      if (lastHeightRef.current !== null && Math.abs(lastHeightRef.current - nextHeight) < 8) return;
       lastHeightRef.current = nextHeight;
       dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: nextHeight });
     }
 
-    const observer = new ResizeObserver(reportHeight);
+    const observer = new ResizeObserver(() => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        reportHeight();
+      });
+    });
     observer.observe(el);
     reportHeight();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [dispatch, nodeId, content]);
 
   const handlePaperOpen = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {

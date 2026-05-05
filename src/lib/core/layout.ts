@@ -32,6 +32,12 @@ interface RoomDemandContext {
   nowMs: number;
 }
 
+export interface DemandSnapshot {
+  contentDemandMap: Map<PaperId, number>;
+  roomDemandMap: Map<PaperId, number>;
+  effectiveAttentionMap: Map<PaperId, number>;
+}
+
 export function getIntrinsicContentDemand(
   nodeId: PaperId,
   contentHeightMap: PaperViewState['contentHeightMap'],
@@ -62,22 +68,59 @@ export function getContentDemand(
   return intrinsic * getAttentionMultiplier(attention, context.config);
 }
 
+function getCachedContentDemand(
+  nodeId: PaperId,
+  context: RoomDemandContext,
+  contentDemandMap: Map<PaperId, number>,
+  effectiveAttentionMap: Map<PaperId, number>,
+): number {
+  const cached = contentDemandMap.get(nodeId);
+  if (cached !== undefined) return cached;
+  if (context.indexedContentIds.has(nodeId)) {
+    contentDemandMap.set(nodeId, 0);
+    return 0;
+  }
+  const intrinsic = getIntrinsicContentDemand(
+    nodeId,
+    context.contentHeightMap,
+    context.fallbackIntrinsicHeight,
+  );
+  let attention = effectiveAttentionMap.get(nodeId);
+  if (attention === undefined) {
+    attention = getEffectiveAttention(
+      {
+        attentionMap: context.attentionMap,
+        attentionTimestampMap: context.attentionTimestampMap,
+      },
+      nodeId,
+      context.config,
+      context.nowMs,
+    );
+    effectiveAttentionMap.set(nodeId, attention);
+  }
+  const demand = intrinsic * getAttentionMultiplier(attention, context.config);
+  contentDemandMap.set(nodeId, demand);
+  return demand;
+}
+
 function computeRoomDemand(
   nodeId: PaperId,
   context: RoomDemandContext,
-  resultMap: Map<PaperId, number>,
+  contentDemandMap: Map<PaperId, number>,
+  roomDemandMap: Map<PaperId, number>,
+  effectiveAttentionMap: Map<PaperId, number>,
 ): number {
-  const cached = resultMap.get(nodeId);
+  const cached = roomDemandMap.get(nodeId);
   if (cached !== undefined) return cached;
 
-  const self = getContentDemand(nodeId, context);
+  const self = getCachedContentDemand(nodeId, context, contentDemandMap, effectiveAttentionMap);
   const openChildIds = getOpenChildIds(context.expansionMap, nodeId);
   const childSum = openChildIds.reduce((sum, childId) => {
-    return sum + computeRoomDemand(childId, context, resultMap);
+    return sum + computeRoomDemand(childId, context, contentDemandMap, roomDemandMap, effectiveAttentionMap);
   }, 0);
 
   const total = self + childSum;
-  resultMap.set(nodeId, total);
+  roomDemandMap.set(nodeId, total);
   return total;
 }
 
@@ -85,12 +128,47 @@ export function buildRoomDemandMap(
   parentId: PaperId,
   context: RoomDemandContext,
 ): Map<PaperId, number> {
+  const { roomDemandMap } = buildDemandSnapshot(parentId, context);
   const resultMap = new Map<PaperId, number>();
   const openChildIds = getOpenChildIds(context.expansionMap, parentId);
   for (const childId of openChildIds) {
-    computeRoomDemand(childId, context, resultMap);
+    const value = roomDemandMap.get(childId);
+    if (value !== undefined) resultMap.set(childId, value);
   }
   return resultMap;
+}
+
+export function buildDemandSnapshot(
+  rootId: PaperId,
+  context: RoomDemandContext,
+): DemandSnapshot {
+  const contentDemandMap = new Map<PaperId, number>();
+  const roomDemandMap = new Map<PaperId, number>();
+  const effectiveAttentionMap = new Map<PaperId, number>();
+
+  computeRoomDemand(rootId, context, contentDemandMap, roomDemandMap, effectiveAttentionMap);
+
+  return { contentDemandMap, roomDemandMap, effectiveAttentionMap };
+}
+
+export function createDemandContext(
+  context: RoomDemandContext,
+): RoomDemandContext {
+  return context;
+}
+
+export function pickChildRoomDemandMap(
+  parentId: PaperId,
+  expansionMap: ExpansionMap,
+  roomDemandMap: Map<PaperId, number>,
+): Map<PaperId, number> {
+  const openChildIds = getOpenChildIds(expansionMap, parentId);
+  const result = new Map<PaperId, number>();
+  for (const childId of openChildIds) {
+    const value = roomDemandMap.get(childId);
+    if (value !== undefined) result.set(childId, value);
+  }
+  return result;
 }
 
 function worstAspectRatio(
@@ -184,4 +262,3 @@ export function computeRoomLayout(
   }
   return { rects };
 }
-

@@ -52,9 +52,13 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
   const isContentIndexed = state.indexedContentIds.has(nodeId);
   const parentEntry = parentId ? layoutMap.get(parentId) : undefined;
   const currentRect = parentEntry?.roomLayout.childRects.get(nodeId);
+  const parentHeaderHeight =
+    parentId && state.indexedContentIds.has(parentId)
+      ? 0
+      : config.paperNode.headerHeight;
   const parentRoomArea = parentEntry
     ? Math.max(0, parentEntry.allocatedRect.width - config.paperNode.borderWidth) *
-      Math.max(0, parentEntry.allocatedRect.height - config.paperNode.headerHeight - config.paperNode.borderWidth)
+      Math.max(0, parentEntry.allocatedRect.height - parentHeaderHeight - config.paperNode.borderWidth)
     : 0;
   const currentShare = currentRect && parentRoomArea > 0
     ? (currentRect.width * currentRect.height) / parentRoomArea

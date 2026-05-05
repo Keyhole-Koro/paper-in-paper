@@ -40,7 +40,8 @@ export function derivePaperNodeViewModel({
   config: PaperNodeConfig;
 }): PaperNodeViewModel {
   const roomWidth = Math.max(0, (entry?.allocatedRect.width ?? 0) - config.borderWidth);
-  const roomHeight = Math.max(0, (entry?.allocatedRect.height ?? 0) - config.headerHeight - config.borderWidth);
+  const headerHeight = isContentIndexed ? 0 : config.headerHeight;
+  const roomHeight = Math.max(0, (entry?.allocatedRect.height ?? 0) - headerHeight - config.borderWidth);
   const interactionMode = derivePaperInteractionMode({ isFocused, isDragTarget });
 
   return {

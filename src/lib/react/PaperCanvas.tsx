@@ -16,9 +16,11 @@ import { FloatingLayer } from './components/FloatingLayer';
 import { useRoomSize } from './hooks/useRoomSize';
 import { useDebug } from './context/DebugContext';
 import { computeNodeLayout } from './hooks/usePaperLayout';
-import type { LayoutRect } from '../core/layout';
+import { buildDemandSnapshot, createDemandContext, type DemandSnapshot, type LayoutRect } from '../core/layout';
 import { selectLowImportanceCandidates } from '../core/candidates';
 import { getEffectiveAttention } from '../core/attention';
+import { IndexLabel } from './components/IndexLabel';
+import { buildPackedLeftIndexLabels } from './internal/indexLabels';
 
 export interface PaperCanvasHandle {
   upsertPapers: (papers: Paper[]) => void;
@@ -47,15 +49,22 @@ function computeRecursiveLayout(
   allocatedRect: LayoutRect,
   state: PaperViewState,
   config: PaperCanvasConfig,
+  nowMs: number,
+  demandSnapshot: DemandSnapshot,
 ): Map<PaperId, NodeLayoutEntry> {
+  const headerHeight = state.indexedContentIds.has(nodeId) ? 0 : config.paperNode.headerHeight;
   const roomW = Math.max(0, allocatedRect.width - config.paperNode.borderWidth);
-  const roomH = Math.max(0, allocatedRect.height - config.paperNode.headerHeight - config.paperNode.borderWidth);
+  const roomH = Math.max(0, allocatedRect.height - headerHeight - config.paperNode.borderWidth);
 
   const roomLayout = computeNodeLayout(
     nodeId, roomW, roomH,
     state.paperMap, state.expansionMap, state.attentionMap, state.attentionTimestampMap, state.accessMap, state.contentHeightMap,
     state.indexedContentIds,
     config,
+    undefined,
+    undefined,
+    nowMs,
+    demandSnapshot,
   );
 
   const result = new Map<PaperId, NodeLayoutEntry>();
@@ -68,11 +77,11 @@ function computeRecursiveLayout(
     const childAllocated: LayoutRect = {
       id: childId,
       x: allocatedRect.x + childRect.x,
-      y: allocatedRect.y + config.paperNode.headerHeight + childRect.y,
+      y: allocatedRect.y + headerHeight + childRect.y,
       width: Math.max(0, childRect.width - borderLeft),
       height: Math.max(0, childRect.height - borderTop),
     };
-    const childLayouts = computeRecursiveLayout(childId, childAllocated, state, config);
+    const childLayouts = computeRecursiveLayout(childId, childAllocated, state, config, nowMs, demandSnapshot);
     for (const [id, entry] of childLayouts) {
       result.set(id, entry);
     }
@@ -103,16 +112,41 @@ function PaperCanvasInner({
 
   const layoutMap = useMemo(() => {
     if (canvasSize.width === 0 || canvasSize.height === 0) return new Map<PaperId, NodeLayoutEntry>();
+    const nowMs = Date.now();
+    const demandContext = createDemandContext({
+      paperMap: state.paperMap,
+      expansionMap: state.expansionMap,
+      attentionMap: state.attentionMap,
+      attentionTimestampMap: state.attentionTimestampMap,
+      contentHeightMap: state.contentHeightMap,
+      indexedContentIds: state.indexedContentIds,
+      config,
+      fallbackIntrinsicHeight: config.paperNode.headerHeight * 3,
+      nowMs,
+    });
+    const demandSnapshot = buildDemandSnapshot(rootId, demandContext);
     return computeRecursiveLayout(
       rootId,
       { id: rootId, x: 0, y: 0, width: canvasSize.width, height: canvasSize.height },
-    state,
-    config,
-  );
+      state,
+      config,
+      nowMs,
+      demandSnapshot,
+    );
   }, [rootId, canvasSize, state.paperMap, state.expansionMap, state.attentionMap, state.attentionTimestampMap, state.accessMap, state.contentHeightMap, state.indexedContentIds, config]);
 
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  const indexLabels = useMemo(() => {
+    if (canvasSize.height === 0 || layoutMap.size === 0) return [];
+    return buildPackedLeftIndexLabels(
+      state.indexedContentIds,
+      layoutMap,
+      state.paperMap,
+      canvasSize.height,
+    );
+  }, [canvasSize.height, layoutMap, state.indexedContentIds, state.paperMap]);
 
   useEffect(() => {
     const now = Date.now();
@@ -153,7 +187,8 @@ function PaperCanvasInner({
     const lines: string[] = [`canvas: ${canvasSize.width}×${canvasSize.height}`, ''];
     for (const [id, entry] of layoutMap) {
       const { allocatedRect: a, roomLayout: r } = entry;
-      const roomArea = Math.max(0, a.width - config.paperNode.borderWidth) * Math.max(0, a.height - config.paperNode.headerHeight - config.paperNode.borderWidth);
+      const headerHeight = state.indexedContentIds.has(id) ? 0 : config.paperNode.headerHeight;
+      const roomArea = Math.max(0, a.width - config.paperNode.borderWidth) * Math.max(0, a.height - headerHeight - config.paperNode.borderWidth);
       const contentArea = r.contentRect.width * r.contentRect.height;
       lines.push(`[${id}]`);
       lines.push(`  allocated: ${a.width}×${a.height} @ (${a.x}, ${a.y})`);
@@ -170,11 +205,15 @@ function PaperCanvasInner({
 
   const focusedDebugEntry = state.focusedNodeId ? layoutMap.get(state.focusedNodeId) : undefined;
   const focusedPaper = state.focusedNodeId ? state.paperMap.get(state.focusedNodeId) : undefined;
+  const focusedHeaderHeight =
+    focusedPaper && state.indexedContentIds.has(focusedPaper.id)
+      ? 0
+      : config.paperNode.headerHeight;
   const focusedRoomArea =
     focusedDebugEntry == null
       ? 0
       : Math.max(0, focusedDebugEntry.allocatedRect.width - config.paperNode.borderWidth) *
-        Math.max(0, focusedDebugEntry.allocatedRect.height - config.paperNode.headerHeight - config.paperNode.borderWidth);
+        Math.max(0, focusedDebugEntry.allocatedRect.height - focusedHeaderHeight - config.paperNode.borderWidth);
   const focusedContentArea =
     focusedDebugEntry == null
       ? 0
@@ -192,11 +231,25 @@ function PaperCanvasInner({
     }
   }
 
+  function handleIndexLabelClick(nodeId: PaperId) {
+    dispatch({ type: 'UNINDEX_CONTENT', nodeId });
+    dispatch({ type: 'FOCUS_NODE', nodeId });
+  }
+
   return (
     <DragProvider onDrop={handleDrop}>
       <LayoutContextProvider layoutMap={layoutMap}>
         <div ref={canvasRef} style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
           <PaperNode nodeId={rootId} parentId={null} overrideCss={overrideCss} />
+          {indexLabels.map((node) => (
+            <IndexLabel
+              key={node.id}
+              node={node}
+              canvasWidth={canvasSize.width}
+              canvasHeight={canvasSize.height}
+              onClick={handleIndexLabelClick}
+            />
+          ))}
         </div>
         <FloatingLayer />
         {debug && createPortal(

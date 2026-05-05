@@ -7,8 +7,6 @@ import { PaperContentFrame } from './PaperContentFrame';
 import { PaperHeader } from './PaperHeader';
 import { PaperNode } from './PaperNode';
 
-const SPRING = { type: 'spring' as const, stiffness: 300, damping: 30, mass: 0.8 };
-
 interface PaperNodeFrameProps {
   nodeId: PaperId;
   parentId: PaperId | null;
@@ -25,6 +23,8 @@ interface PaperNodeFrameProps {
   roomRef: RefObject<HTMLDivElement | null>;
   insertBeforeRect?: { x: number; y: number; height: number } | null;
 }
+
+const POSITION_TRANSITION = { type: 'spring' as const, stiffness: 260, damping: 32, mass: 0.7 };
 
 export function PaperNodeFrame({
   nodeId,
@@ -59,7 +59,17 @@ export function PaperNodeFrame({
         boxSizing: 'border-box',
       }}
     >
-      <PaperHeader nodeId={nodeId} parentId={parentId} title={paper.title} tone={tone} isFocused={isFocused} isPinned={paper.pinnedLayout?.minShare !== undefined} currentShare={currentShare} />
+      {!isContentIndexed && (
+        <PaperHeader
+          nodeId={nodeId}
+          parentId={parentId}
+          title={paper.title}
+          tone={tone}
+          isFocused={isFocused}
+          isPinned={paper.pinnedLayout?.minShare !== undefined}
+          currentShare={currentShare}
+        />
+      )}
 
       <div
         ref={roomRef}
@@ -76,15 +86,14 @@ export function PaperNodeFrame({
           animate={{
             x: layout.contentRect.x,
             y: layout.contentRect.y,
-            width: layout.contentRect.width,
-            height: layout.contentRect.height,
-            opacity: isContentIndexed ? 0 : 1,
           }}
-          transition={SPRING}
+          transition={POSITION_TRANSITION}
           style={{
             position: 'absolute',
             left: 0,
             top: 0,
+            width: layout.contentRect.width,
+            height: layout.contentRect.height,
             overflow: 'auto',
             borderRight: layout.childRects.size > 0 && !isContentIndexed ? `1px solid ${tone.divider}` : 'none',
             boxSizing: 'border-box',
@@ -121,14 +130,16 @@ export function PaperNodeFrame({
             <motion.div
               key={childId}
               data-child-id={childId}
-              initial={{ opacity: 0, scale: 0.95, x: rect.x, y: rect.y, width: rect.width, height: rect.height }}
-              animate={{ opacity: 1, scale: 1, x: rect.x, y: rect.y, width: rect.width, height: rect.height }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={SPRING}
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ x: rect.x, y: rect.y, opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.985 }}
+              transition={POSITION_TRANSITION}
               style={{
                 position: 'absolute',
                 left: 0,
                 top: 0,
+                width: rect.width,
+                height: rect.height,
                 overflow: 'hidden',
                 borderLeft: `1px solid ${tone.divider}`,
                 borderTop: rect.y > 0 ? `1px solid ${tone.divider}` : 'none',

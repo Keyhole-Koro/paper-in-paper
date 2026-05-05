@@ -7,6 +7,7 @@ import { buildPaperMap } from './tree';
 import { computeNodeLayout } from '../react/hooks/usePaperLayout';
 import { selectLowImportanceCandidates } from './candidates';
 import type { Paper } from './types';
+import { buildPackedLeftIndexLabels } from '../react/internal/indexLabels';
 
 function buildState(papers: Paper[]) {
   return createInitialState(buildPaperMap(papers), defaultPaperCanvasConfig);
@@ -98,6 +99,78 @@ describe('attention and layout', () => {
     expect(roomDemandMap.get('a')).toBeCloseTo(getContentDemand('b', context), 5);
   });
 
+  it('collapses indexed content rect to zero while preserving child layout', () => {
+    const state = buildState([
+      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a'] },
+      { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: ['b'], attentionScore: 100 },
+      { id: 'b', title: 'b', description: '', content: '', parentId: 'a', childIds: [], attentionScore: 80 },
+    ]);
+    state.expansionMap.set('root', { openChildIds: ['a'] });
+    state.expansionMap.set('a', { openChildIds: ['b'] });
+    state.indexedContentIds.add('a');
+    state.contentHeightMap.set('a', 500);
+    state.contentHeightMap.set('b', 240);
+
+    const layout = computeNodeLayout(
+      'a',
+      900,
+      700,
+      state.paperMap,
+      state.expansionMap,
+      state.attentionMap,
+      state.attentionTimestampMap,
+      state.accessMap,
+      state.contentHeightMap,
+      state.indexedContentIds,
+      defaultPaperCanvasConfig,
+      0.25,
+      2,
+      1_000,
+    );
+
+    expect(layout.contentRect.width).toBe(0);
+    expect(layout.contentRect.height).toBe(0);
+    expect(layout.childRects.has('b')).toBe(true);
+  });
+
+  it('reduces indexed leaf nodes to zero room while keeping the label entry addressable', () => {
+    const state = buildState([
+      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a', 'b'], attentionScore: 100 },
+      { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 80 },
+      { id: 'b', title: 'b', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 120 },
+    ]);
+    state.expansionMap.set('root', { openChildIds: ['a', 'b'] });
+    state.indexedContentIds.add('a');
+    state.contentHeightMap.set('root', 400);
+    state.contentHeightMap.set('a', 240);
+    state.contentHeightMap.set('b', 260);
+
+    const layout = computeNodeLayout(
+      'root',
+      1000,
+      700,
+      state.paperMap,
+      state.expansionMap,
+      state.attentionMap,
+      state.attentionTimestampMap,
+      state.accessMap,
+      state.contentHeightMap,
+      state.indexedContentIds,
+      defaultPaperCanvasConfig,
+      0.25,
+      2,
+      1_000,
+    );
+
+    const indexedLeafRect = layout.childRects.get('a');
+    const visibleRect = layout.childRects.get('b');
+    expect(indexedLeafRect).toBeDefined();
+    expect(indexedLeafRect?.width).toBe(0);
+    expect(indexedLeafRect?.height).toBe(0);
+    expect(visibleRect).toBeDefined();
+    expect((visibleRect?.width ?? 0) * (visibleRect?.height ?? 0)).toBeGreaterThan(0);
+  });
+
   it('keeps pinned child above its minimum share', () => {
     const state = buildState([
       { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a', 'b'] },
@@ -130,6 +203,38 @@ describe('attention and layout', () => {
     expect(rect).toBeDefined();
     const share = (rect!.width * rect!.height) / (1000 * 1000);
     expect(share).toBeGreaterThanOrEqual(0.39);
+  });
+
+  it('keeps an open child visibly wide even when parent content demand is very large', () => {
+    const state = buildState([
+      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a'], attentionScore: 300 },
+      { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 20 },
+    ]);
+    state.expansionMap.set('root', { openChildIds: ['a'] });
+    state.contentHeightMap.set('root', 4000);
+    state.contentHeightMap.set('a', 120);
+
+    const layout = computeNodeLayout(
+      'root',
+      1200,
+      900,
+      state.paperMap,
+      state.expansionMap,
+      state.attentionMap,
+      state.attentionTimestampMap,
+      state.accessMap,
+      state.contentHeightMap,
+      state.indexedContentIds,
+      defaultPaperCanvasConfig,
+      0.25,
+      2,
+      1_000,
+    );
+
+    const rect = layout.childRects.get('a');
+    expect(rect).toBeDefined();
+    const share = (rect!.width * rect!.height) / (1200 * 900);
+    expect(share).toBeGreaterThanOrEqual(0.17);
   });
 
   it('excludes pinned nodes from auto-close candidates', () => {
@@ -170,5 +275,25 @@ describe('attention and layout', () => {
     const effective = getEffectiveAttention(state, 'a', defaultPaperCanvasConfig, state.attentionTimestampMap.get('a') ?? Date.now());
     expect(effective).toBeCloseTo(50 + defaultPaperCanvasConfig.attention.focusBonus, 0);
   });
-});
 
+  it('packs left index labels without overlap', () => {
+    const papers = buildPaperMap([
+      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a', 'b', 'c'] },
+      { id: 'a', title: 'Short', description: '', content: '', parentId: 'root', childIds: [] },
+      { id: 'b', title: 'A much longer indexed label', description: '', content: '', parentId: 'root', childIds: [] },
+      { id: 'c', title: 'Medium title', description: '', content: '', parentId: 'root', childIds: [] },
+    ]);
+    const layoutMap = new Map([
+      ['a', { allocatedRect: { id: 'a', x: 0, y: 20, width: 100, height: 100 }, roomLayout: { contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 }, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 } }],
+      ['b', { allocatedRect: { id: 'b', x: 0, y: 50, width: 100, height: 100 }, roomLayout: { contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 }, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 } }],
+      ['c', { allocatedRect: { id: 'c', x: 0, y: 80, width: 100, height: 100 }, roomLayout: { contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 }, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 } }],
+    ]);
+    const labels = buildPackedLeftIndexLabels(new Set(['a', 'b', 'c']), layoutMap as any, papers, 240);
+    expect(labels).toHaveLength(3);
+    const extents = labels.map((label) => label.extent ?? 80);
+    expect(labels[1].centerY - labels[0].centerY).toBeGreaterThanOrEqual((extents[0] + extents[1]) / 2);
+    expect(labels[2].centerY - labels[1].centerY).toBeGreaterThanOrEqual((extents[1] + extents[2]) / 2);
+    expect(labels[0].centerY).toBeGreaterThanOrEqual(extents[0] / 2);
+    expect(labels[2].centerY).toBeLessThanOrEqual(240 - extents[2] / 2);
+  });
+});
