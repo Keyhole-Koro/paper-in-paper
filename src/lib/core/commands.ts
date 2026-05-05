@@ -10,7 +10,7 @@ const USER_ACTION_COMMANDS = new Set([
   'CLOSE_NODE',
   'FOCUS_NODE',
   'LABEL_CLICK_BOOST',
-  'UNINDEX_NODE',
+  'UNINDEX_CONTENT',
 ]);
 
 function applyCommandDecay(state: PaperViewState, rate: number): PaperViewState {
@@ -41,8 +41,8 @@ export type Command =
   | { type: 'ATTACH_UNPLACED_NODE'; nodeId: PaperId; targetParentId: PaperId; insertBeforeId: PaperId | null }
   | { type: 'REPORT_CONTENT_HEIGHT'; nodeId: PaperId; height: number }
   | { type: 'AUTO_CLOSE_NODE'; nodeId: PaperId }
-  | { type: 'INDEX_NODE'; nodeId: PaperId }
-  | { type: 'UNINDEX_NODE'; nodeId: PaperId }
+  | { type: 'INDEX_CONTENT'; nodeId: PaperId }
+  | { type: 'UNINDEX_CONTENT'; nodeId: PaperId }
   | { type: 'LABEL_CLICK_BOOST'; nodeId: PaperId }
   | { type: '__SYNC_PAPER_MAP'; paperMap: PaperViewState['paperMap'] }
   | { type: '__SYNC_EXPANSION'; expansionMap: PaperViewState['expansionMap'] }
@@ -184,8 +184,8 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
       importanceMap.delete(command.nodeId);
       accessMap.delete(command.nodeId);
 
-      const indexedNodeIds = new Set(state.indexedNodeIds);
-      indexedNodeIds.delete(command.nodeId);
+      const indexedContentIds = new Set(state.indexedContentIds);
+      indexedContentIds.delete(command.nodeId);
 
       return {
         ...state,
@@ -193,7 +193,7 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
         expansionMap,
         importanceMap,
         accessMap,
-        indexedNodeIds,
+        indexedContentIds,
         focusedNodeId:
           state.focusedNodeId === command.nodeId ? node.parentId : state.focusedNodeId,
       };
@@ -324,23 +324,16 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
       return { ...state, expansionMap };
     }
 
-    case 'INDEX_NODE': {
-      const node = state.paperMap.get(command.nodeId);
-      if (!node || node.parentId === null) return state;
-      const indexedNodeIds = new Set(state.indexedNodeIds);
-      indexedNodeIds.add(command.nodeId);
-      return { ...state, indexedNodeIds };
+    case 'INDEX_CONTENT': {
+      const indexedContentIds = new Set(state.indexedContentIds);
+      indexedContentIds.add(command.nodeId);
+      return { ...state, indexedContentIds };
     }
 
-    case 'UNINDEX_NODE': {
-      const indexedNodeIds = new Set(state.indexedNodeIds);
-      indexedNodeIds.delete(command.nodeId);
-      const importanceMap = new Map(state.importanceMap);
-      const prev = importanceMap.get(command.nodeId) ?? 0;
-      importanceMap.set(command.nodeId, prev + config.importance.openBonus);
-      const accessMap = new Map(state.accessMap);
-      accessMap.set(command.nodeId, Date.now());
-      return { ...state, indexedNodeIds, importanceMap, accessMap, focusedNodeId: command.nodeId };
+    case 'UNINDEX_CONTENT': {
+      const indexedContentIds = new Set(state.indexedContentIds);
+      indexedContentIds.delete(command.nodeId);
+      return { ...state, indexedContentIds };
     }
 
     case '__SYNC_PAPER_MAP': {
@@ -360,7 +353,18 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
 
     case '__SYNC_EXPANSION': {
       if (command.expansionMap === state.expansionMap) return state;
-      return { ...state, expansionMap: command.expansionMap };
+      const protectedUntilMap = new Map(state.protectedUntilMap);
+      const now = Date.now();
+      for (const [parentId, entry] of command.expansionMap) {
+        const prevEntry = state.expansionMap.get(parentId);
+        const prevOpen = new Set(prevEntry?.openChildIds ?? []);
+        for (const childId of entry.openChildIds) {
+          if (!prevOpen.has(childId)) {
+            protectedUntilMap.set(childId, now + config.importance.protectDurationMs);
+          }
+        }
+      }
+      return { ...state, expansionMap: command.expansionMap, protectedUntilMap };
     }
 
     case '__SYNC_FOCUSED': {
@@ -403,7 +407,7 @@ export function createInitialState(
   return {
     paperMap,
     expansionMap: new Map(),
-    indexedNodeIds: new Set(),
+    indexedContentIds: new Set(),
     unplacedNodeIds,
     focusedNodeId: null,
     accessMap,

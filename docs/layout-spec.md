@@ -32,9 +32,9 @@ Each paper node has an `importance` score.
 
 ### Minimum Size
 
-- When `importance` falls below a threshold, automatic collapse is triggered
-- The minimum size is the closed-card size that displays only the title
-- (Note: Automatic collapse to `IndexLabel` via `entry.hidden` is defined in the types and UI components, but the logic to trigger it is currently NOT implemented. Nodes currently remain in `normal` visibility mode regardless of size.)
+- When `importance` falls below a threshold, automatic space management is triggered
+- The first stage of reduction is "Content Indexing", where the node's body content is hidden but the header and child nodes remain visible
+- If space remains constrained after content indexing, the second stage is "Auto Close", where the node is completely closed and converted into a compact title-only card
 - Even when `importance` reaches zero, the node itself does not disappear
 
 ### Parent Importance
@@ -72,8 +72,10 @@ Each room is divided into a grid and child nodes are placed inside it.
 
 When room space becomes constrained, as determined by the layout engine:
 
-- Lower-importance child nodes are collapsed first
-- Collapsing a node means closing its expansion state by removing it from `openChildIds`
+- Lower-importance child nodes are adjusted first
+- Space management occurs in two stages to maximize layout stability:
+    1. **Content Indexing**: Hide the iframe content of the candidate node. This preserves the node's position and its children's presence, minimizing visual movement.
+    2. **Auto Close**: Fully close the node by removing it from `openChildIds`. This recovers the full area occupied by the node's frame.
 - Importance scores themselves are preserved after collapse so they are still available when the node is reopened
 
 ## User Action Priority

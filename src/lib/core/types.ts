@@ -60,7 +60,7 @@ export type PlacementMap = Map<PaperId, ManualPlacement>;
 export interface PaperViewState {
   paperMap: PaperMap;
   expansionMap: ExpansionMap;
-  indexedNodeIds: Set<PaperId>;
+  indexedContentIds: Set<PaperId>;
   unplacedNodeIds: PaperId[];
   focusedNodeId: PaperId | null;
   accessMap: AccessMap;

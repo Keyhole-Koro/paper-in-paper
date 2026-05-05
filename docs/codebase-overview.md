@@ -37,12 +37,10 @@ src/lib/
       PaperNode              スマートコンポーネント（store/drag/layout 読み取り）
       PaperNodeFrame         ダムレンダラー（header + room + 子 + アニメーション）
       PaperHeader            ヘッダー（ドラッグ・フォーカス・close・add-child）
-      PaperBreadcrumbs       hidden chain のパンくずリスト
+      PaperBreadcrumbs       パンくずリスト
       PaperContentFrame      コンテンツレンダラー（HTML/ReactNode/ContentNode[] の3形式）
       PaperContentNodes      ContentNode[] 専用レンダラー
-      CollapsedPaperNode     折り畳みノードのプレースホルダー
       FloatingLayer          ドラッグゴースト
-      IndexLabel             hidden ノードのタブラベル
 ```
 
 ---
@@ -55,6 +53,7 @@ src/lib/
 |---|---|---|
 | `paperMap` | `Map<PaperId, Paper>` | 全ノードのデータ |
 | `expansionMap` | `Map<PaperId, { openChildIds }>`| 開いている子の一覧 |
+| `indexedContentIds`| `Set<PaperId>` | 本文のみ折り畳まれているノードの ID |
 | `importanceMap` | `Map<PaperId, number>` | ノードごとの importance 値 |
 | `accessMap` | `Map<PaperId, number>` | 最終アクセス timestamp |
 | `protectedUntilMap` | `Map<PaperId, number>` | auto-close 保護期限 |
@@ -66,20 +65,17 @@ src/lib/
 ### importance の動き
 
 - 初期値: `config.importance.initial`（デフォルト 100）
-- 増加: `OPEN_NODE`（+30）、`FOCUS_NODE`（+20）、`LABEL_CLICK_BOOST`（+50）、`CREATE_CHILD_NODE`（initial で初期化）
+- 増加: `OPEN_NODE`（+30）、`FOCUS_NODE`（+20）、`LABEL_CLICK_BOOST`（+50）、`CREATE_CHILD_NODE`（initial で初期化）、`UNINDEX_CONTENT`（+30）
 - 減少: ユーザー操作コマンド実行時に全ノード `× (1 - commandDecayRate)`（デフォルト 0.05）
 
 ### ViewModel（PaperNode 内で導出）
 
 | フィールド | 型 | 値 |
 |---|---|---|
-| `visibilityMode` | `'normal' \| 'hidden'` | `entry.hidden` が true なら hidden (※現在はどこからも true に設定されていない) |
 | `interactionMode` | `'idle' \| 'focused' \| 'drag-target'` | フォーカス・ドラッグ状態 |
 | `roomWidth` | `number` | allocatedRect.width - borderWidth |
 | `roomHeight` | `number` | allocatedRect.height - headerHeight - borderWidth |
-
-> [!NOTE]
-> 現在 `entry.hidden` を `true` に設定するロジック（サイズ閾値による自動折り畳みなど）は実装されていません。そのため、UI 上で `IndexLabel` (タブラベル) が表示されることはありません。将来的にレイアウトエンジン内で判定ロジックを実装する必要があります。
+| `isContentIndexed`| `boolean` | 本文が折り畳み状態か |
 
 ---
 
@@ -88,7 +84,7 @@ src/lib/
 ```
 allocatedRect      親が割り当てた矩形
   └── room         allocatedRect から header + border を除いた領域
-        ├── contentRect   本文が占める部分
+        ├── contentRect   本文が占める部分（isContentIndexed なら面積 0）
         └── childRects    open な各子ノードが占める部分
 ```
 
@@ -101,7 +97,14 @@ roomWeight(node) = rawImportance(node) + Σ roomWeight(open children)   // k = 1
 ### contentWeight
 
 ノード自身の `importanceMap` の値をそのまま使う。
-open child 数ではなく importance の相対比率で content と子の面積が決まる。
+ただし `isContentIndexed` が true の場合は `0` となり、その分の面積がすべて子ノードに割り振られる。
+
+### 自動スペース管理（`PaperCanvas.tsx`）
+
+面積が逼迫し `overflowChildCount > 0` となった場合、以下の2段階で自動調整が行われる。
+
+1.  **INDEX_CONTENT**: 重要度の低いノードの本文を畳み、スペースを空ける。
+2.  **AUTO_CLOSE_NODE**: 本文を畳んでもなお不足する場合、ノードを完全に閉じ（通常のカード化）、親の展開リストから外す。
 
 ### shrink フォールバック（`usePaperLayout.ts`）
 
@@ -148,22 +151,6 @@ export function ruleOpen(parentId: PaperId): ExpansionRule {
 
 ---
 
-### [Smell] paperNodeView.ts の dead params
-
-`derivePaperVisibilityMode` のシグネチャ:
-
-```ts
-function derivePaperVisibilityMode({
-  isRoot,   // 使われていない
-  entry,
-  config,   // 使われていない
-}: { isRoot: boolean; entry: ...; config: PaperNodeConfig })
-```
-
-また ViewModel の `roomWidth` / `roomHeight` は PaperNodeFrame で使われておらず、layout.contentRect / childRects から直接読んでいる。
-
----
-
 ### [Smell] PaperNode が ViewModel をすぐブール分解して渡している
 
 ```ts
@@ -173,18 +160,6 @@ const isDragTargetView = view.interactionMode === 'drag-target';
 ```
 
 ViewModel を作るメリットが薄い。PaperNodeFrame に `interactionMode` を直接渡すか、ViewModel 自体を渡す形に統一すべき。
-
----
-
-### [Smell] PaperBreadcrumbs が `__SYNC_EXPANSION` を直接 dispatch
-
-`__SYNC_*` コマンドは外部からの prop 同期用のプライベート規約だが、内部ロジックから呼んでいる:
-
-```ts
-dispatch({ type: '__SYNC_EXPANSION', expansionMap: next });
-```
-
-`expansionRules` の結果を適用するための公開コマンド（例: `APPLY_EXPANSION_RULE`）があるべき。
 
 ---
 
@@ -202,12 +177,6 @@ ref オブジェクト + useEffect でクリーンアップを管理する標準
 
 ---
 
-### [Smell] IndexLabel の side が常に 'left' に固定
-
-`PaperCanvas` の `collapsedNodes` 生成ロジックで side が `'left'` ハードコードされている。
-
----
-
 ### [考慮] content 3形式の管理コスト
 
-`string`（iframe）・`ReactNode`・`ContentNode[]` の3パスは、追加機能（検索・シリアライズ等）を実装するたびに3つ全てに対応が必要になる。長期的には `ContentNode[]` に一本化する方向が保守しやすい。
+`string`（iframe）・`ReactNode`・`ContentNode[]` の3形式は、追加機能（検索・シリアライズ等）を実装するたびに3つ全てに対応が必要になる。長期的には `ContentNode[]` に一本化する方向が保守しやすい。

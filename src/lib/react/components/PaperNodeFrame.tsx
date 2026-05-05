@@ -19,6 +19,7 @@ interface PaperNodeFrameProps {
   overrideCss?: string;
   isFocused: boolean;
   isDragTarget: boolean;
+  isContentIndexed: boolean;
   debugBadge?: string | null;
   roomRef: RefObject<HTMLDivElement | null>;
   insertBeforeRect?: { x: number; y: number; height: number } | null;
@@ -34,6 +35,7 @@ export function PaperNodeFrame({
   overrideCss,
   isFocused,
   isDragTarget,
+  isContentIndexed,
   debugBadge,
   roomRef,
   insertBeforeRect,
@@ -74,6 +76,7 @@ export function PaperNodeFrame({
             y: layout.contentRect.y,
             width: layout.contentRect.width,
             height: layout.contentRect.height,
+            opacity: isContentIndexed ? 0 : 1,
           }}
           transition={SPRING}
           style={{
@@ -81,31 +84,34 @@ export function PaperNodeFrame({
             left: 0,
             top: 0,
             overflow: 'auto',
-            borderRight: layout.childRects.size > 0 ? `1px solid ${tone.divider}` : 'none',
+            borderRight: layout.childRects.size > 0 && !isContentIndexed ? `1px solid ${tone.divider}` : 'none',
             boxSizing: 'border-box',
-            padding: 10,
+            padding: isContentIndexed ? 0 : 10,
             color: tone.text,
             scrollbarWidth: 'thin',
             scrollbarColor: `${tone.divider} transparent`,
+            pointerEvents: isContentIndexed ? 'none' : 'auto',
           }}
         >
-          <PaperContentFrame
-            nodeId={nodeId}
-            content={paper.content}
-            overrideCss={paper.overrideCss ?? overrideCss}
-            theme={{
-              surface: tone.background,
-              surfaceAlt: tone.backgroundHover,
-              surfaceRaised: tone.headerBackground,
-              text: tone.text,
-              mutedText: tone.mutedText,
-              divider: tone.divider,
-              linkBackground: tone.headerBackground,
-              linkBackgroundHover: tone.backgroundHover,
-              linkBorder: tone.border,
-              linkText: tone.title,
-            }}
-          />
+          {!isContentIndexed && (
+            <PaperContentFrame
+              nodeId={nodeId}
+              content={paper.content}
+              overrideCss={paper.overrideCss ?? overrideCss}
+              theme={{
+                surface: tone.background,
+                surfaceAlt: tone.backgroundHover,
+                surfaceRaised: tone.headerBackground,
+                text: tone.text,
+                mutedText: tone.mutedText,
+                divider: tone.divider,
+                linkBackground: tone.headerBackground,
+                linkBackgroundHover: tone.backgroundHover,
+                linkBorder: tone.border,
+                linkText: tone.title,
+              }}
+            />
+          )}
         </motion.div>
 
         <AnimatePresence>

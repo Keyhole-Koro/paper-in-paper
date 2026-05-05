@@ -48,15 +48,15 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
 
   const isFocused = state.focusedNodeId === nodeId;
   const isDragTarget = session !== null && insertTarget?.parentId === nodeId;
+  const isContentIndexed = state.indexedContentIds.has(nodeId);
   const view = derivePaperNodeViewModel({
     nodeId,
-    isRoot,
     entry,
     isFocused,
     isDragTarget,
+    isContentIndexed,
     config: config.paperNode,
   });
-  if (view.visibilityMode === 'hidden') return null;
 
   const color = resolvePaperColorContext(paper.hue, inheritedColor);
   const isFocusedView = view.interactionMode === 'focused';
@@ -70,7 +70,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
       })()
     : null;
   const debugBadge = debug
-    ? `${nodeId} • imp ${Math.round(state.importanceMap.get(nodeId) ?? 0)} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} • ${view.visibilityMode} • ${view.interactionMode}`
+    ? `${nodeId} • imp ${Math.round(state.importanceMap.get(nodeId) ?? 0)} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} • ${view.interactionMode}${isContentIndexed ? ' • indexed-content' : ''}`
     : null;
 
   return (
@@ -84,6 +84,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
       overrideCss={overrideCss}
       isFocused={isFocusedView}
       isDragTarget={isDragTargetView}
+      isContentIndexed={isContentIndexed}
       debugBadge={debugBadge}
       roomRef={roomRef}
       insertBeforeRect={insertBeforeRect}

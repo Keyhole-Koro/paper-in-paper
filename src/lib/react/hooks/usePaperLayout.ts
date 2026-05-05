@@ -37,7 +37,7 @@ export function computeNodeLayout(
   importanceMap: ImportanceMap,
   accessMap: AccessMap,
   _contentHeightMap: Map<PaperId, number>,
-  indexedNodeIds: Set<PaperId> = new Set(),
+  indexedContentIds: Set<PaperId> = new Set(),
   minAR = DEFAULT_MIN_AR,
   maxAR = DEFAULT_MAX_AR,
 ): RoomLayout {
@@ -52,7 +52,7 @@ export function computeNodeLayout(
   }
 
   const allOpenChildIds = getOpenChildIds(expansionMap, nodeId);
-  const openChildIds = allOpenChildIds.filter((id) => !indexedNodeIds.has(id));
+  const openChildIds = allOpenChildIds;
   const openSet = new Set(allOpenChildIds);
   const closedChildIds = parent.childIds.filter((id) => !openSet.has(id));
 
@@ -62,7 +62,10 @@ export function computeNodeLayout(
 
   // content の weight = このノード自身の rawImportance
   // importance が decay するほど content が縮み、子により多くの room を譲る
-  const contentWeight = importanceMap.get(nodeId) ?? CONTENT_WEIGHT_FALLBACK;
+  // indexedContentIds に含まれる場合は weight 0 (非表示) にする
+  const contentWeight = indexedContentIds.has(nodeId)
+    ? 0
+    : (importanceMap.get(nodeId) ?? CONTENT_WEIGHT_FALLBACK);
 
   // sibling 間の room 配分 = rawImportance + Σ 子孫の roomWeight（subtree 全量加算）
   const roomWeightMap = buildRoomWeightMap(nodeId, expansionMap, importanceMap);
@@ -138,7 +141,7 @@ export function usePaperLayout(
     return computeNodeLayout(
       nodeId, containerWidth, containerHeight,
       state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap,
-      state.indexedNodeIds, minAR, maxAR,
+      state.indexedContentIds, minAR, maxAR,
     );
-  }, [nodeId, containerWidth, containerHeight, minAR, maxAR, state.expansionMap, state.importanceMap, state.paperMap, state.contentHeightMap, state.accessMap, state.indexedNodeIds]);
+  }, [nodeId, containerWidth, containerHeight, minAR, maxAR, state.expansionMap, state.importanceMap, state.paperMap, state.contentHeightMap, state.accessMap, state.indexedContentIds]);
 }

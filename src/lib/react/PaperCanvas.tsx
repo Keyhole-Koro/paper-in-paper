@@ -11,12 +11,10 @@ import { DebugContext } from './context/DebugContext';
 import { CreateChildContext, type OnCreateChild } from './context/CreateChildContext';
 import { LayoutContextProvider, type NodeLayoutEntry } from './context/LayoutContext';
 import type { InsertTarget } from './internal/hitTest';
-import { IndexLabel, type IndexLabelNode } from './components/IndexLabel';
 import { PaperNode } from './components/PaperNode';
 import { FloatingLayer } from './components/FloatingLayer';
 import { useRoomSize } from './hooks/useRoomSize';
 import { useDebug } from './context/DebugContext';
-import { derivePaperVisibilityMode } from './internal/paperNodeView';
 import { computeNodeLayout } from './hooks/usePaperLayout';
 import type { LayoutRect } from '../core/layout';
 import { selectLowImportanceCandidates } from '../core/candidates';
@@ -43,14 +41,6 @@ export interface PaperCanvasProps {
   onFullscreenChange?: (fullscreen: boolean) => void;
 }
 
-const ZERO_RECT: LayoutRect = { id: '', x: 0, y: 0, width: 0, height: 0 };
-const EMPTY_ROOM_LAYOUT = {
-  contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 },
-  childRects: new Map<PaperId, LayoutRect>(),
-  closedChildIds: [] as PaperId[],
-  overflowChildCount: 0,
-};
-
 function computeRecursiveLayout(
   nodeId: PaperId,
   allocatedRect: LayoutRect,
@@ -63,7 +53,7 @@ function computeRecursiveLayout(
   const roomLayout = computeNodeLayout(
     nodeId, roomW, roomH,
     state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap,
-    state.indexedNodeIds,
+    state.indexedContentIds,
   );
 
   const result = new Map<PaperId, NodeLayoutEntry>();
@@ -83,13 +73,6 @@ function computeRecursiveLayout(
     const childLayouts = computeRecursiveLayout(childId, childAllocated, state, config);
     for (const [id, entry] of childLayouts) {
       result.set(id, entry);
-    }
-  }
-
-  // indexed nodes: open in expansionMap but excluded from layout → hidden: true
-  for (const indexedId of state.indexedNodeIds) {
-    if (state.expansionMap.get(nodeId)?.openChildIds.includes(indexedId)) {
-      result.set(indexedId, { allocatedRect: { ...ZERO_RECT, id: indexedId }, roomLayout: EMPTY_ROOM_LAYOUT, hidden: true });
     }
   }
 
@@ -134,9 +117,7 @@ function PaperCanvasInner({
     for (const [parentId, entry] of layoutMap) {
       if (entry.roomLayout.overflowChildCount === 0) continue;
       const candidates = selectLowImportanceCandidates(stateRef.current, parentId, now);
-      if (candidates.length > 0) {
-        console.log(`[PaperCanvas] overflow in ${parentId}, closing candidate: ${candidates[0]}`);
-      } else {
+      if (candidates.length === 0) {
         // Space is constrained but everyone is protected
         const openIds = stateRef.current.expansionMap.get(parentId)?.openChildIds ?? [];
         const protectionInfo = openIds.map(id => {
@@ -145,30 +126,21 @@ function PaperCanvasInner({
           return `${id}(${remaining}s)`;
         });
         console.log(`[PaperCanvas] overflow in ${parentId} but ALL nodes are protected:`, protectionInfo.join(', '));
+        continue;
       }
-      if (candidates.length === 0) continue;
-      dispatch({ type: 'INDEX_NODE', nodeId: candidates[0] });
+
+      const firstCandidate = candidates[0];
+      const isAlreadyContentIndexed = stateRef.current.indexedContentIds.has(firstCandidate);
+
+      if (!isAlreadyContentIndexed) {
+        console.log(`[PaperCanvas] overflow in ${parentId}, closing content of candidate: ${firstCandidate}`);
+        dispatch({ type: 'INDEX_CONTENT', nodeId: firstCandidate });
+      } else {
+        console.log(`[PaperCanvas] overflow in ${parentId}, fully closing candidate to collapsed card: ${firstCandidate}`);
+        dispatch({ type: 'AUTO_CLOSE_NODE', nodeId: firstCandidate });
+      }
     }
   }, [layoutMap, dispatch]);
-
-  const collapsedNodes = useMemo((): IndexLabelNode[] => {
-    const result: IndexLabelNode[] = [];
-    for (const [id, entry] of layoutMap) {
-      const paper = state.paperMap.get(id);
-      if (!paper || paper.parentId === null) continue;
-      const visibilityMode = derivePaperVisibilityMode({
-        isRoot: paper.parentId === null,
-        entry,
-        config: config.paperNode,
-      });
-      if (visibilityMode === 'hidden') {
-        const cx = entry.allocatedRect.x + entry.allocatedRect.width / 2;
-        const cy = entry.allocatedRect.y + entry.allocatedRect.height / 2;
-        result.push({ id, title: paper.title, side: 'left', centerX: cx, centerY: cy });
-      }
-    }
-    return result;
-  }, [layoutMap, state.paperMap, config]);
 
   const copyDebugInfo = useCallback(() => {
     const formatPercent = (part: number, whole: number) => {
@@ -223,15 +195,6 @@ function PaperCanvasInner({
       <LayoutContextProvider layoutMap={layoutMap}>
         <div ref={canvasRef} style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
           <PaperNode nodeId={rootId} parentId={null} overrideCss={overrideCss} />
-          {collapsedNodes.map(n => (
-            <IndexLabel
-              key={n.id}
-              node={n}
-              canvasWidth={canvasSize.width}
-              canvasHeight={canvasSize.height}
-              onClick={(nodeId) => dispatch({ type: 'UNINDEX_NODE', nodeId })}
-            />
-          ))}
         </div>
         <FloatingLayer />
         {debug && createPortal(

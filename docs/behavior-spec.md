@@ -169,9 +169,10 @@ Behavior:
 The layout engine decides when a room is under pressure.
 
 When space becomes constrained inside a room:
-- Child nodes are collapsed in ascending order of recency, starting from the least recently accessed
-- To collapse a node means to close it by clearing its expansion state
-- (Note: An alternative "hidden" mode that turns a node into a side tab (IndexLabel) instead of fully closing it is defined in the codebase, but the logic to trigger it is currently not implemented.)
+- Child nodes are adjusted in ascending order of recency, starting from the least recently accessed
+- Space is recovered in two stages:
+    1. **Content Indexing**: The paper's body content is hidden while keeping its room and children visible. This provides a stable way to gain space without moving other nodes.
+    2. **Auto Close**: The node is fully closed (clearing its expansion state) if hiding the content was not enough to resolve the space pressure.
 
 
 ## Breadcrumb Behavior

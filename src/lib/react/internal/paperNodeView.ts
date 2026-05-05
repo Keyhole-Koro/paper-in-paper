@@ -2,15 +2,14 @@ import type { PaperId } from '../../core/types';
 import type { PaperNodeConfig } from '../../config/paperCanvasConfig';
 import type { NodeLayoutEntry } from '../context/LayoutContext';
 
-export type PaperVisibilityMode = 'normal' | 'hidden';
 export type PaperInteractionMode = 'idle' | 'focused' | 'drag-target';
 
 export interface PaperNodeViewModel {
   nodeId: PaperId;
-  visibilityMode: PaperVisibilityMode;
   interactionMode: PaperInteractionMode;
   roomWidth: number;
   roomHeight: number;
+  isContentIndexed: boolean;
 }
 
 export function derivePaperInteractionMode({
@@ -25,30 +24,19 @@ export function derivePaperInteractionMode({
   return 'idle';
 }
 
-export function derivePaperVisibilityMode({
-  entry,
-}: {
-  isRoot: boolean;
-  entry: NodeLayoutEntry | undefined;
-  config: PaperNodeConfig;
-}): PaperVisibilityMode {
-  if (entry?.hidden) return 'hidden';
-  return 'normal';
-}
-
 export function derivePaperNodeViewModel({
   nodeId,
-  isRoot,
   entry,
   isFocused,
   isDragTarget,
+  isContentIndexed,
   config,
 }: {
   nodeId: PaperId;
-  isRoot: boolean;
   entry: NodeLayoutEntry | undefined;
   isFocused: boolean;
   isDragTarget: boolean;
+  isContentIndexed: boolean;
   config: PaperNodeConfig;
 }): PaperNodeViewModel {
   const roomWidth = Math.max(0, (entry?.allocatedRect.width ?? 0) - config.borderWidth);
@@ -57,9 +45,9 @@ export function derivePaperNodeViewModel({
 
   return {
     nodeId,
-    visibilityMode: derivePaperVisibilityMode({ isRoot, entry, config }),
     interactionMode,
     roomWidth,
     roomHeight,
+    isContentIndexed,
   };
 }
