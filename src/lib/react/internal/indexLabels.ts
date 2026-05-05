@@ -1,4 +1,7 @@
 import type { Paper, PaperId } from '../../core/types';
+import type { PaperCanvasConfig } from '../../config/paperCanvasConfig';
+import type { NodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
+import { deriveNodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
 import type { NodeLayoutEntry } from '../context/LayoutContext';
 import type { IndexLabelNode } from '../components/IndexLabel';
 import { getIndexLabelExtent, TAB_PACKED_MIN_LEN } from '../components/IndexLabel';
@@ -17,13 +20,18 @@ type LeftLabelNode = {
 };
 
 export function buildPackedLeftIndexLabels(
-  indexedContentIds: Set<PaperId>,
   layoutMap: Map<PaperId, NodeLayoutEntry>,
   paperMap: Map<PaperId, Paper>,
+  indexedContentIds: Set<PaperId>,
+  policyMap: Map<PaperId, NodeLayoutPolicy>,
+  config: PaperCanvasConfig,
   canvasHeight: number,
 ): IndexLabelNode[] {
   const desired = Array.from(layoutMap.entries())
-    .filter(([id]) => indexedContentIds.has(id))
+    .filter(([id]) => {
+      const policy = policyMap.get(id) ?? deriveNodeLayoutPolicy(id, { paperMap, indexedContentIds }, config);
+      return policy.showsIndexLabel;
+    })
     .map(([id, entry]) => {
       const paper = paperMap.get(id);
       if (!paper) return null;

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import type { RefObject } from 'react';
 import type { Paper, PaperId } from '../../core/types';
+import type { NodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
 import type { RoomLayout } from '../hooks/usePaperLayout';
 import type { PaperTone, PaperColorContext } from '../internal/paperColors';
 import { PaperContentFrame } from './PaperContentFrame';
@@ -18,7 +19,7 @@ interface PaperNodeFrameProps {
   currentShare?: number;
   isFocused: boolean;
   isDragTarget: boolean;
-  isContentIndexed: boolean;
+  layoutPolicy: NodeLayoutPolicy;
   debugBadge?: string | null;
   roomRef: RefObject<HTMLDivElement | null>;
   insertBeforeRect?: { x: number; y: number; height: number } | null;
@@ -37,7 +38,7 @@ export function PaperNodeFrame({
   currentShare,
   isFocused,
   isDragTarget,
-  isContentIndexed,
+  layoutPolicy,
   debugBadge,
   roomRef,
   insertBeforeRect,
@@ -59,7 +60,7 @@ export function PaperNodeFrame({
         boxSizing: 'border-box',
       }}
     >
-      {!isContentIndexed && (
+      {layoutPolicy.hasHeader && (
         <PaperHeader
           nodeId={nodeId}
           parentId={parentId}
@@ -95,16 +96,16 @@ export function PaperNodeFrame({
             width: layout.contentRect.width,
             height: layout.contentRect.height,
             overflow: 'auto',
-            borderRight: layout.childRects.size > 0 && !isContentIndexed ? `1px solid ${tone.divider}` : 'none',
+            borderRight: layout.childRects.size > 0 && layoutPolicy.hasContent ? `1px solid ${tone.divider}` : 'none',
             boxSizing: 'border-box',
-            padding: isContentIndexed ? 0 : 10,
+            padding: layoutPolicy.hasContent ? 10 : 0,
             color: tone.text,
             scrollbarWidth: 'thin',
             scrollbarColor: `${tone.divider} transparent`,
-            pointerEvents: isContentIndexed ? 'none' : 'auto',
+            pointerEvents: layoutPolicy.hasContent ? 'auto' : 'none',
           }}
         >
-          {!isContentIndexed && (
+          {layoutPolicy.hasContent && (
             <PaperContentFrame
               nodeId={nodeId}
               content={paper.content}

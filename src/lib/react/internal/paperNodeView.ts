@@ -1,6 +1,7 @@
 import type { PaperId } from '../../core/types';
 import type { PaperNodeConfig } from '../../config/paperCanvasConfig';
 import type { NodeLayoutEntry } from '../context/LayoutContext';
+import type { NodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
 
 export type PaperInteractionMode = 'idle' | 'focused' | 'drag-target';
 
@@ -9,7 +10,7 @@ export interface PaperNodeViewModel {
   interactionMode: PaperInteractionMode;
   roomWidth: number;
   roomHeight: number;
-  isContentIndexed: boolean;
+  layoutPolicy: NodeLayoutPolicy;
 }
 
 export function derivePaperInteractionMode({
@@ -29,18 +30,18 @@ export function derivePaperNodeViewModel({
   entry,
   isFocused,
   isDragTarget,
-  isContentIndexed,
+  layoutPolicy,
   config,
 }: {
   nodeId: PaperId;
   entry: NodeLayoutEntry | undefined;
   isFocused: boolean;
   isDragTarget: boolean;
-  isContentIndexed: boolean;
+  layoutPolicy: NodeLayoutPolicy;
   config: PaperNodeConfig;
 }): PaperNodeViewModel {
   const roomWidth = Math.max(0, (entry?.allocatedRect.width ?? 0) - config.borderWidth);
-  const headerHeight = isContentIndexed ? 0 : config.headerHeight;
+  const headerHeight = layoutPolicy.headerHeight;
   const roomHeight = Math.max(0, (entry?.allocatedRect.height ?? 0) - headerHeight - config.borderWidth);
   const interactionMode = derivePaperInteractionMode({ isFocused, isDragTarget });
 
@@ -49,6 +50,6 @@ export function derivePaperNodeViewModel({
     interactionMode,
     roomWidth,
     roomHeight,
-    isContentIndexed,
+    layoutPolicy,
   };
 }

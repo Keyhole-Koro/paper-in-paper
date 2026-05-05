@@ -15,8 +15,7 @@ import { PaperNode } from './components/PaperNode';
 import { FloatingLayer } from './components/FloatingLayer';
 import { useRoomSize } from './hooks/useRoomSize';
 import { useDebug } from './context/DebugContext';
-import { computeNodeLayout } from './hooks/usePaperLayout';
-import { buildDemandSnapshot, createDemandContext, type DemandSnapshot, type LayoutRect } from '../core/layout';
+import { buildDemandSnapshot, computeNodeLayout, createDemandContext, getCachedNodeLayoutPolicy, type DemandSnapshot, type LayoutRect } from '../core/layout';
 import { selectLowImportanceCandidates } from '../core/candidates';
 import { getEffectiveAttention } from '../core/attention';
 import { IndexLabel } from './components/IndexLabel';
@@ -52,7 +51,8 @@ function computeRecursiveLayout(
   nowMs: number,
   demandSnapshot: DemandSnapshot,
 ): Map<PaperId, NodeLayoutEntry> {
-  const headerHeight = state.indexedContentIds.has(nodeId) ? 0 : config.paperNode.headerHeight;
+  const policy = getCachedNodeLayoutPolicy(nodeId, state, config, demandSnapshot.policyMap);
+  const headerHeight = policy.headerHeight;
   const roomW = Math.max(0, allocatedRect.width - config.paperNode.borderWidth);
   const roomH = Math.max(0, allocatedRect.height - headerHeight - config.paperNode.borderWidth);
 
@@ -110,8 +110,16 @@ function PaperCanvasInner({
   const [canvasRef, canvasSize] = useRoomSize();
   const debug = useDebug();
 
-  const layoutMap = useMemo(() => {
-    if (canvasSize.width === 0 || canvasSize.height === 0) return new Map<PaperId, NodeLayoutEntry>();
+  const layoutSnapshot = useMemo(() => {
+    const emptySnapshot: DemandSnapshot = {
+      policyMap: new Map(),
+      contentDemandMap: new Map(),
+      roomDemandMap: new Map(),
+      effectiveAttentionMap: new Map(),
+    };
+    if (canvasSize.width === 0 || canvasSize.height === 0) {
+      return { layoutMap: new Map<PaperId, NodeLayoutEntry>(), demandSnapshot: emptySnapshot };
+    }
     const nowMs = Date.now();
     const demandContext = createDemandContext({
       paperMap: state.paperMap,
@@ -125,7 +133,7 @@ function PaperCanvasInner({
       nowMs,
     });
     const demandSnapshot = buildDemandSnapshot(rootId, demandContext);
-    return computeRecursiveLayout(
+    const layoutMap = computeRecursiveLayout(
       rootId,
       { id: rootId, x: 0, y: 0, width: canvasSize.width, height: canvasSize.height },
       state,
@@ -133,7 +141,9 @@ function PaperCanvasInner({
       nowMs,
       demandSnapshot,
     );
+    return { layoutMap, demandSnapshot };
   }, [rootId, canvasSize, state.paperMap, state.expansionMap, state.attentionMap, state.attentionTimestampMap, state.accessMap, state.contentHeightMap, state.indexedContentIds, config]);
+  const { layoutMap, demandSnapshot } = layoutSnapshot;
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -141,12 +151,14 @@ function PaperCanvasInner({
   const indexLabels = useMemo(() => {
     if (canvasSize.height === 0 || layoutMap.size === 0) return [];
     return buildPackedLeftIndexLabels(
-      state.indexedContentIds,
       layoutMap,
       state.paperMap,
+      state.indexedContentIds,
+      demandSnapshot.policyMap,
+      config,
       canvasSize.height,
     );
-  }, [canvasSize.height, layoutMap, state.indexedContentIds, state.paperMap]);
+  }, [canvasSize.height, layoutMap, state.indexedContentIds, state.paperMap, demandSnapshot.policyMap, config]);
 
   useEffect(() => {
     const now = Date.now();
@@ -187,7 +199,7 @@ function PaperCanvasInner({
     const lines: string[] = [`canvas: ${canvasSize.width}×${canvasSize.height}`, ''];
     for (const [id, entry] of layoutMap) {
       const { allocatedRect: a, roomLayout: r } = entry;
-      const headerHeight = state.indexedContentIds.has(id) ? 0 : config.paperNode.headerHeight;
+      const headerHeight = getCachedNodeLayoutPolicy(id, state, config, demandSnapshot.policyMap).headerHeight;
       const roomArea = Math.max(0, a.width - config.paperNode.borderWidth) * Math.max(0, a.height - headerHeight - config.paperNode.borderWidth);
       const contentArea = r.contentRect.width * r.contentRect.height;
       lines.push(`[${id}]`);
@@ -201,13 +213,13 @@ function PaperCanvasInner({
       lines.push('');
     }
     navigator.clipboard.writeText(lines.join('\n'));
-  }, [canvasSize, layoutMap]);
+  }, [canvasSize, layoutMap, demandSnapshot.policyMap, state, config]);
 
   const focusedDebugEntry = state.focusedNodeId ? layoutMap.get(state.focusedNodeId) : undefined;
   const focusedPaper = state.focusedNodeId ? state.paperMap.get(state.focusedNodeId) : undefined;
   const focusedHeaderHeight =
     focusedPaper && state.indexedContentIds.has(focusedPaper.id)
-      ? 0
+      ? getCachedNodeLayoutPolicy(focusedPaper.id, state, config, demandSnapshot.policyMap).headerHeight
       : config.paperNode.headerHeight;
   const focusedRoomArea =
     focusedDebugEntry == null

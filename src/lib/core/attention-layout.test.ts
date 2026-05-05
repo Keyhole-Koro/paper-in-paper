@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { defaultPaperCanvasConfig } from '../config/paperCanvasConfig';
 import { getAttentionMultiplier, getEffectiveAttention } from './attention';
 import { createInitialState, reduce } from './commands';
-import { buildRoomDemandMap, getContentDemand } from './layout';
+import { buildRoomDemandMap, computeNodeLayout, getContentDemand } from './layout';
+import { deriveNodeLayoutPolicy } from './nodeLayoutPolicy';
 import { buildPaperMap } from './tree';
-import { computeNodeLayout } from '../react/hooks/usePaperLayout';
 import { selectLowImportanceCandidates } from './candidates';
 import type { Paper } from './types';
 import { buildPackedLeftIndexLabels } from '../react/internal/indexLabels';
@@ -14,6 +14,31 @@ function buildState(papers: Paper[]) {
 }
 
 describe('attention and layout', () => {
+  it('derives expanded and indexed display modes from node state', () => {
+    const state = buildState([
+      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['branch', 'leaf'] },
+      { id: 'branch', title: 'branch', description: '', content: '', parentId: 'root', childIds: ['child'] },
+      { id: 'child', title: 'child', description: '', content: '', parentId: 'branch', childIds: [] },
+      { id: 'leaf', title: 'leaf', description: '', content: '', parentId: 'root', childIds: [] },
+    ]);
+    state.indexedContentIds.add('branch');
+    state.indexedContentIds.add('leaf');
+
+    const expanded = deriveNodeLayoutPolicy('root', state, defaultPaperCanvasConfig);
+    const indexedBranch = deriveNodeLayoutPolicy('branch', state, defaultPaperCanvasConfig);
+    const indexedLeaf = deriveNodeLayoutPolicy('leaf', state, defaultPaperCanvasConfig);
+
+    expect(expanded.mode).toBe('expanded');
+    expect(expanded.hasHeader).toBe(true);
+    expect(expanded.showsIndexLabel).toBe(false);
+    expect(indexedBranch.mode).toBe('indexed-branch');
+    expect(indexedBranch.reservesRoom).toBe(true);
+    expect(indexedBranch.childRoomEnabled).toBe(true);
+    expect(indexedLeaf.mode).toBe('indexed-leaf');
+    expect(indexedLeaf.reservesRoom).toBe(false);
+    expect(indexedLeaf.childRoomEnabled).toBe(false);
+  });
+
   it('uses content height to increase content demand', () => {
     const state = buildState([
       { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a', 'b'] },
@@ -288,7 +313,12 @@ describe('attention and layout', () => {
       ['b', { allocatedRect: { id: 'b', x: 0, y: 50, width: 100, height: 100 }, roomLayout: { contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 }, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 } }],
       ['c', { allocatedRect: { id: 'c', x: 0, y: 80, width: 100, height: 100 }, roomLayout: { contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 }, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 } }],
     ]);
-    const labels = buildPackedLeftIndexLabels(new Set(['a', 'b', 'c']), layoutMap as any, papers, 240);
+    const policyMap = new Map([
+      ['a', deriveNodeLayoutPolicy('a', { paperMap: papers, indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
+      ['b', deriveNodeLayoutPolicy('b', { paperMap: papers, indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
+      ['c', deriveNodeLayoutPolicy('c', { paperMap: papers, indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
+    ]);
+    const labels = buildPackedLeftIndexLabels(layoutMap as any, papers, new Set(['a', 'b', 'c']), policyMap, defaultPaperCanvasConfig, 240);
     expect(labels).toHaveLength(3);
     const extents = labels.map((label) => label.extent ?? 80);
     expect(labels[1].centerY - labels[0].centerY).toBeGreaterThanOrEqual((extents[0] + extents[1]) / 2);
