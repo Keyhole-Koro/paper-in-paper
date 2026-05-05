@@ -7,7 +7,6 @@ import type { PaperTone } from '../internal/paperColors';
 import { PaperBreadcrumbs } from './PaperBreadcrumbs';
 
 const DRAG_THRESHOLD = 5;
-export const HEADER_HEIGHT = 37;
 
 interface PaperHeaderProps {
   nodeId: PaperId;
@@ -18,7 +17,7 @@ interface PaperHeaderProps {
 }
 
 export function PaperHeader({ nodeId, parentId, title, tone, isFocused }: PaperHeaderProps) {
-  const { dispatch } = usePaperStore();
+  const { config, dispatch } = usePaperStore();
   const { startDrag } = useDrag();
   const onCreateChild = useCreateChild();
 
@@ -80,7 +79,7 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused }: PaperH
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '8px 14px',
-        height: HEADER_HEIGHT,
+        height: config.paperNode.headerHeight,
         background: isFocused ? tone.headerBackgroundFocused : tone.headerBackground,
         borderBottom: `1px solid ${tone.divider}`,
         cursor: isRoot ? 'default' : 'grab',

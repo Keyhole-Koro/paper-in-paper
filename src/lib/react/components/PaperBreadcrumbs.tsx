@@ -20,7 +20,7 @@ export function PaperBreadcrumbs({ nodeId, parentId, title, tone }: PaperBreadcr
   const breadcrumbs = useMemo(() => {
     const parentPaper = state.paperMap.get(parentId);
     if (!parentPaper) return [];
-    const hiddenIds = walkHiddenChain(parentId, nodeId, state.expansionMap, layoutMap);
+    const hiddenIds = walkHiddenChain(parentId, nodeId, state.expansionMap);
     return [parentId, ...hiddenIds, nodeId].map(id => ({
       id,
       title: state.paperMap.get(id)?.title ?? '',

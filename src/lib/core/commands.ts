@@ -1,7 +1,30 @@
 import type { GridPosition, PaperContent, PaperId, PaperViewState, Paper } from './types';
+import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import { openChild, closeChild, removeNodeFromExpansion } from './expansion';
 import { addChild, moveNode, removeNode, type RemoveMode } from './tree';
 import { nanoid } from './nanoid';
+
+const USER_ACTION_COMMANDS = new Set([
+  'CREATE_CHILD_NODE',
+  'OPEN_NODE',
+  'CLOSE_NODE',
+  'FOCUS_NODE',
+  'LABEL_CLICK_BOOST',
+  'UNINDEX_CONTENT',
+]);
+
+function applyCommandDecay(state: PaperViewState, rate: number): PaperViewState {
+  const importanceMap = new Map(state.importanceMap);
+  let changed = false;
+  for (const [id, importance] of importanceMap) {
+    const next = Math.max(0, importance * (1 - rate));
+    if (Math.abs(next - importance) > 0.001) {
+      importanceMap.set(id, next);
+      changed = true;
+    }
+  }
+  return changed ? { ...state, importanceMap } : state;
+}
 
 export type Command =
   | { type: 'CREATE_UNPLACED_NODE'; title: string; description: string; content: PaperContent }
@@ -17,24 +40,20 @@ export type Command =
   | { type: 'REORDER_WITHIN_PARENT'; parentId: PaperId; paperId: PaperId; position: GridPosition }
   | { type: 'ATTACH_UNPLACED_NODE'; nodeId: PaperId; targetParentId: PaperId; insertBeforeId: PaperId | null }
   | { type: 'REPORT_CONTENT_HEIGHT'; nodeId: PaperId; height: number }
-  | { type: 'TICK_IMPORTANCE'; now: number }
   | { type: 'AUTO_CLOSE_NODE'; nodeId: PaperId }
+  | { type: 'INDEX_CONTENT'; nodeId: PaperId }
+  | { type: 'UNINDEX_CONTENT'; nodeId: PaperId }
+  | { type: 'LABEL_CLICK_BOOST'; nodeId: PaperId }
   | { type: '__SYNC_PAPER_MAP'; paperMap: PaperViewState['paperMap'] }
   | { type: '__SYNC_EXPANSION'; expansionMap: PaperViewState['expansionMap'] }
   | { type: '__SYNC_FOCUSED'; focusedNodeId: PaperViewState['focusedNodeId'] }
   | { type: '__SYNC_UNPLACED'; unplacedNodeIds: PaperViewState['unplacedNodeIds'] };
 
-const IMPORTANCE_INITIAL = 100;
-const IMPORTANCE_OPEN_BONUS = 30;
-const IMPORTANCE_FOCUS_BONUS = 20;
-const PROTECT_DURATION_MS = 10_000;
-const DECAY_RATE = 0.00001;
-
-function resolveInitialImportance(paper: Paper) {
-  return paper.importance ?? IMPORTANCE_INITIAL;
+function resolveInitialImportance(paper: Paper, config: PaperCanvasConfig) {
+  return paper.importance ?? config.importance.initial;
 }
 
-export function reduce(state: PaperViewState, command: Command): PaperViewState {
+function reduceCore(state: PaperViewState, command: Command, config: PaperCanvasConfig): PaperViewState {
   switch (command.type) {
     case 'CREATE_UNPLACED_NODE': {
       const id = nanoid();
@@ -48,7 +67,7 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
         childIds: [],
       });
       const importanceMap = new Map(state.importanceMap);
-      importanceMap.set(id, IMPORTANCE_INITIAL);
+      importanceMap.set(id, config.importance.initial);
       const accessMap = new Map(state.accessMap);
       accessMap.set(id, Date.now());
       return {
@@ -77,11 +96,11 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
       next.set(command.parentId, { ...parent, childIds: [...parent.childIds, id] });
       const expansionMap = openChild(state.expansionMap, command.parentId, id);
       const importanceMap = new Map(state.importanceMap);
-      importanceMap.set(id, IMPORTANCE_INITIAL);
+      importanceMap.set(id, config.importance.initial);
       const accessMap = new Map(state.accessMap);
       accessMap.set(id, Date.now());
       const protectedUntilMap = new Map(state.protectedUntilMap);
-      protectedUntilMap.set(id, Date.now() + PROTECT_DURATION_MS);
+      protectedUntilMap.set(id, Date.now() + config.importance.protectDurationMs);
       return {
         ...state,
         paperMap: next,
@@ -110,7 +129,7 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
         const isNew = !paperMap.has(paper.id);
         paperMap.set(paper.id, paper);
         if (isNew) {
-          importanceMap.set(paper.id, resolveInitialImportance(paper));
+          importanceMap.set(paper.id, resolveInitialImportance(paper, config));
           accessMap.set(paper.id, now);
         } else if (paper.importance !== undefined) {
           importanceMap.set(paper.id, paper.importance);
@@ -138,7 +157,7 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
           }
         } else {
           paperMap.set(paper.id, paper);
-          importanceMap.set(paper.id, resolveInitialImportance(paper));
+          importanceMap.set(paper.id, resolveInitialImportance(paper, config));
           accessMap.set(paper.id, now);
         }
       }
@@ -165,12 +184,16 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
       importanceMap.delete(command.nodeId);
       accessMap.delete(command.nodeId);
 
+      const indexedContentIds = new Set(state.indexedContentIds);
+      indexedContentIds.delete(command.nodeId);
+
       return {
         ...state,
         paperMap,
         expansionMap,
         importanceMap,
         accessMap,
+        indexedContentIds,
         focusedNodeId:
           state.focusedNodeId === command.nodeId ? node.parentId : state.focusedNodeId,
       };
@@ -180,11 +203,11 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
       const expansionMap = openChild(state.expansionMap, command.parentId, command.childId);
       const importanceMap = new Map(state.importanceMap);
       const prev = importanceMap.get(command.childId) ?? 0;
-      importanceMap.set(command.childId, prev + IMPORTANCE_OPEN_BONUS);
+      importanceMap.set(command.childId, prev + config.importance.openBonus);
       const accessMap = new Map(state.accessMap);
       accessMap.set(command.childId, Date.now());
       const protectedUntilMap = new Map(state.protectedUntilMap);
-      protectedUntilMap.set(command.childId, Date.now() + PROTECT_DURATION_MS);
+      protectedUntilMap.set(command.childId, Date.now() + config.importance.protectDurationMs);
       return {
         ...state,
         expansionMap,
@@ -208,10 +231,19 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
     case 'FOCUS_NODE': {
       const importanceMap = new Map(state.importanceMap);
       const prev = importanceMap.get(command.nodeId) ?? 0;
-      importanceMap.set(command.nodeId, prev + IMPORTANCE_FOCUS_BONUS);
+      importanceMap.set(command.nodeId, prev + config.importance.focusBonus);
       const accessMap = new Map(state.accessMap);
       accessMap.set(command.nodeId, Date.now());
       return { ...state, importanceMap, accessMap, focusedNodeId: command.nodeId };
+    }
+
+    case 'LABEL_CLICK_BOOST': {
+      const importanceMap = new Map(state.importanceMap);
+      const prev = importanceMap.get(command.nodeId) ?? 0;
+      importanceMap.set(command.nodeId, prev + config.importance.labelClickBoost);
+      const accessMap = new Map(state.accessMap);
+      accessMap.set(command.nodeId, Date.now());
+      return { ...state, importanceMap, accessMap };
     }
 
     case 'MOVE_NODE': {
@@ -280,22 +312,6 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
       return { ...state, contentHeightMap };
     }
 
-    case 'TICK_IMPORTANCE': {
-      const importanceMap = new Map(state.importanceMap);
-      let changed = false;
-      for (const [id, importance] of importanceMap) {
-        const lastAccess = state.accessMap.get(id) ?? command.now;
-        const t = (command.now - lastAccess) / 1000;
-        const decayed = importance * (1 - DECAY_RATE * t * t);
-        const next = Math.max(0, decayed);
-        if (Math.abs(next - importance) > 0.01) {
-          importanceMap.set(id, next);
-          changed = true;
-        }
-      }
-      return changed ? { ...state, importanceMap } : state;
-    }
-
     case 'AUTO_CLOSE_NODE': {
       const node = state.paperMap.get(command.nodeId);
       if (!node || node.parentId === null) return state;
@@ -308,12 +324,24 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
       return { ...state, expansionMap };
     }
 
+    case 'INDEX_CONTENT': {
+      const indexedContentIds = new Set(state.indexedContentIds);
+      indexedContentIds.add(command.nodeId);
+      return { ...state, indexedContentIds };
+    }
+
+    case 'UNINDEX_CONTENT': {
+      const indexedContentIds = new Set(state.indexedContentIds);
+      indexedContentIds.delete(command.nodeId);
+      return { ...state, indexedContentIds };
+    }
+
     case '__SYNC_PAPER_MAP': {
       if (command.paperMap === state.paperMap) return state;
       const importanceMap = new Map(state.importanceMap);
       for (const [id, paper] of command.paperMap) {
         if (!importanceMap.has(id)) {
-          importanceMap.set(id, resolveInitialImportance(paper));
+          importanceMap.set(id, resolveInitialImportance(paper, config));
           continue;
         }
         if (paper.importance !== undefined) {
@@ -325,7 +353,18 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
 
     case '__SYNC_EXPANSION': {
       if (command.expansionMap === state.expansionMap) return state;
-      return { ...state, expansionMap: command.expansionMap };
+      const protectedUntilMap = new Map(state.protectedUntilMap);
+      const now = Date.now();
+      for (const [parentId, entry] of command.expansionMap) {
+        const prevEntry = state.expansionMap.get(parentId);
+        const prevOpen = new Set(prevEntry?.openChildIds ?? []);
+        for (const childId of entry.openChildIds) {
+          if (!prevOpen.has(childId)) {
+            protectedUntilMap.set(childId, now + config.importance.protectDurationMs);
+          }
+        }
+      }
+      return { ...state, expansionMap: command.expansionMap, protectedUntilMap };
     }
 
     case '__SYNC_FOCUSED': {
@@ -343,13 +382,22 @@ export function reduce(state: PaperViewState, command: Command): PaperViewState 
   }
 }
 
+export function reduce(state: PaperViewState, command: Command, config: PaperCanvasConfig): PaperViewState {
+  const next = reduceCore(state, command, config);
+  if (USER_ACTION_COMMANDS.has(command.type)) {
+    return applyCommandDecay(next, config.importance.commandDecayRate);
+  }
+  return next;
+}
+
 export function createInitialState(
   paperMap: PaperViewState['paperMap'],
+  config: PaperCanvasConfig,
   unplacedNodeIds: PaperViewState['unplacedNodeIds'] = [],
 ): PaperViewState {
   const importanceMap = new Map<string, number>();
   for (const [id, paper] of paperMap) {
-    importanceMap.set(id, resolveInitialImportance(paper));
+    importanceMap.set(id, resolveInitialImportance(paper, config));
   }
   const accessMap = new Map<string, number>();
   const now = Date.now();
@@ -359,6 +407,7 @@ export function createInitialState(
   return {
     paperMap,
     expansionMap: new Map(),
+    indexedContentIds: new Set(),
     unplacedNodeIds,
     focusedNodeId: null,
     accessMap,

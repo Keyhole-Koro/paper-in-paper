@@ -83,7 +83,6 @@ const BOOTSTRAP_SCRIPT = `
 
   window.addEventListener('message', function (e) {
     if (!e.data || e.data.type !== 'setOpenIds') return;
-    console.log('[iframe] setOpenIds received', e.data.openIds);
     var ids = e.data.openIds;
     document.querySelectorAll('a[data-paper-id]').forEach(function (el) {
       if (ids.indexOf(el.getAttribute('data-paper-id')) !== -1) {

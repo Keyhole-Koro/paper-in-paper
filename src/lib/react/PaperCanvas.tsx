@@ -1,7 +1,9 @@
-import { useCallback, useImperativeHandle, useMemo } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import type { Ref } from 'react';
 import { createPortal } from 'react-dom';
 import type { ExpansionMap, Paper, PaperId, PaperMap, PaperViewState } from '../core/types';
+import type { PaperCanvasConfig, PaperCanvasConfigInput } from '../config/paperCanvasConfig';
+import { resolvePaperCanvasConfig } from '../config/paperCanvasConfig';
 import { getRootId } from '../core/tree';
 import { PaperStoreProvider, usePaperStore } from './context/PaperStoreContext';
 import { DragProvider, type DragSession } from './context/DragContext';
@@ -14,7 +16,8 @@ import { FloatingLayer } from './components/FloatingLayer';
 import { useRoomSize } from './hooks/useRoomSize';
 import { useDebug } from './context/DebugContext';
 import { computeNodeLayout } from './hooks/usePaperLayout';
-import type { LayoutRect } from './internal/roomLayout';
+import type { LayoutRect } from '../core/layout';
+import { selectLowImportanceCandidates } from '../core/candidates';
 
 export interface PaperCanvasHandle {
   upsertPapers: (papers: Paper[]) => void;
@@ -23,6 +26,7 @@ export interface PaperCanvasHandle {
 }
 
 export interface PaperCanvasProps {
+  config?: PaperCanvasConfigInput;
   paperMap: PaperMap;
   rootId?: PaperId;
   expansionMap?: ExpansionMap;
@@ -37,20 +41,19 @@ export interface PaperCanvasProps {
   onFullscreenChange?: (fullscreen: boolean) => void;
 }
 
-const HEADER_HEIGHT = 37;
-const PAPER_NODE_BORDER = 2; // PaperNode has 1px border each side
-
 function computeRecursiveLayout(
   nodeId: PaperId,
   allocatedRect: LayoutRect,
   state: PaperViewState,
+  config: PaperCanvasConfig,
 ): Map<PaperId, NodeLayoutEntry> {
-  const roomW = Math.max(0, allocatedRect.width - PAPER_NODE_BORDER);
-  const roomH = Math.max(0, allocatedRect.height - HEADER_HEIGHT - PAPER_NODE_BORDER);
+  const roomW = Math.max(0, allocatedRect.width - config.paperNode.borderWidth);
+  const roomH = Math.max(0, allocatedRect.height - config.paperNode.headerHeight - config.paperNode.borderWidth);
 
   const roomLayout = computeNodeLayout(
     nodeId, roomW, roomH,
     state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap,
+    state.indexedContentIds,
   );
 
   const result = new Map<PaperId, NodeLayoutEntry>();
@@ -63,11 +66,11 @@ function computeRecursiveLayout(
     const childAllocated: LayoutRect = {
       id: childId,
       x: allocatedRect.x + childRect.x,
-      y: allocatedRect.y + HEADER_HEIGHT + childRect.y,
+      y: allocatedRect.y + config.paperNode.headerHeight + childRect.y,
       width: Math.max(0, childRect.width - borderLeft),
       height: Math.max(0, childRect.height - borderTop),
     };
-    const childLayouts = computeRecursiveLayout(childId, childAllocated, state);
+    const childLayouts = computeRecursiveLayout(childId, childAllocated, state, config);
     for (const [id, entry] of childLayouts) {
       result.set(id, entry);
     }
@@ -85,7 +88,7 @@ function PaperCanvasInner({
   overrideCss?: string;
   ref?: Ref<PaperCanvasHandle>;
 }) {
-  const { state, dispatch } = usePaperStore();
+  const { config, state, dispatch } = usePaperStore();
 
   useImperativeHandle(ref, () => ({
     upsertPapers: (papers) => dispatch({ type: 'UPSERT_PAPERS', papers }),
@@ -102,8 +105,42 @@ function PaperCanvasInner({
       rootId,
       { id: rootId, x: 0, y: 0, width: canvasSize.width, height: canvasSize.height },
       state,
+      config,
     );
-  }, [rootId, canvasSize, state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap]);
+  }, [rootId, canvasSize, state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap, config]);
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  useEffect(() => {
+    const now = Date.now();
+    for (const [parentId, entry] of layoutMap) {
+      if (entry.roomLayout.overflowChildCount === 0) continue;
+      const candidates = selectLowImportanceCandidates(stateRef.current, parentId, now);
+      if (candidates.length === 0) {
+        // Space is constrained but everyone is protected
+        const openIds = stateRef.current.expansionMap.get(parentId)?.openChildIds ?? [];
+        const protectionInfo = openIds.map(id => {
+          const until = stateRef.current.protectedUntilMap.get(id) ?? 0;
+          const remaining = Math.max(0, Math.round((until - now) / 1000));
+          return `${id}(${remaining}s)`;
+        });
+        console.log(`[PaperCanvas] overflow in ${parentId} but ALL nodes are protected:`, protectionInfo.join(', '));
+        continue;
+      }
+
+      const firstCandidate = candidates[0];
+      const isAlreadyContentIndexed = stateRef.current.indexedContentIds.has(firstCandidate);
+
+      if (!isAlreadyContentIndexed) {
+        console.log(`[PaperCanvas] overflow in ${parentId}, closing content of candidate: ${firstCandidate}`);
+        dispatch({ type: 'INDEX_CONTENT', nodeId: firstCandidate });
+      } else {
+        console.log(`[PaperCanvas] overflow in ${parentId}, fully closing candidate to collapsed card: ${firstCandidate}`);
+        dispatch({ type: 'AUTO_CLOSE_NODE', nodeId: firstCandidate });
+      }
+    }
+  }, [layoutMap, dispatch]);
 
   const copyDebugInfo = useCallback(() => {
     const formatPercent = (part: number, whole: number) => {
@@ -114,7 +151,7 @@ function PaperCanvasInner({
     const lines: string[] = [`canvas: ${canvasSize.width}×${canvasSize.height}`, ''];
     for (const [id, entry] of layoutMap) {
       const { allocatedRect: a, roomLayout: r } = entry;
-      const roomArea = Math.max(0, a.width - PAPER_NODE_BORDER) * Math.max(0, a.height - HEADER_HEIGHT - PAPER_NODE_BORDER);
+      const roomArea = Math.max(0, a.width - config.paperNode.borderWidth) * Math.max(0, a.height - config.paperNode.headerHeight - config.paperNode.borderWidth);
       const contentArea = r.contentRect.width * r.contentRect.height;
       lines.push(`[${id}]`);
       lines.push(`  allocated: ${a.width}×${a.height} @ (${a.x}, ${a.y})`);
@@ -134,8 +171,8 @@ function PaperCanvasInner({
   const focusedRoomArea =
     focusedDebugEntry == null
       ? 0
-      : Math.max(0, focusedDebugEntry.allocatedRect.width - PAPER_NODE_BORDER) *
-        Math.max(0, focusedDebugEntry.allocatedRect.height - HEADER_HEIGHT - PAPER_NODE_BORDER);
+      : Math.max(0, focusedDebugEntry.allocatedRect.width - config.paperNode.borderWidth) *
+        Math.max(0, focusedDebugEntry.allocatedRect.height - config.paperNode.headerHeight - config.paperNode.borderWidth);
   const focusedContentArea =
     focusedDebugEntry == null
       ? 0
@@ -233,6 +270,7 @@ function PaperCanvasInner({
 }
 
 export function PaperCanvas({
+  config,
   paperMap,
   rootId,
   expansionMap,
@@ -247,10 +285,12 @@ export function PaperCanvas({
   onFullscreenChange,
   ref,
 }: PaperCanvasProps & { ref?: Ref<PaperCanvasHandle> }) {
+  const resolvedConfig = useMemo(() => resolvePaperCanvasConfig(config), [config]);
   return (
     <DebugContext.Provider value={debug}>
     <CreateChildContext.Provider value={onCreateChild ?? null}>
     <PaperStoreProvider
+      config={resolvedConfig}
       paperMap={paperMap}
       expansionMap={expansionMap}
       focusedNodeId={focusedNodeId}

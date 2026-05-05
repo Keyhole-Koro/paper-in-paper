@@ -1,13 +1,12 @@
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import type { PaperId } from '../../core/types';
-import type { LayoutRect } from '../internal/roomLayout';
+import type { LayoutRect } from '../../core/layout';
 import type { RoomLayout } from '../hooks/usePaperLayout';
 
 export interface NodeLayoutEntry {
   allocatedRect: LayoutRect;
   roomLayout: RoomLayout;
-  hidden?: boolean;
 }
 
 const LayoutContext = createContext<Map<PaperId, NodeLayoutEntry>>(new Map());

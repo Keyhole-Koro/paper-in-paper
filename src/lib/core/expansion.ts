@@ -64,7 +64,6 @@ export function walkHiddenChain(
   fromId: PaperId,
   toId: PaperId,
   expansionMap: ExpansionMap,
-  layoutMap: Map<PaperId, { hidden?: boolean }>,
 ): PaperId[] {
   const chain: PaperId[] = [];
   let cur = fromId;
@@ -74,7 +73,6 @@ export function walkHiddenChain(
     if (openIds.length !== 1) break;
     const next = openIds[0];
     if (visited.has(next) || next === toId) break;
-    if (!layoutMap.get(next)?.hidden) break;
     chain.push(next);
     visited.add(next);
     cur = next;
