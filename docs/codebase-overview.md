@@ -13,28 +13,30 @@ src/lib/
     expansion.ts             展開状態操作（open/close/walk）
     expansionRules.ts        高レベル展開ルール（collapse/break chain）
     commands.ts              Command 型 + reduce + createInitialState
-    layout.ts                roomWeight 計算 + roomLayout アルゴリズム
+    nodeLayoutPolicy.ts      indexed / branch / leaf の表示ポリシー導出
+    layout.ts                demand snapshot + roomLayout アルゴリズム
     autoClose.ts             auto-close 候補選出
   react/
-    PaperCanvas.tsx          ルートコンポーネント・layoutMap 計算
+    PaperCanvas.tsx          ルートコンポーネント・layoutSnapshot 計算
     context/
       PaperStoreContext      状態ストア・dispatch・controlled/uncontrolled 同期
-      LayoutContext          layoutMap（PaperId → NodeLayoutEntry）
+      LayoutContext          layoutMap + node 単位購読
       DragContext            ドラッグセッション・ルーム登録・hit test
       CreateChildContext     子ノード作成コールバック
       DebugContext           デバッグ表示フラグ
     hooks/
       useControllableState   controlled/uncontrolled 吸収
       useRoomSize            ResizeObserver でコンテナサイズ追跡
-      usePaperLayout         状態 + サイズ → RoomLayout を導出
+      usePaperLayout         状態 + サイズ → core layout 呼び出し
       useIframeBridge        HTML コンテンツ用 iframe 管理
     internal/
-      paperNodeView.ts       ViewModel 導出関数
+      paperNodeView.ts       interaction / room size ViewModel 導出
+      paperNodeRenderModel.ts PaperNode 描画用 selector
       paperColors.ts         HSL カラーテーマ
       hitTest.ts             DOM ベースのドロップ先検出
       iframeBridge.ts        srcDoc ビルダー + メッセージプロトコル
     components/
-      PaperNode              スマートコンポーネント（store/drag/layout 読み取り）
+      PaperNode              node 単位 selector を使う orchestration component
       PaperNodeFrame         ダムレンダラー（header + room + 子 + アニメーション）
       PaperHeader            ヘッダー（ドラッグ・フォーカス・close・add-child）
       PaperBreadcrumbs       パンくずリスト
@@ -53,8 +55,9 @@ src/lib/
 |---|---|---|
 | `paperMap` | `Map<PaperId, Paper>` | 全ノードのデータ |
 | `expansionMap` | `Map<PaperId, { openChildIds }>`| 開いている子の一覧 |
-| `indexedContentIds`| `Set<PaperId>` | 本文のみ折り畳まれているノードの ID |
-| `importanceMap` | `Map<PaperId, number>` | ノードごとの importance 値 |
+| `indexedContentIds`| `Set<PaperId>` | 本文が左ラベルへ退避しているノードの ID |
+| `attentionMap` | `Map<PaperId, number>` | ノードごとの attention 値 |
+| `attentionTimestampMap` | `Map<PaperId, number>` | lazy decay 用の最終更新時刻 |
 | `accessMap` | `Map<PaperId, number>` | 最終アクセス timestamp |
 | `protectedUntilMap` | `Map<PaperId, number>` | auto-close 保護期限 |
 | `focusedNodeId` | `PaperId \| null` | フォーカス中ノード |
@@ -62,11 +65,12 @@ src/lib/
 | `unplacedNodeIds` | `PaperId[]` | 未配置ノードのリスト |
 | `manualPlacementMap` | `Map<PaperId, ManualPlacement>` | 手動配置情報 |
 
-### importance の動き
+### attention の動き
 
-- 初期値: `config.importance.initial`（デフォルト 100）
-- 増加: `OPEN_NODE`（+30）、`FOCUS_NODE`（+20）、`LABEL_CLICK_BOOST`（+50）、`CREATE_CHILD_NODE`（initial で初期化）、`UNINDEX_CONTENT`（+30）
-- 減少: ユーザー操作コマンド実行時に全ノード `× (1 - commandDecayRate)`（デフォルト 0.05）
+- 初期値: `config.attention.initial`
+- 増加: `OPEN_NODE` / `FOCUS_NODE` / `LABEL_CLICK_BOOST`
+- 減衰: `attentionTimestampMap` を使った lazy decay
+- レイアウトには attention を直接使わず、`contentDemand` / `roomDemand` に変換して使う
 
 ### ViewModel（PaperNode 内で導出）
 
@@ -75,7 +79,7 @@ src/lib/
 | `interactionMode` | `'idle' \| 'focused' \| 'drag-target'` | フォーカス・ドラッグ状態 |
 | `roomWidth` | `number` | allocatedRect.width - borderWidth |
 | `roomHeight` | `number` | allocatedRect.height - headerHeight - borderWidth |
-| `isContentIndexed`| `boolean` | 本文が折り畳み状態か |
+| `layoutPolicy`| `NodeLayoutPolicy` | `expanded / indexed-branch / indexed-leaf` の表示ルール |
 
 ---
 
@@ -88,16 +92,32 @@ allocatedRect      親が割り当てた矩形
         └── childRects    open な各子ノードが占める部分
 ```
 
-### roomWeight の計算（`layout.ts`）
+### demand snapshot の計算（`layout.ts`）
 
 ```
-roomWeight(node) = rawImportance(node) + Σ roomWeight(open children)   // k = 1
+contentDemand(node) = intrinsicContentHeight(node) * attentionMultiplier(node)
+roomDemand(node) = contentDemand(node) + Σ roomDemand(open children)
 ```
 
-### contentWeight
+`DemandSnapshot` には次の派生値が入る。
 
-ノード自身の `importanceMap` の値をそのまま使う。
-ただし `isContentIndexed` が true の場合は `0` となり、その分の面積がすべて子ノードに割り振られる。
+- `policyMap`
+- `contentDemandMap`
+- `roomDemandMap`
+- `effectiveAttentionMap`
+
+### indexed node の扱い
+
+- `indexed-branch`
+  - header なし
+  - contentRect は 0
+  - child room は残す
+  - 左側 `IndexLabel` を表示する
+- `indexed-leaf`
+  - header なし
+  - contentRect は 0
+  - parent layout 上の room も 0
+  - 左側 `IndexLabel` だけ残す
 
 ### 自動スペース管理（`PaperCanvas.tsx`）
 
@@ -108,8 +128,155 @@ roomWeight(node) = rawImportance(node) + Σ roomWeight(open children)   // k = 1
 
 ### shrink フォールバック（`usePaperLayout.ts`）
 
-アスペクト比が minAR〜maxAR を外れた場合、roomWeight の低いノードから `SHRINK_STEP(0.84)` ずつ縮小。
-最大 `MAX_SHRINK_PASSES(24)` 回繰り返す。
+アスペクト比が minAR〜maxAR を外れた場合、roomDemand の低いノードから `SHRINK_STEP(0.84)` ずつ縮小。
+最大 `MAX_SHRINK_PASSES(6)` 回繰り返す。
+
+---
+
+## 直近の最適化
+
+### 5. node 単位購読を導入
+
+この最適化の狙いは、「1 node の状態変化で tree 全体の `PaperNode` が巻き込まれて再 render される範囲を減らす」こと。
+
+以前の `PaperNode` は次の2つを直接読んでいた。
+
+- `PaperStoreContext` の `state` 全体
+- `LayoutContext` の `layoutMap` 全体
+
+この構造だと、たとえば次のような局所的な変更でも再 render の波及範囲が広くなりやすい。
+
+- 1つの node の `focusedNodeId` 変更
+- 1つの node の `indexedContentIds` 変更
+- 1つの node の layout entry 更新
+- drag target の更新
+
+#### 何を追加したか
+
+##### `PaperStoreContext` の selector 層
+
+- `PaperStoreSelectorContext`
+- `usePaperStoreSelector()`
+
+`PaperStoreProvider` は reducer state をそのまま React context に入れるだけでなく、内部に小さな subscription store を持つ。
+
+- `getSnapshot(): { state, config }`
+- `subscribe(listener)`
+
+`usePaperStoreSelector()` はこの subscription store にぶら下がり、呼び出し側が必要な slice だけ選ぶ。
+
+```ts
+usePaperStoreSelector(({ state, config }) => {
+  return {
+    paper: state.paperMap.get(nodeId),
+    isFocused: state.focusedNodeId === nodeId,
+    nodeIsIndexed: state.indexedContentIds.has(nodeId),
+    parentIsIndexed: parentId ? state.indexedContentIds.has(parentId) : false,
+    effectiveAttention: getEffectiveAttention(state, nodeId, config, Date.now()),
+  };
+}, isEqual)
+```
+
+重要なのは、`PaperNode` が `state` 全体を直接受け取らず、selector の返り値だけを state として持つこと。
+
+##### `LayoutContext` の selector 層
+
+- `LayoutSelectorContext`
+- `useLayoutEntry(nodeId)`
+
+`LayoutContextProvider` も同じく subscription store を持つ。
+
+- `getSnapshot(): Map<PaperId, NodeLayoutEntry>`
+- `subscribe(listener)`
+
+`useLayoutEntry(nodeId)` は `layoutMap.get(nodeId)` だけを購読する。
+
+これにより `PaperNode` は
+
+- 自分の `entry`
+- 親の `entry`
+
+だけを読む。
+
+#### `PaperNode` がどう変わったか
+
+以前:
+
+- store 全体を読む
+- layoutMap 全体を読む
+- その場で tone / share / policy / debug badge を組み立てる
+
+現在:
+
+- `usePaperStoreSelector()` で current node に必要な state slice を読む
+- `useLayoutEntry(nodeId)` と `useLayoutEntry(parentId)` だけを読む
+- `derivePaperNodeRenderModel()` に渡して描画 props を作る
+
+つまり `PaperNode` は「global map を全部覗く component」から、「node 単位の selector をつなぐ component」へ役割が変わった。
+
+#### なぜこれで速くなるのか
+
+React context は value が変わると、その context を読んでいる subtree が広く再評価されやすい。
+
+特に recursive tree UI では、
+
+- node 数が多い
+- `PaperNode` が深く再帰する
+- drag / focus / auto-index で更新頻度が高い
+
+ので、context 丸読みはコストが目立ちやすい。
+
+node 単位購読にすると、
+
+- `paperMap` のうち current node に関係ない部分の変化
+- `layoutMap` のうち current node / parent node に関係ない部分の変化
+
+では `PaperNode` の selector 結果が変わらないため、再 render を抑えやすい。
+
+#### どこまで最適化したか
+
+今回の最適化で改善したのは主に `PaperNode` の巻き込み範囲。
+
+具体的には次の計算が node 単位へ局所化された。
+
+- current node の `paper`
+- current node の `focused` 判定
+- current node / parent node の `indexed` 判定
+- current node の `layout entry`
+- parent node の `layout entry`
+
+一方で、まだ全体計算のまま残っているものもある。
+
+- `PaperCanvas` の `layoutSnapshot` 構築
+- overflow 判定と `INDEX_CONTENT` / `AUTO_CLOSE_NODE` dispatch
+- debug パネル全体
+
+なので、これは「すべての再計算を止めた」最適化ではなく、「recursive node rendering の再 render 範囲を狭めた」最適化である。
+
+#### 実装上の注意点
+
+この方式は便利だが、selector 実装を雑にすると逆に無限更新や余計な再 render を起こしやすい。
+
+今回気をつけている点:
+
+- selector の購読更新は `subscribe(listener)` 経由だけにする
+- render ごとに変わる selector 関数を `useEffect` の依存に入れて `setState` しない
+- `usePaperStoreSelector()` は `isEqual` で前回値と比較して不要な更新を落とす
+- `useLayoutEntry(nodeId)` も `prev === next` 比較で局所更新に寄せる
+
+実際、途中で selector 用の `useEffect` が毎 render `setState` を叩いて update depth exceeded を起こしたため、その effect は削除して subscription 駆動に戻している。
+
+#### 今後の余地
+
+この最適化は `PaperNode` には効いているが、まだ次の余地がある。
+
+- `PaperBreadcrumbs`
+- `PaperContentFrame`
+- `PaperHeader`
+
+など、他の store 直読 component も必要なら selector 化できる。
+
+ただしコスパが最も高いのは recursive node 本体なので、まず `PaperNode` を node 単位購読へ変えた。
 
 ---
 
