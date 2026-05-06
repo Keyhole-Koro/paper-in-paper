@@ -2,6 +2,7 @@ import type { GridPosition, PaperContent, PaperId, PaperViewState, Paper } from 
 import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import { getAttentionSnapshot, resolveInitialAttention } from './attention';
 import { openChild, closeChild, removeNodeFromExpansion } from './expansion';
+import { deriveNodeVisibilityState, getNextNodeVisibilityState } from './nodeVisibility';
 import { addChild, getDescendantIds, moveNode, removeNode, type RemoveMode } from './tree';
 import { nanoid } from './nanoid';
 
@@ -75,6 +76,18 @@ function clearPinOnNode(paperMap: PaperViewState['paperMap'], nodeId: PaperId) {
   if (!node || node.pinnedLayout === undefined) return paperMap;
   const next = new Map(paperMap);
   next.set(nodeId, { ...node, pinnedLayout: undefined });
+  return next;
+}
+
+function addIndexedContent(indexedContentIds: Set<PaperId>, nodeId: PaperId) {
+  const next = new Set(indexedContentIds);
+  next.add(nodeId);
+  return next;
+}
+
+function removeIndexedContent(indexedContentIds: Set<PaperId>, nodeId: PaperId) {
+  const next = new Set(indexedContentIds);
+  next.delete(nodeId);
   return next;
 }
 
@@ -244,6 +257,12 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
     case 'OPEN_NODE': {
       const now = Date.now();
       const expansionMap = openChild(state.expansionMap, command.parentId, command.childId);
+      const currentVisibility = deriveNodeVisibilityState(command.childId, state);
+      const nextVisibility = getNextNodeVisibilityState(currentVisibility, 'OPEN_NODE');
+      const indexedContentIds =
+        nextVisibility === 'expanded'
+          ? removeIndexedContent(state.indexedContentIds, command.childId)
+          : state.indexedContentIds;
       const { attentionMap, attentionTimestampMap } = upsertAttention(
         state,
         command.childId,
@@ -258,6 +277,7 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
       return {
         ...state,
         expansionMap,
+        indexedContentIds,
         attentionMap,
         attentionTimestampMap,
         accessMap,
@@ -386,14 +406,22 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
     }
 
     case 'INDEX_CONTENT': {
-      const indexedContentIds = new Set(state.indexedContentIds);
-      indexedContentIds.add(command.nodeId);
+      const currentVisibility = deriveNodeVisibilityState(command.nodeId, state);
+      const nextVisibility = getNextNodeVisibilityState(currentVisibility, 'INDEX_CONTENT');
+      if (nextVisibility === currentVisibility) return state;
+      const indexedContentIds = addIndexedContent(state.indexedContentIds, command.nodeId);
       return { ...state, indexedContentIds };
     }
 
     case 'UNINDEX_CONTENT': {
-      const indexedContentIds = new Set(state.indexedContentIds);
-      indexedContentIds.delete(command.nodeId);
+      const currentVisibility = deriveNodeVisibilityState(command.nodeId, state);
+      const nextVisibility = getNextNodeVisibilityState(currentVisibility, 'UNINDEX_CONTENT');
+      if (nextVisibility === currentVisibility) {
+        const indexedContentIds = removeIndexedContent(state.indexedContentIds, command.nodeId);
+        if (indexedContentIds.size === state.indexedContentIds.size) return state;
+        return { ...state, indexedContentIds };
+      }
+      const indexedContentIds = removeIndexedContent(state.indexedContentIds, command.nodeId);
       return { ...state, indexedContentIds };
     }
 

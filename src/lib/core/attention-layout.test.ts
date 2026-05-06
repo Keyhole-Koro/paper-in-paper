@@ -4,6 +4,7 @@ import { getAttentionMultiplier, getEffectiveAttention } from './attention';
 import { createInitialState, reduce } from './commands';
 import { buildRoomDemandMap, computeNodeLayout, getContentDemand } from './layout';
 import { deriveNodeLayoutPolicy } from './nodeLayoutPolicy';
+import { deriveNodeVisibilityState, getNextNodeVisibilityState } from './nodeVisibility';
 import { buildPaperMap } from './tree';
 import { selectLowImportanceCandidates } from './candidates';
 import type { Paper } from './types';
@@ -14,6 +15,27 @@ function buildState(papers: Paper[]) {
 }
 
 describe('attention and layout', () => {
+  it('derives explicit visibility states for expanded, indexed, and closed nodes', () => {
+    const state = buildState([
+      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['open', 'closed'] },
+      { id: 'open', title: 'open', description: '', content: '', parentId: 'root', childIds: [] },
+      { id: 'closed', title: 'closed', description: '', content: '', parentId: 'root', childIds: [] },
+    ]);
+    state.expansionMap.set('root', { openChildIds: ['open'] });
+    state.indexedContentIds.add('open');
+
+    expect(deriveNodeVisibilityState('root', state)).toBe('expanded');
+    expect(deriveNodeVisibilityState('open', state)).toBe('indexed');
+    expect(deriveNodeVisibilityState('closed', state)).toBe('closed');
+  });
+
+  it('defines explicit visibility transitions', () => {
+    expect(getNextNodeVisibilityState('expanded', 'INDEX_CONTENT')).toBe('indexed');
+    expect(getNextNodeVisibilityState('indexed', 'AUTO_CLOSE_NODE')).toBe('closed');
+    expect(getNextNodeVisibilityState('closed', 'OPEN_NODE')).toBe('expanded');
+    expect(getNextNodeVisibilityState('closed', 'UNINDEX_CONTENT')).toBe('closed');
+  });
+
   it('derives expanded and indexed display modes from node state', () => {
     const state = buildState([
       { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['branch', 'leaf'] },
@@ -23,6 +45,9 @@ describe('attention and layout', () => {
     ]);
     state.indexedContentIds.add('branch');
     state.indexedContentIds.add('leaf');
+
+    state.expansionMap.set('root', { openChildIds: ['branch', 'leaf'] });
+    state.expansionMap.set('branch', { openChildIds: ['child'] });
 
     const expanded = deriveNodeLayoutPolicy('root', state, defaultPaperCanvasConfig);
     const indexedBranch = deriveNodeLayoutPolicy('branch', state, defaultPaperCanvasConfig);
@@ -301,6 +326,41 @@ describe('attention and layout', () => {
     expect(effective).toBeCloseTo(50 + defaultPaperCanvasConfig.attention.focusBonus, 0);
   });
 
+  it('reopens auto-closed indexed nodes as expanded content', () => {
+    let state = buildState([
+      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a'] },
+      { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [] },
+    ]);
+    state.expansionMap.set('root', { openChildIds: ['a'] });
+
+    state = reduce(state, { type: 'INDEX_CONTENT', nodeId: 'a' }, defaultPaperCanvasConfig);
+    expect(deriveNodeVisibilityState('a', state)).toBe('indexed');
+
+    state = reduce(state, { type: 'AUTO_CLOSE_NODE', nodeId: 'a' }, defaultPaperCanvasConfig);
+    expect(deriveNodeVisibilityState('a', state)).toBe('closed');
+
+    state = reduce(state, { type: 'OPEN_NODE', parentId: 'root', childId: 'a' }, defaultPaperCanvasConfig);
+    expect(deriveNodeVisibilityState('a', state)).toBe('expanded');
+    expect(state.indexedContentIds.has('a')).toBe(false);
+  });
+
+  it('keeps a closed node closed when unindexing it before reopen', () => {
+    let state = buildState([
+      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a'] },
+      { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [] },
+    ]);
+    state.expansionMap.set('root', { openChildIds: ['a'] });
+    state = reduce(state, { type: 'INDEX_CONTENT', nodeId: 'a' }, defaultPaperCanvasConfig);
+    state = reduce(state, { type: 'AUTO_CLOSE_NODE', nodeId: 'a' }, defaultPaperCanvasConfig);
+
+    state = reduce(state, { type: 'UNINDEX_CONTENT', nodeId: 'a' }, defaultPaperCanvasConfig);
+    expect(deriveNodeVisibilityState('a', state)).toBe('closed');
+    expect(state.indexedContentIds.has('a')).toBe(false);
+
+    state = reduce(state, { type: 'OPEN_NODE', parentId: 'root', childId: 'a' }, defaultPaperCanvasConfig);
+    expect(deriveNodeVisibilityState('a', state)).toBe('expanded');
+  });
+
   it('packs left index labels without overlap', () => {
     const papers = buildPaperMap([
       { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a', 'b', 'c'] },
@@ -314,11 +374,12 @@ describe('attention and layout', () => {
       ['c', { allocatedRect: { id: 'c', x: 0, y: 80, width: 100, height: 100 }, roomLayout: { contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 }, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 } }],
     ]);
     const policyMap = new Map([
-      ['a', deriveNodeLayoutPolicy('a', { paperMap: papers, indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
-      ['b', deriveNodeLayoutPolicy('b', { paperMap: papers, indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
-      ['c', deriveNodeLayoutPolicy('c', { paperMap: papers, indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
+      ['a', deriveNodeLayoutPolicy('a', { paperMap: papers, expansionMap: new Map([['root', { openChildIds: ['a', 'b', 'c'] }]]), indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
+      ['b', deriveNodeLayoutPolicy('b', { paperMap: papers, expansionMap: new Map([['root', { openChildIds: ['a', 'b', 'c'] }]]), indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
+      ['c', deriveNodeLayoutPolicy('c', { paperMap: papers, expansionMap: new Map([['root', { openChildIds: ['a', 'b', 'c'] }]]), indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
     ]);
-    const labels = buildPackedLeftIndexLabels(layoutMap as any, papers, new Set(['a', 'b', 'c']), policyMap, defaultPaperCanvasConfig, 240);
+    const expansionMap = new Map([['root', { openChildIds: ['a', 'b', 'c'] }]]);
+    const labels = buildPackedLeftIndexLabels(layoutMap as any, papers, expansionMap, new Set(['a', 'b', 'c']), policyMap, defaultPaperCanvasConfig, 240);
     expect(labels).toHaveLength(3);
     const extents = labels.map((label) => label.extent ?? 80);
     expect(labels[1].centerY - labels[0].centerY).toBeGreaterThanOrEqual((extents[0] + extents[1]) / 2);

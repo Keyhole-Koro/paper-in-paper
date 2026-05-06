@@ -7,4 +7,4 @@ export { buildPaperMap } from './core/tree';
 export type { RemoveMode } from './core/tree';
 export { createInitialState, reduce } from './core/commands';
 export type { Command } from './core/commands';
-export { usePaperStore } from './react/context/PaperStoreContext';
+export { usePaperDispatch, usePaperStoreSelector } from './react/context/PaperStoreContext';

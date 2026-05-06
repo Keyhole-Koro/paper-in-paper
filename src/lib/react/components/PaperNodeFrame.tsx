@@ -1,8 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import type { RefObject } from 'react';
+import type { NodeRoomLayout } from '../../core/layout';
 import type { Paper, PaperId } from '../../core/types';
 import type { NodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
-import type { RoomLayout } from '../hooks/usePaperLayout';
 import type { PaperTone, PaperColorContext } from '../internal/paperColors';
 import { PaperContentFrame } from './PaperContentFrame';
 import { PaperHeader } from './PaperHeader';
@@ -12,7 +12,7 @@ interface PaperNodeFrameProps {
   nodeId: PaperId;
   parentId: PaperId | null;
   paper: Paper;
-  layout: RoomLayout;
+  layout: NodeRoomLayout;
   tone: PaperTone;
   inheritedColor: PaperColorContext | null;
   overrideCss?: string;

@@ -182,7 +182,7 @@ export function createDemandContext(
 
 export function getCachedNodeLayoutPolicy(
   nodeId: PaperId,
-  context: Pick<RoomDemandContext, 'paperMap' | 'indexedContentIds'>,
+  context: Pick<RoomDemandContext, 'paperMap' | 'expansionMap' | 'indexedContentIds'>,
   config: PaperCanvasConfig,
   policyMap: Map<PaperId, NodeLayoutPolicy>,
 ): NodeLayoutPolicy {
@@ -404,7 +404,7 @@ export function computeNodeLayout(
   const openChildIds = getOpenChildIds(expansionMap, nodeId);
   const openSet = new Set(openChildIds);
   const closedChildIds = parent.childIds.filter((id) => !openSet.has(id));
-  const nodePolicy = deriveNodeLayoutPolicy(nodeId, { paperMap, indexedContentIds }, config);
+  const nodePolicy = deriveNodeLayoutPolicy(nodeId, { paperMap, expansionMap, indexedContentIds }, config);
 
   if (w === 0 || h === 0 || openChildIds.length === 0) {
     return {

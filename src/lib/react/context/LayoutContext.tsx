@@ -1,15 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { PaperId } from '../../core/types';
-import type { LayoutRect } from '../../core/layout';
-import type { RoomLayout } from '../hooks/usePaperLayout';
+import type { LayoutRect, NodeRoomLayout } from '../../core/layout';
 
 export interface NodeLayoutEntry {
   allocatedRect: LayoutRect;
-  roomLayout: RoomLayout;
+  roomLayout: NodeRoomLayout;
 }
 
-const LayoutContext = createContext<Map<PaperId, NodeLayoutEntry>>(new Map());
 type LayoutListener = () => void;
 interface LayoutSelectorContextValue {
   subscribe: (listener: LayoutListener) => () => void;
@@ -57,14 +55,8 @@ export function LayoutContextProvider({
   }, [layoutMap]);
 
   return (
-    <LayoutSelectorContext.Provider value={selectorStoreRef.current.api}>
-      <LayoutContext.Provider value={layoutMap}>{children}</LayoutContext.Provider>
-    </LayoutSelectorContext.Provider>
+    <LayoutSelectorContext.Provider value={selectorStoreRef.current.api}>{children}</LayoutSelectorContext.Provider>
   );
-}
-
-export function useLayoutContext(): Map<PaperId, NodeLayoutEntry> {
-  return useContext(LayoutContext);
 }
 
 export function useLayoutEntry(nodeId: PaperId | null) {

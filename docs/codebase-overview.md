@@ -17,7 +17,7 @@ src/lib/
     layout.ts                demand snapshot + roomLayout アルゴリズム
     autoClose.ts             auto-close 候補選出
   react/
-    PaperCanvas.tsx          ルートコンポーネント・layoutSnapshot 計算
+    PaperCanvas.tsx          ルートコンポーネント・hook orchestration
     context/
       PaperStoreContext      状態ストア・dispatch・controlled/uncontrolled 同期
       LayoutContext          layoutMap + node 単位購読
@@ -25,13 +25,16 @@ src/lib/
       CreateChildContext     子ノード作成コールバック
       DebugContext           デバッグ表示フラグ
     hooks/
-      useControllableState   controlled/uncontrolled 吸収
       useRoomSize            ResizeObserver でコンテナサイズ追跡
-      usePaperLayout         状態 + サイズ → core layout 呼び出し
+      useCanvasLayoutSnapshot canvas 全体の layout / demand snapshot 構築
+      useOverflowAutoClose   overflow 監視と INDEX_CONTENT / AUTO_CLOSE_NODE dispatch
+      useIndexLabels         左側 index label の packed layout
       useIframeBridge        HTML コンテンツ用 iframe 管理
     internal/
       paperNodeView.ts       interaction / room size ViewModel 導出
       paperNodeRenderModel.ts PaperNode 描画用 selector
+      paperContentHtml.ts    HTML content 表示用 helper
+      canvasDebug.ts         debug 文字列生成
       paperColors.ts         HSL カラーテーマ
       hitTest.ts             DOM ベースのドロップ先検出
       iframeBridge.ts        srcDoc ビルダー + メッセージプロトコル
@@ -42,6 +45,7 @@ src/lib/
       PaperBreadcrumbs       パンくずリスト
       PaperContentFrame      コンテンツレンダラー（HTML/ReactNode/ContentNode[] の3形式）
       PaperContentNodes      ContentNode[] 専用レンダラー
+      PaperCanvasDebugPanel  debug overlay
       FloatingLayer          ドラッグゴースト
 ```
 
@@ -119,14 +123,14 @@ roomDemand(node) = contentDemand(node) + Σ roomDemand(open children)
   - parent layout 上の room も 0
   - 左側 `IndexLabel` だけ残す
 
-### 自動スペース管理（`PaperCanvas.tsx`）
+### 自動スペース管理（`useOverflowAutoClose.ts`）
 
 面積が逼迫し `overflowChildCount > 0` となった場合、以下の2段階で自動調整が行われる。
 
 1.  **INDEX_CONTENT**: 重要度の低いノードの本文を畳み、スペースを空ける。
 2.  **AUTO_CLOSE_NODE**: 本文を畳んでもなお不足する場合、ノードを完全に閉じ（通常のカード化）、親の展開リストから外す。
 
-### shrink フォールバック（`usePaperLayout.ts`）
+### shrink フォールバック（`layout.ts`）
 
 アスペクト比が minAR〜maxAR を外れた場合、roomDemand の低いノードから `SHRINK_STEP(0.84)` ずつ縮小。
 最大 `MAX_SHRINK_PASSES(6)` 回繰り返す。
@@ -340,7 +344,7 @@ ref オブジェクト + useEffect でクリーンアップを管理する標準
 ### [Smell] PaperContentFrame の height が二重管理
 
 ローカル `useState(60)` でも管理しつつ、`REPORT_CONTENT_HEIGHT` でストアにも送信。
-ストアの `contentHeightMap` は `usePaperLayout` の `_contentHeightMap` 引数として渡されているが、内部で未使用（`_` プレフィックス）。
+現在は iframe 自体の表示高さと、layout engine が使う `contentHeightMap` が別用途のため共存している。片方に寄せるなら、iframe 高さを完全にストア駆動にするか、逆に layout 側の需要計算だけへ責務を限定する整理が必要。
 
 ---
 

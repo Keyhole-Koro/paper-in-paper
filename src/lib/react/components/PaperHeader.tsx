@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import type { PaperId } from '../../core/types';
-import { usePaperStore } from '../context/PaperStoreContext';
+import { usePaperDispatch, usePaperStoreSelector } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
 import { useCreateChild } from '../context/CreateChildContext';
 import type { PaperTone } from '../internal/paperColors';
@@ -19,7 +19,8 @@ interface PaperHeaderProps {
 }
 
 export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned, currentShare }: PaperHeaderProps) {
-  const { config, dispatch } = usePaperStore();
+  const { config } = usePaperStoreSelector(({ config }) => ({ config }));
+  const dispatch = usePaperDispatch();
   const { startDrag } = useDrag();
   const onCreateChild = useCreateChild();
 

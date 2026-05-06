@@ -441,7 +441,7 @@ const papers: Paper[] = [
       <section>
         <h4>State slices</h4>
         <p>
-          Expansion, importance, placement, and focus each change for different reasons.
+          Expansion, attention, placement, and focus each change for different reasons.
         </p>
         <p>
           That separation helps when tuning <a data-paper-id="derived-selectors">derived selectors</a>.

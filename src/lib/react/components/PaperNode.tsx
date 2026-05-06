@@ -8,35 +8,34 @@ import type { PaperColorContext } from '../internal/paperColors';
 import { derivePaperNodeRenderModel } from '../internal/paperNodeRenderModel';
 import { PaperNodeFrame } from './PaperNodeFrame';
 import { getEffectiveAttention } from '../../core/attention';
+import type { NodeVisibilityState } from '../../core/nodeVisibility';
+import { deriveNodeVisibilityState } from '../../core/nodeVisibility';
 
 function shallowEqualNodeSelection(
   a: {
     config: any;
     paper: any;
-    nodeIsIndexed: boolean;
-    parentIsIndexed: boolean;
+    nodeVisibility: NodeVisibilityState;
+    parentVisibility: NodeVisibilityState | null;
     isFocused: boolean;
     effectiveAttention: number;
-    debugBadge: string | null;
   },
   b: {
     config: any;
     paper: any;
-    nodeIsIndexed: boolean;
-    parentIsIndexed: boolean;
+    nodeVisibility: NodeVisibilityState;
+    parentVisibility: NodeVisibilityState | null;
     isFocused: boolean;
     effectiveAttention: number;
-    debugBadge: string | null;
   },
 ) {
   return (
     a.config === b.config &&
     a.paper === b.paper &&
-    a.nodeIsIndexed === b.nodeIsIndexed &&
-    a.parentIsIndexed === b.parentIsIndexed &&
+    a.nodeVisibility === b.nodeVisibility &&
+    a.parentVisibility === b.parentVisibility &&
     a.isFocused === b.isFocused &&
-    a.effectiveAttention === b.effectiveAttention &&
-    a.debugBadge === b.debugBadge
+    a.effectiveAttention === b.effectiveAttention
   );
 }
 
@@ -54,24 +53,20 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
 
   const entry = useLayoutEntry(nodeId);
   const parentEntry = useLayoutEntry(parentId);
-  const { config, paper, nodeIsIndexed, parentIsIndexed, isFocused, effectiveAttention, debugBadge } = usePaperStoreSelector(
+  const { config, paper, nodeVisibility, parentVisibility, isFocused, effectiveAttention } = usePaperStoreSelector(
     ({ state, config }) => {
       const paper = state.paperMap.get(nodeId);
       const isFocused = state.focusedNodeId === nodeId;
-      const nodeIsIndexed = state.indexedContentIds.has(nodeId);
-      const parentIsIndexed = parentId ? state.indexedContentIds.has(parentId) : false;
+      const nodeVisibility = deriveNodeVisibilityState(nodeId, state);
+      const parentVisibility = parentId ? deriveNodeVisibilityState(parentId, state) : null;
       const effectiveAttention = getEffectiveAttention(state, nodeId, config, Date.now());
       return {
         config,
         paper,
-        nodeIsIndexed,
-        parentIsIndexed,
+        nodeVisibility,
+        parentVisibility,
         isFocused,
         effectiveAttention,
-        debugBadge:
-          debug && paper
-            ? `${nodeId} • att ${Math.round(effectiveAttention)} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0}`
-            : null,
       };
     },
     shallowEqualNodeSelection,
@@ -95,10 +90,10 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
     insertTarget,
     inheritedColor,
     isFocused,
-    nodeIsIndexed,
-    parentIsIndexed,
+    nodeVisibility,
+    parentVisibility,
     effectiveAttention,
-    debugBadge,
+    debug,
   });
 
   return (

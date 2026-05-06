@@ -20,12 +20,12 @@ export interface PaperStoreProviderProps {
 interface PaperStoreContextValue {
   config: PaperCanvasConfig;
   state: PaperViewState;
-  dispatch: (command: Command) => void;
   isFullscreen: boolean;
   onFullscreenChange?: (fullscreen: boolean) => void;
 }
 
 const PaperStoreContext = createContext<PaperStoreContextValue | null>(null);
+const PaperDispatchContext = createContext<((command: Command) => void) | null>(null);
 type PaperStoreSnapshot = { state: PaperViewState; config: PaperCanvasConfig };
 type PaperStoreListener = () => void;
 interface PaperStoreSelectorContextValue {
@@ -148,17 +148,19 @@ export function PaperStoreProvider({
 
   return (
     <PaperStoreSelectorContext.Provider value={selectorStoreRef.current.api}>
-      <PaperStoreContext value={{ config, state, dispatch, isFullscreen: isFullscreen ?? false, onFullscreenChange }}>
-        {children}
-      </PaperStoreContext>
+      <PaperDispatchContext.Provider value={dispatch}>
+        <PaperStoreContext value={{ config, state, isFullscreen: isFullscreen ?? false, onFullscreenChange }}>
+          {children}
+        </PaperStoreContext>
+      </PaperDispatchContext.Provider>
     </PaperStoreSelectorContext.Provider>
   );
 }
 
-export function usePaperStore() {
-  const ctx = useContext(PaperStoreContext);
-  if (!ctx) throw new Error('usePaperStore must be used inside PaperStoreProvider');
-  return ctx;
+export function usePaperDispatch() {
+  const dispatch = useContext(PaperDispatchContext);
+  if (!dispatch) throw new Error('usePaperDispatch must be used inside PaperStoreProvider');
+  return dispatch;
 }
 
 export function usePaperStoreSelector<T>(

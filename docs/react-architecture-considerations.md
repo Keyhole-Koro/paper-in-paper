@@ -12,7 +12,7 @@ The document has three goals:
 
 - The initial implementation should be centered on React and TypeScript
 - Introduce Rust/WASM for performance only after profiling identifies real bottlenecks
-- If Rust/WASM is introduced, prioritize pure functions such as importance calculation, grid placement, pressure evaluation, and auto-close candidate selection rather than moving the whole UI
+- If Rust/WASM is introduced, prioritize pure functions such as attention calculation, grid placement, pressure evaluation, and auto-close candidate selection rather than moving the whole UI
 
 ## Implementation Principles
 
@@ -34,7 +34,7 @@ src/
       tree.ts
       expansion.ts
       access.ts
-      importance.ts
+      attention.ts
       layout.ts
       derived.ts
       commands.ts
@@ -53,12 +53,13 @@ src/
         Sidebar.tsx
         FloatingLayer.tsx
       hooks/
-        usePaperStore.ts
-        usePaperCommands.ts
-        usePaperLayout.ts
+        useCanvasLayoutSnapshot.ts
+        useOverflowAutoClose.ts
+        useIndexLabels.ts
         useIframeBridge.ts
-        useDragSession.ts
       internal/
+        canvasDebug.ts
+        paperContentHtml.ts
         iframeBridge.ts
         hitTest.ts
         autoClose.ts
@@ -94,7 +95,7 @@ export type UnplacedNodeIds = PaperId[];
 
 export type AccessMap = Map<PaperId, number>;
 
-export type ImportanceMap = Map<PaperId, number>;
+export type AttentionMap = Map<PaperId, number>;
 
 export interface GridPosition {
   x: number;
@@ -130,7 +131,7 @@ export interface PaperViewState {
   unplacedNodeIds: PaperId[];
   focusedNodeId: PaperId | null;
   accessMap: AccessMap;
-  importanceMap: ImportanceMap;
+  attentionMap: AttentionMap;
   manualPlacementMap: PlacementMap;
   contentHeightMap: Map<PaperId, number>;
   protectedUntilMap: Map<PaperId, number>;
@@ -148,7 +149,7 @@ Actions should be defined by semantic intent rather than raw UI events.
 - `REORDER_WITHIN_PARENT` with payload `{ parentId, paperId, position: GridPosition }`
 - `ATTACH_UNPLACED_NODE`
 - `REPORT_CONTENT_HEIGHT`
-- `TICK_IMPORTANCE`
+- lazy attention decay
 - `AUTO_CLOSE_NODE`
 
 Hover positions and pointer coordinates during drag should not enter the reducer. They change every frame and should remain inside React state or refs.
@@ -160,7 +161,7 @@ One top-level reducer is acceptable, but its internal logic should still be spli
 1. `treeReducer`
 2. `expansionReducer`
 3. `focusReducer`
-4. `importanceReducer`
+4. `attentionReducer`
 5. `placementReducer`
 
 At the top level, each action is applied to these reducers in order.
@@ -183,7 +184,7 @@ Values that are recalculated before rendering should live in selectors.
 - `selectOpenChildren(parentId)`
 - `selectClosedChildren(parentId)`
 - `selectVisibleChildren(parentId)`
-- `selectNodeImportance(nodeId)`
+- `selectNodeAttention(nodeId)`
 - `selectNodeSize(nodeId)`
 - `selectRoomLayout(parentId, roomRect)` where `roomRect` is measured with `ResizeObserver` plus `useLayoutEffect`
 - `selectAutoCloseCandidates(parentId)`
@@ -336,8 +337,8 @@ After drag start, pointer tracking runs on the parent document's `pointermove` a
 
 Do not leave layout inside a React component's `useMemo`. Extract it into a set of pure functions.
 
-- `computeImportance`
-- `decayImportance`
+- `computeAttention`
+- `decayAttention`
 - `computeNodeFootprint`
 - `computeGridMetrics`
 - `placeChildren`
@@ -346,36 +347,36 @@ Do not leave layout inside a React component's `useMemo`. Extract it into a set 
 Recommended flow:
 
 1. Read leaf baseline heights from `contentHeightMap`
-2. Compute effective importance from `importanceMap` plus open state
-3. Sort open children by importance
+2. Compute effective attention from `attentionMap` plus open state
+3. Sort open children by attention
 4. Lock in manually placed children first
 5. Pack the rest into the grid with auto layout
 6. If they do not fit, return auto-collapse candidates from `resolvePressure`
 
 The layout functions should not execute the actual automatic collapse. That belongs in the command layer.
 
-## Importance and Automatic Collapse
+## Attention and Automatic Collapse
 
-The importance model in `layout-spec.md` needs more than access timestamps alone, so the implementation should split it into two layers:
+The attention model in `layout-spec.md` needs more than access timestamps alone, so the implementation should split it into two layers:
 
 - `accessMap` for LRU decisions
-- `importanceMap` for size ratio calculations
+- `attentionMap` for size ratio calculations
 
 Update rules:
 
-- Increase importance on `OPEN_NODE`
-- Increase importance on `FOCUS_NODE`
-- Run `TICK_IMPORTANCE` periodically
-- Aggregate parent importance from children in selectors
+- Increase attention on `OPEN_NODE`
+- Increase attention on `FOCUS_NODE`
+- Apply lazy attention decay when selectors or layout computations read attention
+- Aggregate parent attention from children in selectors
 
-### `TICK_IMPORTANCE` and Rerendering
+### Lazy Attention Decay and Rerendering
 
-Because `TICK_IMPORTANCE` updates the entire `importanceMap`, it risks changing the map reference and rerendering the whole tree.
+Because eager decay would update the entire `attentionMap`, it would risk changing the map reference and rerendering the whole tree.
 
 To avoid that:
 
 - Do not recreate entries for nodes whose values did not change during a tick
-- Components that depend on importance should subscribe through node-level selectors instead of receiving the whole `importanceMap`
+- Components that depend on attention should subscribe through node-level selectors instead of receiving the whole `attentionMap`
 
 ### When to Fire `AUTO_CLOSE_NODE`
 
@@ -392,7 +393,7 @@ Choose automatic collapse candidates using the following rules:
 
 1. Exclude nodes whose `protectedUntilMap` timestamp is still in the future
 2. Consider only open children
-3. Sort by ascending importance, then by oldest access when tied
+3. Sort by ascending attention, then by oldest access when tied
 4. Repeat until closing nodes resolves the pressure
 
 Nodes that the user has just opened manually should remain protected for a fixed period.
@@ -441,7 +442,7 @@ Minimum required `core` cases:
 - Subtree expansion preservation on parent moves
 - Attach from unplaced state
 - Cascading deletion
-- Importance decay
+- Attention decay
 - Auto-close ordering used to resolve pressure
 
 Minimum required `react` cases:
@@ -462,7 +463,7 @@ Do not implement everything at once. The recommended sequence is:
 3. `PaperContentFrame` and the iframe bridge
 4. Sidebar and unplaced-node support
 5. Pointer-based drag and drop
-6. Importance, layout, and auto-close
+6. Attention, layout, and auto-close
 7. Controlled API and persistence boundary
 
 ## Decision Criteria

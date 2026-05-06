@@ -1,10 +1,10 @@
-import type { Paper, PaperId } from '../../core/types';
+import type { ExpansionMap, Paper, PaperId } from '../../core/types';
 import type { PaperCanvasConfig } from '../../config/paperCanvasConfig';
 import type { NodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
 import { deriveNodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
-import type { NodeLayoutEntry } from '../context/LayoutContext';
 import type { IndexLabelNode } from '../components/IndexLabel';
 import { getIndexLabelExtent, TAB_PACKED_MIN_LEN } from '../components/IndexLabel';
+import type { NodeLayoutEntry } from '../context/LayoutContext';
 import { getPaperTone, resolvePaperColorContext } from './paperColors';
 
 type LeftLabelNode = {
@@ -22,6 +22,7 @@ type LeftLabelNode = {
 export function buildPackedLeftIndexLabels(
   layoutMap: Map<PaperId, NodeLayoutEntry>,
   paperMap: Map<PaperId, Paper>,
+  expansionMap: ExpansionMap,
   indexedContentIds: Set<PaperId>,
   policyMap: Map<PaperId, NodeLayoutPolicy>,
   config: PaperCanvasConfig,
@@ -29,7 +30,7 @@ export function buildPackedLeftIndexLabels(
 ): IndexLabelNode[] {
   const desired = Array.from(layoutMap.entries())
     .filter(([id]) => {
-      const policy = policyMap.get(id) ?? deriveNodeLayoutPolicy(id, { paperMap, indexedContentIds }, config);
+      const policy = policyMap.get(id) ?? deriveNodeLayoutPolicy(id, { paperMap, expansionMap, indexedContentIds }, config);
       return policy.showsIndexLabel;
     })
     .map(([id, entry]) => {

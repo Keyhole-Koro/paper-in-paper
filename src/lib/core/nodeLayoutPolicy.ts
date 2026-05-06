@@ -1,11 +1,15 @@
 import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import type { PaperId, PaperMap } from './types';
+import {
+  deriveNodeVisibilityState,
+  type NodeVisibilityContext,
+  type NodeVisibilityState,
+} from './nodeVisibility';
 
 export type NodeDisplayMode = 'expanded' | 'indexed-branch' | 'indexed-leaf';
 
-export interface NodeLayoutPolicyContext {
+export interface NodeLayoutPolicyContext extends NodeVisibilityContext {
   paperMap: PaperMap;
-  indexedContentIds: Set<PaperId>;
 }
 
 export interface NodeLayoutPolicy {
@@ -19,14 +23,23 @@ export interface NodeLayoutPolicy {
   childRoomEnabled: boolean;
 }
 
-export function deriveNodeLayoutPolicyFromPaper(
+export function deriveNodeDisplayMode(
   hasChildren: boolean,
-  isIndexed: boolean,
+  visibility: NodeVisibilityState,
+): NodeDisplayMode {
+  if (visibility !== 'indexed') return 'expanded';
+  return hasChildren ? 'indexed-branch' : 'indexed-leaf';
+}
+
+export function deriveNodeLayoutPolicyFromVisibility(
+  hasChildren: boolean,
+  visibility: NodeVisibilityState,
   config: PaperCanvasConfig,
 ): NodeLayoutPolicy {
-  if (!isIndexed) {
+  const mode = deriveNodeDisplayMode(hasChildren, visibility);
+  if (mode === 'expanded') {
     return {
-      mode: 'expanded',
+      mode,
       hasHeader: true,
       hasContent: true,
       showsIndexLabel: false,
@@ -37,9 +50,9 @@ export function deriveNodeLayoutPolicyFromPaper(
     };
   }
 
-  if (hasChildren) {
+  if (mode === 'indexed-branch') {
     return {
-      mode: 'indexed-branch',
+      mode,
       hasHeader: false,
       hasContent: false,
       showsIndexLabel: true,
@@ -51,7 +64,7 @@ export function deriveNodeLayoutPolicyFromPaper(
   }
 
   return {
-    mode: 'indexed-leaf',
+    mode,
     hasHeader: false,
     hasContent: false,
     showsIndexLabel: true,
@@ -69,6 +82,6 @@ export function deriveNodeLayoutPolicy(
 ): NodeLayoutPolicy {
   const paper = context.paperMap.get(nodeId);
   const hasChildren = (paper?.childIds.length ?? 0) > 0;
-  const isIndexed = context.indexedContentIds.has(nodeId);
-  return deriveNodeLayoutPolicyFromPaper(hasChildren, isIndexed, config);
+  const visibility = deriveNodeVisibilityState(nodeId, context);
+  return deriveNodeLayoutPolicyFromVisibility(hasChildren, visibility, config);
 }
