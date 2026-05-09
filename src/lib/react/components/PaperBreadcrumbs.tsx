@@ -93,7 +93,22 @@ export function PaperBreadcrumbs({ nodeId, parentId, title, tone }: PaperBreadcr
                 e.stopPropagation();
                 if (!isClickable) return;
                 const next = applyRules(expansionMap, paperMap, crumb.id, ruleBreakChainAt);
-                dispatch({ type: '__SYNC_EXPANSION', expansionMap: next });
+                for (const [currentParentId, entry] of expansionMap) {
+                  const nextOpenIds = next.get(currentParentId)?.openChildIds ?? [];
+                  for (const childId of entry.openChildIds) {
+                    if (!nextOpenIds.includes(childId)) {
+                      dispatch({ type: 'CLOSE_NODE', parentId: currentParentId, childId });
+                    }
+                  }
+                }
+                for (const [nextParentId, entry] of next) {
+                  const currentOpenIds = expansionMap.get(nextParentId)?.openChildIds ?? [];
+                  for (const childId of entry.openChildIds) {
+                    if (!currentOpenIds.includes(childId)) {
+                      dispatch({ type: 'OPEN_NODE', parentId: nextParentId, childId });
+                    }
+                  }
+                }
                 dispatch({ type: 'FOCUS_NODE', nodeId: crumb.id });
               }}
               style={{

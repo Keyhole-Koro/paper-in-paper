@@ -1,10 +1,22 @@
 import type { GridPosition, PaperContent, PaperId, PaperViewState, Paper } from './types';
 import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
-import { getAttentionSnapshot, resolveInitialAttention } from './attention';
+import { resolveInitialAttention } from './attention';
 import { openChild, closeChild, removeNodeFromExpansion } from './expansion';
 import { deriveNodeVisibilityState, getNextNodeVisibilityState } from './nodeVisibility';
+import { registerNode, syncAttentionForPaperMap, touchNode, unregisterNodes } from './nodeRegistry';
+import {
+  pruneExpansionMap,
+  pruneIdKeyedMap,
+  pruneIdSet,
+  pruneManualPlacementMap,
+} from './pruneViewState';
 import { addChild, getDescendantIds, moveNode, removeNode, type RemoveMode } from './tree';
 import { nanoid } from './nanoid';
+
+export interface DefaultOpenState {
+  expansionMap?: PaperViewState['expansionMap'];
+  focusedNodeId?: PaperViewState['focusedNodeId'];
+}
 
 export type Command =
   | { type: 'CREATE_UNPLACED_NODE'; title: string; description: string; content: PaperContent }
@@ -27,49 +39,7 @@ export type Command =
   | { type: 'UNPIN_NODE'; nodeId: PaperId }
   | { type: 'LABEL_CLICK_BOOST'; nodeId: PaperId }
   | { type: '__SYNC_PAPER_MAP'; paperMap: PaperViewState['paperMap'] }
-  | { type: '__SYNC_EXPANSION'; expansionMap: PaperViewState['expansionMap'] }
-  | { type: '__SYNC_FOCUSED'; focusedNodeId: PaperViewState['focusedNodeId'] }
   | { type: '__SYNC_UNPLACED'; unplacedNodeIds: PaperViewState['unplacedNodeIds'] };
-
-function upsertAttention(
-  state: PaperViewState,
-  nodeId: PaperId,
-  delta: number,
-  config: PaperCanvasConfig,
-  now: number,
-) {
-  const attentionMap = new Map(state.attentionMap);
-  const attentionTimestampMap = new Map(state.attentionTimestampMap);
-  const current = getAttentionSnapshot(state, nodeId, config, now).value;
-  attentionMap.set(nodeId, Math.max(0, current + delta));
-  attentionTimestampMap.set(nodeId, now);
-  return { attentionMap, attentionTimestampMap };
-}
-
-function syncAttentionForPaperMap(
-  state: PaperViewState,
-  nextPaperMap: PaperViewState['paperMap'],
-  config: PaperCanvasConfig,
-  now: number,
-) {
-  const attentionMap = new Map<PaperId, number>();
-  const attentionTimestampMap = new Map<PaperId, number>();
-
-  for (const [id, paper] of nextPaperMap) {
-    const hasExternalAttention = paper.attentionScore !== undefined;
-    if (hasExternalAttention) {
-      attentionMap.set(id, resolveInitialAttention(paper, config));
-      attentionTimestampMap.set(id, now);
-      continue;
-    }
-
-    const existing = state.attentionMap.get(id);
-    attentionMap.set(id, existing ?? resolveInitialAttention(paper, config));
-    attentionTimestampMap.set(id, state.attentionTimestampMap.get(id) ?? now);
-  }
-
-  return { attentionMap, attentionTimestampMap };
-}
 
 function clearPinOnNode(paperMap: PaperViewState['paperMap'], nodeId: PaperId) {
   const node = paperMap.get(nodeId);
@@ -96,8 +66,8 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
     case 'CREATE_UNPLACED_NODE': {
       const id = nanoid();
       const now = Date.now();
-      const next = new Map(state.paperMap);
-      next.set(id, {
+      const paperMap = new Map(state.paperMap);
+      paperMap.set(id, {
         id,
         title: command.title,
         description: command.description,
@@ -105,29 +75,21 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
         parentId: null,
         childIds: [],
       });
-      const attentionMap = new Map(state.attentionMap);
-      attentionMap.set(id, config.attention.initial);
-      const attentionTimestampMap = new Map(state.attentionTimestampMap);
-      attentionTimestampMap.set(id, now);
-      const accessMap = new Map(state.accessMap);
-      accessMap.set(id, now);
       return {
         ...state,
-        paperMap: next,
+        paperMap,
         unplacedNodeIds: [...state.unplacedNodeIds, id],
-        attentionMap,
-        attentionTimestampMap,
-        accessMap,
+        ...registerNode(state, id, config, now),
       };
     }
 
     case 'CREATE_CHILD_NODE': {
+      const parent = state.paperMap.get(command.parentId);
+      if (!parent) return state;
       const id = nanoid();
       const now = Date.now();
-      const next = new Map(state.paperMap);
-      const parent = next.get(command.parentId);
-      if (!parent) return state;
-      next.set(id, {
+      const paperMap = new Map(state.paperMap);
+      paperMap.set(id, {
         id,
         title: command.title,
         description: command.description,
@@ -136,24 +98,12 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
         parentId: command.parentId,
         childIds: [],
       });
-      next.set(command.parentId, { ...parent, childIds: [...parent.childIds, id] });
-      const expansionMap = openChild(state.expansionMap, command.parentId, id);
-      const attentionMap = new Map(state.attentionMap);
-      attentionMap.set(id, config.attention.initial);
-      const attentionTimestampMap = new Map(state.attentionTimestampMap);
-      attentionTimestampMap.set(id, now);
-      const accessMap = new Map(state.accessMap);
-      accessMap.set(id, now);
-      const protectedUntilMap = new Map(state.protectedUntilMap);
-      protectedUntilMap.set(id, now + config.attention.protectDurationMs);
+      paperMap.set(command.parentId, { ...parent, childIds: [...parent.childIds, id] });
       return {
         ...state,
-        paperMap: next,
-        expansionMap,
-        attentionMap,
-        attentionTimestampMap,
-        accessMap,
-        protectedUntilMap,
+        paperMap,
+        expansionMap: openChild(state.expansionMap, command.parentId, id),
+        ...registerNode(state, id, config, now, { protect: true }),
         focusedNodeId: id,
       };
     }
@@ -218,37 +168,16 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
       if (!node || node.parentId === null) return state;
       const removedIds = new Set([command.nodeId, ...getDescendantIds(state.paperMap, command.nodeId)]);
 
-      const paperMap = removeNode(state.paperMap, command.nodeId, command.mode ?? 'cascade');
-      let expansionMap = new Map(state.expansionMap);
-      expansionMap = removeNodeFromExpansion(
-        expansionMap,
-        state.paperMap,
-        node.parentId,
-        command.nodeId,
-      );
-
-      const attentionMap = new Map(state.attentionMap);
-      const attentionTimestampMap = new Map(state.attentionTimestampMap);
-      const accessMap = new Map(state.accessMap);
-      for (const removedId of removedIds) {
-        attentionMap.delete(removedId);
-        attentionTimestampMap.delete(removedId);
-        accessMap.delete(removedId);
-      }
-
-      const indexedContentIds = new Set(state.indexedContentIds);
-      for (const removedId of removedIds) {
-        indexedContentIds.delete(removedId);
-      }
-
       return {
         ...state,
-        paperMap,
-        expansionMap,
-        attentionMap,
-        attentionTimestampMap,
-        accessMap,
-        indexedContentIds,
+        paperMap: removeNode(state.paperMap, command.nodeId, command.mode ?? 'cascade'),
+        expansionMap: removeNodeFromExpansion(
+          state.expansionMap,
+          state.paperMap,
+          node.parentId,
+          command.nodeId,
+        ),
+        ...unregisterNodes(state, removedIds),
         focusedNodeId:
           state.focusedNodeId === command.nodeId ? node.parentId : state.focusedNodeId,
       };
@@ -256,32 +185,17 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
 
     case 'OPEN_NODE': {
       const now = Date.now();
-      const expansionMap = openChild(state.expansionMap, command.parentId, command.childId);
       const currentVisibility = deriveNodeVisibilityState(command.childId, state);
       const nextVisibility = getNextNodeVisibilityState(currentVisibility, 'OPEN_NODE');
       const indexedContentIds =
         nextVisibility === 'expanded'
           ? removeIndexedContent(state.indexedContentIds, command.childId)
           : state.indexedContentIds;
-      const { attentionMap, attentionTimestampMap } = upsertAttention(
-        state,
-        command.childId,
-        config.attention.openBonus,
-        config,
-        now,
-      );
-      const accessMap = new Map(state.accessMap);
-      accessMap.set(command.childId, now);
-      const protectedUntilMap = new Map(state.protectedUntilMap);
-      protectedUntilMap.set(command.childId, now + config.attention.protectDurationMs);
       return {
         ...state,
-        expansionMap,
+        expansionMap: openChild(state.expansionMap, command.parentId, command.childId),
         indexedContentIds,
-        attentionMap,
-        attentionTimestampMap,
-        accessMap,
-        protectedUntilMap,
+        ...touchNode(state, command.childId, config.attention.openBonus, config, now, { protect: true }),
         focusedNodeId: command.childId,
       };
     }
@@ -297,31 +211,18 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
     }
 
     case 'FOCUS_NODE': {
-      const now = Date.now();
-      const { attentionMap, attentionTimestampMap } = upsertAttention(
-        state,
-        command.nodeId,
-        config.attention.focusBonus,
-        config,
-        now,
-      );
-      const accessMap = new Map(state.accessMap);
-      accessMap.set(command.nodeId, now);
-      return { ...state, attentionMap, attentionTimestampMap, accessMap, focusedNodeId: command.nodeId };
+      return {
+        ...state,
+        ...touchNode(state, command.nodeId, config.attention.focusBonus, config, Date.now()),
+        focusedNodeId: command.nodeId,
+      };
     }
 
     case 'LABEL_CLICK_BOOST': {
-      const now = Date.now();
-      const { attentionMap, attentionTimestampMap } = upsertAttention(
-        state,
-        command.nodeId,
-        config.attention.labelClickBoost,
-        config,
-        now,
-      );
-      const accessMap = new Map(state.accessMap);
-      accessMap.set(command.nodeId, now);
-      return { ...state, attentionMap, attentionTimestampMap, accessMap };
+      return {
+        ...state,
+        ...touchNode(state, command.nodeId, config.attention.labelClickBoost, config, Date.now()),
+      };
     }
 
     case 'MOVE_NODE': {
@@ -414,15 +315,8 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
     }
 
     case 'UNINDEX_CONTENT': {
-      const currentVisibility = deriveNodeVisibilityState(command.nodeId, state);
-      const nextVisibility = getNextNodeVisibilityState(currentVisibility, 'UNINDEX_CONTENT');
-      if (nextVisibility === currentVisibility) {
-        const indexedContentIds = removeIndexedContent(state.indexedContentIds, command.nodeId);
-        if (indexedContentIds.size === state.indexedContentIds.size) return state;
-        return { ...state, indexedContentIds };
-      }
-      const indexedContentIds = removeIndexedContent(state.indexedContentIds, command.nodeId);
-      return { ...state, indexedContentIds };
+      if (!state.indexedContentIds.has(command.nodeId)) return state;
+      return { ...state, indexedContentIds: removeIndexedContent(state.indexedContentIds, command.nodeId) };
     }
 
     case 'PIN_NODE': {
@@ -450,29 +344,27 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
     case '__SYNC_PAPER_MAP': {
       if (command.paperMap === state.paperMap) return state;
       const now = Date.now();
-      const { attentionMap, attentionTimestampMap } = syncAttentionForPaperMap(state, command.paperMap, config, now);
-      return { ...state, paperMap: command.paperMap, attentionMap, attentionTimestampMap };
-    }
+      const nextPaperMap = command.paperMap;
+      const { attentionMap, attentionTimestampMap } = syncAttentionForPaperMap(state, nextPaperMap, config, now);
 
-    case '__SYNC_EXPANSION': {
-      if (command.expansionMap === state.expansionMap) return state;
-      const protectedUntilMap = new Map(state.protectedUntilMap);
-      const now = Date.now();
-      for (const [parentId, entry] of command.expansionMap) {
-        const prevEntry = state.expansionMap.get(parentId);
-        const prevOpen = new Set(prevEntry?.openChildIds ?? []);
-        for (const childId of entry.openChildIds) {
-          if (!prevOpen.has(childId)) {
-            protectedUntilMap.set(childId, now + config.attention.protectDurationMs);
-          }
-        }
-      }
-      return { ...state, expansionMap: command.expansionMap, protectedUntilMap };
-    }
+      const focusedNodeId =
+        state.focusedNodeId !== null && !nextPaperMap.has(state.focusedNodeId)
+          ? null
+          : state.focusedNodeId;
 
-    case '__SYNC_FOCUSED': {
-      if (command.focusedNodeId === state.focusedNodeId) return state;
-      return { ...state, focusedNodeId: command.focusedNodeId };
+      return {
+        ...state,
+        paperMap: nextPaperMap,
+        expansionMap: pruneExpansionMap(state.expansionMap, nextPaperMap),
+        focusedNodeId,
+        attentionMap,
+        attentionTimestampMap,
+        accessMap: pruneIdKeyedMap(state.accessMap, nextPaperMap),
+        indexedContentIds: pruneIdSet(state.indexedContentIds, nextPaperMap),
+        protectedUntilMap: pruneIdKeyedMap(state.protectedUntilMap, nextPaperMap),
+        contentHeightMap: pruneIdKeyedMap(state.contentHeightMap, nextPaperMap),
+        manualPlacementMap: pruneManualPlacementMap(state.manualPlacementMap, nextPaperMap),
+      };
     }
 
     case '__SYNC_UNPLACED': {
@@ -493,6 +385,7 @@ export function createInitialState(
   paperMap: PaperViewState['paperMap'],
   config: PaperCanvasConfig,
   unplacedNodeIds: PaperViewState['unplacedNodeIds'] = [],
+  defaultOpenState?: DefaultOpenState,
 ): PaperViewState {
   const attentionMap = new Map<string, number>();
   const attentionTimestampMap = new Map<string, number>();
@@ -507,10 +400,10 @@ export function createInitialState(
   }
   return {
     paperMap,
-    expansionMap: new Map(),
+    expansionMap: new Map(defaultOpenState?.expansionMap ?? []),
     indexedContentIds: new Set(),
     unplacedNodeIds,
-    focusedNodeId: null,
+    focusedNodeId: defaultOpenState?.focusedNodeId ?? null,
     accessMap,
     attentionMap,
     attentionTimestampMap,

@@ -1,10 +1,11 @@
 import { useCallback, useImperativeHandle, useMemo } from 'react';
 import type { Ref } from 'react';
-import type { ExpansionMap, Paper, PaperId, PaperMap } from '../core/types';
+import type { PaperId, PaperMap, PaperViewState } from '../core/types';
+import type { Command, DefaultOpenState } from '../core/commands';
 import type { PaperCanvasConfig, PaperCanvasConfigInput } from '../config/paperCanvasConfig';
 import { resolvePaperCanvasConfig } from '../config/paperCanvasConfig';
 import { getRootId } from '../core/tree';
-import { PaperStoreProvider, usePaperDispatch, usePaperStoreSelector } from './context/PaperStoreContext';
+import { PaperStoreProvider, usePaperDispatch, usePaperStoreApi, usePaperStoreSelector } from './context/PaperStoreContext';
 import { DragProvider, type DragSession } from './context/DragContext';
 import { DebugContext } from './context/DebugContext';
 import { CreateChildContext, type OnCreateChild } from './context/CreateChildContext';
@@ -22,24 +23,22 @@ import { useOverflowAutoClose } from './hooks/useOverflowAutoClose';
 import { IndexLabel } from './components/IndexLabel';
 
 export interface PaperCanvasHandle {
-  upsertPapers: (papers: Paper[]) => void;
-  mergePapers: (papers: Paper[]) => void;
-  removePaper: (id: PaperId) => void;
+  dispatch: (command: Command) => void;
+  dispatchAll: (commands: Command[]) => void;
+  getState: () => PaperViewState;
+  subscribe: (listener: () => void) => () => void;
 }
 
 export interface PaperCanvasProps {
   config?: PaperCanvasConfigInput;
   paperMap: PaperMap;
   rootId?: PaperId;
-  expansionMap?: ExpansionMap;
-  focusedNodeId?: PaperId | null;
+  defaultOpenState?: DefaultOpenState;
   isFullscreen?: boolean;
   debug?: boolean;
   overrideCss?: string;
   onCreateChild?: OnCreateChild;
   onPaperMapChange?: (paperMap: PaperMap) => void;
-  onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
-  onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
   onFullscreenChange?: (fullscreen: boolean) => void;
 }
 
@@ -56,13 +55,17 @@ function PaperCanvasInner({
     ({ state, config }) => ({ state, config }),
     (a, b) => a.state === b.state && a.config === b.config,
   );
+  const store = usePaperStoreApi();
   const dispatch = usePaperDispatch();
 
   useImperativeHandle(ref, () => ({
-    upsertPapers: (papers) => dispatch({ type: 'UPSERT_PAPERS', papers }),
-    mergePapers: (papers) => dispatch({ type: 'MERGE_PAPERS', papers }),
-    removePaper: (id) => dispatch({ type: 'DELETE_NODE', nodeId: id }),
-  }), [dispatch]);
+    dispatch,
+    dispatchAll: (commands) => {
+      for (const command of commands) dispatch(command);
+    },
+    getState: () => store.getSnapshot().state,
+    subscribe: (listener) => store.subscribe(listener),
+  }), [dispatch, store]);
   const rootId = explicitRootId ?? getRootId(state.paperMap);
   const [canvasRef, canvasSize] = useRoomSize();
   const debug = useDebug();
@@ -121,15 +124,12 @@ export function PaperCanvas({
   config,
   paperMap,
   rootId,
-  expansionMap,
-  focusedNodeId,
+  defaultOpenState,
   isFullscreen,
   debug = false,
   overrideCss,
   onCreateChild,
   onPaperMapChange,
-  onExpansionMapChange,
-  onFocusedNodeIdChange,
   onFullscreenChange,
   ref,
 }: PaperCanvasProps & { ref?: Ref<PaperCanvasHandle> }) {
@@ -140,12 +140,9 @@ export function PaperCanvas({
     <PaperStoreProvider
       config={resolvedConfig}
       paperMap={paperMap}
-      expansionMap={expansionMap}
-      focusedNodeId={focusedNodeId}
+      defaultOpenState={defaultOpenState}
       isFullscreen={isFullscreen}
       onPaperMapChange={onPaperMapChange}
-      onExpansionMapChange={onExpansionMapChange}
-      onFocusedNodeIdChange={onFocusedNodeIdChange}
       onFullscreenChange={onFullscreenChange}
     >
       <PaperCanvasInner rootId={rootId} overrideCss={overrideCss} ref={ref} />

@@ -4,7 +4,13 @@ export type { PaperCanvasConfig, PaperCanvasConfigInput, PaperNodeConfig, Attent
 export { defaultPaperCanvasConfig, resolvePaperCanvasConfig } from './config/paperCanvasConfig';
 export type { Paper, PaperContent, PaperId, PaperMap, PaperViewState, ContentNode, ExpansionMap, PinnedLayout } from './core/types';
 export { buildPaperMap } from './core/tree';
+export { PaperMapBuilder } from './core/paperMapBuilder';
+export type { PaperUpsertInput } from './core/paperMapBuilder';
 export type { RemoveMode } from './core/tree';
 export { createInitialState, reduce } from './core/commands';
-export type { Command } from './core/commands';
+export type { Command, DefaultOpenState } from './core/commands';
 export { usePaperDispatch, usePaperStoreSelector } from './react/context/PaperStoreContext';
+export { useSiblingShare } from './react/hooks/useSiblingShare';
+export type { SiblingShareOptions, SiblingShareResult } from './react/hooks/useSiblingShare';
+export { useCanvasHandle, useCanvasSelector } from './react/hooks/useCanvasSelector';
+export type { CanvasHandleHook } from './react/hooks/useCanvasSelector';
