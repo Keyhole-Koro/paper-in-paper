@@ -40,7 +40,6 @@ export type Command =
   | { type: 'REORDER_WITHIN_PARENT'; parentId: PaperId; paperId: PaperId; position: GridPosition }
   | { type: 'ATTACH_UNPLACED_NODE'; nodeId: PaperId; targetParentId: PaperId; insertBeforeId: PaperId | null }
   | { type: 'REPORT_CONTENT_HEIGHT'; nodeId: PaperId; height: number }
-  | { type: 'AUTO_CLOSE_NODE'; nodeId: PaperId }
   | { type: 'INDEX_CONTENT'; nodeId: PaperId }
   | { type: 'UNINDEX_CONTENT'; nodeId: PaperId }
   | { type: 'LABEL_CLICK_BOOST'; nodeId: PaperId }
@@ -166,11 +165,10 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
 
     case 'DELETE_NODE': {
       const node = state.paperMap.get(command.nodeId);
-      if (!node || node.parentId === null) return state; // root cannot be deleted
+      if (!node || node.parentId === null) return state;
 
       const paperMap = removeNode(state.paperMap, command.nodeId, command.mode ?? 'cascade');
 
-      // clean up expansion for deleted subtree
       let expansionMap = new Map(state.expansionMap);
       expansionMap = removeNodeFromExpansion(
         expansionMap,
@@ -257,7 +255,6 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
         command.insertBeforeId,
       );
 
-      // remove from source parent's openChildIds, preserve subtree expansion
       const expansionMap = removeNodeFromExpansion(
         state.expansionMap,
         state.paperMap,
@@ -310,18 +307,6 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
       const contentHeightMap = new Map(state.contentHeightMap);
       contentHeightMap.set(command.nodeId, command.height);
       return { ...state, contentHeightMap };
-    }
-
-    case 'AUTO_CLOSE_NODE': {
-      const node = state.paperMap.get(command.nodeId);
-      if (!node || node.parentId === null) return state;
-      const expansionMap = closeChild(
-        state.expansionMap,
-        state.paperMap,
-        node.parentId,
-        command.nodeId,
-      );
-      return { ...state, expansionMap };
     }
 
     case 'INDEX_CONTENT': {

@@ -128,9 +128,6 @@ export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: numbe
     color: var(--text);
     padding: 0;
     overflow: hidden;
-    background:
-      radial-gradient(circle at top right, color-mix(in srgb, ${theme.linkBackground} 50%, transparent), transparent 34%),
-      linear-gradient(180deg, var(--surface), var(--surface-alt));
   }
   body > * + * {
     margin-top: 16px;

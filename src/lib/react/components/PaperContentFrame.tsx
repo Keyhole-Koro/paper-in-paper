@@ -74,7 +74,6 @@ export function PaperContentFrame({ nodeId, content, theme, overrideCss }: Paper
     (event: PaperContentEvent) => {
       if (event.type === 'open') {
         dispatch({ type: 'OPEN_NODE', parentId: nodeId, childId: event.paperId });
-        dispatch({ type: 'FOCUS_NODE', nodeId: event.paperId });
       } else if (event.type === 'resize') {
         setHeight(event.height);
         dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: event.height });
@@ -110,7 +109,6 @@ export function PaperContentFrame({ nodeId, content, theme, overrideCss }: Paper
         theme={theme}
         onOpen={(paperId) => {
           dispatch({ type: 'OPEN_NODE', parentId: nodeId, childId: paperId });
-          dispatch({ type: 'FOCUS_NODE', nodeId: paperId });
         }}
       />
     );
@@ -216,7 +214,6 @@ function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
     if (!paperId) return;
     e.preventDefault();
     dispatch({ type: 'OPEN_NODE', parentId: nodeId, childId: paperId });
-    dispatch({ type: 'FOCUS_NODE', nodeId: paperId });
   }, [dispatch, nodeId]);
 
   return (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { PaperId } from '../../core/types';
 import { buildSrcDoc, isPaperContentEvent, type PaperContentEvent } from '../internal/iframeBridge';
 
@@ -25,7 +25,21 @@ interface UseIframeBridgeOptions {
 }
 
 export function useIframeBridge({ content, theme, fontSize, overrideCss, openIds, onEvent }: UseIframeBridgeOptions) {
-  const srcDoc = buildSrcDoc(content, theme, fontSize, overrideCss);
+  const srcDoc = useMemo(() => buildSrcDoc(content, theme, fontSize, overrideCss), [
+    content,
+    fontSize,
+    overrideCss,
+    theme.surface,
+    theme.surfaceAlt,
+    theme.surfaceRaised,
+    theme.text,
+    theme.mutedText,
+    theme.divider,
+    theme.linkBackground,
+    theme.linkBackgroundHover,
+    theme.linkBorder,
+    theme.linkText,
+  ]);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
@@ -39,9 +53,15 @@ export function useIframeBridge({ content, theme, fontSize, overrideCss, openIds
   }, []);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   // ref callback: iframeがマウント/アンマウントされたとき
   const setIframeRef = useCallback((el: HTMLIFrameElement | null) => {
+    if (iframeRef.current === el && el !== null) return;
+    if (iframeRef.current !== el) {
+      cleanupRef.current?.();
+      cleanupRef.current = null;
+    }
     (iframeRef as { current: HTMLIFrameElement | null }).current = el;
     if (!el) return;
 
@@ -58,8 +78,7 @@ export function useIframeBridge({ content, theme, fontSize, overrideCss, openIds
     el.addEventListener('load', onLoad);
     window.addEventListener('message', handleMessage);
 
-    // cleanup は返せないのでWeakMapで管理
-    (el as any).__cleanup = () => {
+    cleanupRef.current = () => {
       el.removeEventListener('load', onLoad);
       window.removeEventListener('message', handleMessage);
     };
@@ -75,10 +94,8 @@ export function useIframeBridge({ content, theme, fontSize, overrideCss, openIds
   // アンマウント時にcleanup
   useEffect(() => {
     return () => {
-      const iframe = iframeRef.current;
-      if (iframe && (iframe as any).__cleanup) {
-        (iframe as any).__cleanup();
-      }
+      cleanupRef.current?.();
+      cleanupRef.current = null;
     };
   }, []);
 

@@ -13,7 +13,6 @@ export interface RoomLayout {
 
 const DEFAULT_MIN_AR = 0.25;
 const DEFAULT_MAX_AR = 2.0;
-// importanceMap に値がない場合の contentWeight フォールバック
 const CONTENT_WEIGHT_FALLBACK = 100;
 const CONTENT_ID = '__content__';
 const SHRINK_STEP = 0.84;
@@ -51,23 +50,18 @@ export function computeNodeLayout(
     return { contentRect: zeroContent, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 };
   }
 
-  const allOpenChildIds = getOpenChildIds(expansionMap, nodeId);
-  const openChildIds = allOpenChildIds;
-  const openSet = new Set(allOpenChildIds);
+  const openChildIds = getOpenChildIds(expansionMap, nodeId);
+  const openSet = new Set(openChildIds);
   const closedChildIds = parent.childIds.filter((id) => !openSet.has(id));
 
   if (w === 0 || h === 0 || openChildIds.length === 0) {
     return { contentRect: fullContent, childRects: new Map(), closedChildIds, overflowChildCount: 0 };
   }
 
-  // content の weight = このノード自身の rawImportance
-  // importance が decay するほど content が縮み、子により多くの room を譲る
-  // indexedContentIds に含まれる場合は weight 0 (非表示) にする
   const contentWeight = indexedContentIds.has(nodeId)
     ? 0
     : (importanceMap.get(nodeId) ?? CONTENT_WEIGHT_FALLBACK);
 
-  // sibling 間の room 配分 = rawImportance + Σ 子孫の roomWeight（subtree 全量加算）
   const roomWeightMap = buildRoomWeightMap(nodeId, expansionMap, importanceMap);
 
   const roomPriority = [...openChildIds].sort((a, b) => {
@@ -84,18 +78,14 @@ export function computeNodeLayout(
     Math.max(roomWeightMap.get(id) ?? 0, 1),
   ]));
 
-  let rects = computeRoomLayout(
-    [
-      { id: CONTENT_ID, weight: contentWeight },
-      ...openChildIds.map((id) => ({ id, weight: roomWeights.get(id) ?? 1 })),
-    ],
-    w, h, minAR, maxAR,
-  ).rects;
+  const buildLayoutItems = () => [
+    { id: CONTENT_ID, weight: contentWeight },
+    ...openChildIds.map((id) => ({ id, weight: roomWeights.get(id) ?? 1 })),
+  ];
+
+  let rects = computeRoomLayout(buildLayoutItems(), w, h, minAR, maxAR).rects;
 
   let pass = 0;
-  if (roomNeedsShrink(rects, minAR, maxAR)) {
-    console.log(`[usePaperLayout] shrinking room for ${nodeId} (w:${w}, h:${h})`);
-  }
   while (roomNeedsShrink(rects, minAR, maxAR) && pass < MAX_SHRINK_PASSES) {
     let changed = false;
     for (const childId of roomPriority) {
@@ -108,13 +98,7 @@ export function computeNodeLayout(
       }
     }
     if (!changed) break;
-    rects = computeRoomLayout(
-      [
-        { id: CONTENT_ID, weight: contentWeight },
-        ...openChildIds.map((id) => ({ id, weight: roomWeights.get(id) ?? 1 })),
-      ],
-      w, h, minAR, maxAR,
-    ).rects;
+    rects = computeRoomLayout(buildLayoutItems(), w, h, minAR, maxAR).rects;
     pass += 1;
   }
 
@@ -143,5 +127,17 @@ export function usePaperLayout(
       state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap,
       state.indexedContentIds, minAR, maxAR,
     );
-  }, [nodeId, containerWidth, containerHeight, minAR, maxAR, state.expansionMap, state.importanceMap, state.paperMap, state.contentHeightMap, state.accessMap, state.indexedContentIds]);
+  }, [
+    nodeId,
+    containerWidth,
+    containerHeight,
+    minAR,
+    maxAR,
+    state.expansionMap,
+    state.importanceMap,
+    state.paperMap,
+    state.contentHeightMap,
+    state.accessMap,
+    state.indexedContentIds,
+  ]);
 }
