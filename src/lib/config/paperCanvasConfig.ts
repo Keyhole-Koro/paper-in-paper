@@ -16,6 +16,7 @@ export interface ImportanceConfig {
 export interface PaperCanvasConfig {
   paperNode: PaperNodeConfig;
   importance: ImportanceConfig;
+  indexLabelThick: number;
 }
 
 export interface PaperCanvasConfigInput {
@@ -28,6 +29,7 @@ export const defaultPaperCanvasConfig: PaperCanvasConfig = {
     headerHeight: 37,
     borderWidth: 2,
   },
+  indexLabelThick: 28,
   importance: {
     initial: 100,
     openBonus: 30,
@@ -51,5 +53,6 @@ export function resolvePaperCanvasConfig(
       ...defaultPaperCanvasConfig.importance,
       ...config?.importance,
     },
+    indexLabelThick: defaultPaperCanvasConfig.indexLabelThick,
   };
 }

@@ -86,24 +86,9 @@ function fillRecursiveLayout(
   }
 }
 
-function resolveIndexSide(rect: LayoutRect, canvasWidth: number, canvasHeight: number): IndexLabelNode['side'] {
-  const centerX = rect.x + rect.width / 2;
-  const centerY = rect.y + rect.height / 2;
-  const distances = [
-    { side: 'left' as const, value: centerX },
-    { side: 'right' as const, value: Math.max(0, canvasWidth - centerX) },
-    { side: 'top' as const, value: centerY },
-    { side: 'bottom' as const, value: Math.max(0, canvasHeight - centerY) },
-  ];
-  distances.sort((a, b) => a.value - b.value);
-  return distances[0].side;
-}
-
 function buildIndexLabels(
   state: PaperViewState,
   layoutMap: Map<PaperId, NodeLayoutEntry>,
-  canvasWidth: number,
-  canvasHeight: number,
 ): IndexLabelNode[] {
   const labels: IndexLabelNode[] = [];
   for (const id of state.indexedContentIds) {
@@ -115,7 +100,7 @@ function buildIndexLabels(
     labels.push({
       id,
       title: paper.title,
-      side: resolveIndexSide(allocatedRect, canvasWidth, canvasHeight),
+      side: 'right',
       centerX: allocatedRect.x + allocatedRect.width / 2,
       centerY: allocatedRect.y + allocatedRect.height / 2,
     });
@@ -145,9 +130,16 @@ function PaperCanvasInner({
 
   const layoutMap = useMemo(() => {
     if (canvasSize.width === 0 || canvasSize.height === 0) return new Map<PaperId, NodeLayoutEntry>();
+    const inset = state.indexedContentIds.size > 0 ? config.indexLabelThick : 0;
     return computeRecursiveLayout(
       rootId,
-      { id: rootId, x: 0, y: 0, width: canvasSize.width, height: canvasSize.height },
+      {
+        id: rootId,
+        x: 0,
+        y: 0,
+        width: Math.max(0, canvasSize.width - inset),
+        height: canvasSize.height,
+      },
       state,
       config,
     );
@@ -161,8 +153,8 @@ function PaperCanvasInner({
   useAutoCollapse({ rootId, layoutMap });
 
   const indexLabels = useMemo(
-    () => buildIndexLabels(state, layoutMap, canvasSize.width, canvasSize.height),
-    [state, layoutMap, canvasSize.width, canvasSize.height],
+    () => buildIndexLabels(state, layoutMap),
+    [state, layoutMap],
   );
 
   const handleIndexLabelClick = useCallback((nodeId: PaperId) => {
@@ -222,12 +214,13 @@ function PaperCanvasInner({
     <DragProvider onDrop={handleDrop}>
       <LayoutContextProvider layoutMap={layoutMap}>
         <div ref={canvasRef} style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
-          <PaperNode nodeId={rootId} parentId={null} overrideCss={overrideCss} />
+          <div style={{ position: 'absolute', inset: 0, right: indexLabels.length > 0 ? config.indexLabelThick : 0 }}>
+            <PaperNode nodeId={rootId} parentId={null} overrideCss={overrideCss} />
+          </div>
           {indexLabels.map((label) => (
             <IndexLabel
               key={label.id}
               node={label}
-              canvasWidth={canvasSize.width}
               canvasHeight={canvasSize.height}
               onClick={handleIndexLabelClick}
             />
