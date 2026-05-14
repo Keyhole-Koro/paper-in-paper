@@ -1,6 +1,6 @@
 import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import { getAttentionMultiplier, getEffectiveAttention } from './attention';
-import { getOpenChildIds } from './expansion';
+import { getOpenChildIds, getOpenChildSet } from './expansion';
 import { deriveNodeLayoutPolicy, type NodeLayoutPolicy } from './nodeLayoutPolicy';
 import type {
   AccessMap,
@@ -402,7 +402,7 @@ export function computeNodeLayout(
   }
 
   const openChildIds = getOpenChildIds(expansionMap, nodeId);
-  const openSet = new Set(openChildIds);
+  const openSet = getOpenChildSet(expansionMap, nodeId);
   const closedChildIds = parent.childIds.filter((id) => !openSet.has(id));
   const nodePolicy = deriveNodeLayoutPolicy(nodeId, { paperMap, expansionMap, indexedContentIds }, config);
 

@@ -381,6 +381,19 @@ export function reduce(state: PaperViewState, command: Command, config: PaperCan
   return reduceCore(state, command, config);
 }
 
+function normalizeExpansionMap(input?: PaperViewState['expansionMap']): PaperViewState['expansionMap'] {
+  const next: PaperViewState['expansionMap'] = new Map();
+  if (!input) return next;
+  for (const [parentId, entry] of input) {
+    if (entry.openChildSet && entry.openChildSet.size === entry.openChildIds.length) {
+      next.set(parentId, entry);
+    } else {
+      next.set(parentId, { openChildIds: entry.openChildIds, openChildSet: new Set(entry.openChildIds) });
+    }
+  }
+  return next;
+}
+
 export function createInitialState(
   paperMap: PaperViewState['paperMap'],
   config: PaperCanvasConfig,
@@ -400,7 +413,7 @@ export function createInitialState(
   }
   return {
     paperMap,
-    expansionMap: new Map(defaultOpenState?.expansionMap ?? []),
+    expansionMap: normalizeExpansionMap(defaultOpenState?.expansionMap),
     indexedContentIds: new Set(),
     unplacedNodeIds,
     focusedNodeId: defaultOpenState?.focusedNodeId ?? null,

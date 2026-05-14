@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { PaperId } from '../../core/types';
-import { findInsertTarget, type InsertTarget } from '../internal/hitTest';
+import { buildRoomSnapshots, findInsertTargetFromSnapshots, type InsertTarget } from '../internal/hitTest';
 
 export type DragMode = 'reorder' | 'move-parent' | 'attach-unplaced' | 'content-link';
 
@@ -45,6 +45,9 @@ export function DragProvider({
   const pointerPosRef = useRef({ x: 0, y: 0 });
   const onDropRef = useRef(onDrop);
   onDropRef.current = onDrop;
+  const snapshotsRef = useRef<ReturnType<typeof buildRoomSnapshots>>([]);
+  const rafIdRef = useRef<number | null>(null);
+  const snapshotDirtyRef = useRef(false);
 
   const registerRoom = useCallback((parentId: PaperId, el: HTMLElement | null) => {
     if (el) {
@@ -52,31 +55,57 @@ export function DragProvider({
     } else {
       roomsRef.current.delete(parentId);
     }
+    // If a drag is in progress, the rooms set just changed; refresh next frame.
+    if (sessionRef.current) snapshotDirtyRef.current = true;
+  }, []);
+
+  const refreshSnapshots = useCallback(() => {
+    snapshotsRef.current = buildRoomSnapshots(roomsRef.current);
+    snapshotDirtyRef.current = false;
+  }, []);
+
+  const invalidateSnapshots = useCallback(() => {
+    snapshotDirtyRef.current = true;
   }, []);
 
   const endDrag = useCallback(() => {
     const s = sessionRef.current;
     if (s) {
-      const target = findInsertTarget(roomsRef.current, pointerPosRef.current, s.draggedPaperId);
+      if (snapshotDirtyRef.current) refreshSnapshots();
+      const target = findInsertTargetFromSnapshots(snapshotsRef.current, pointerPosRef.current, s.draggedPaperId);
       if (target) onDropRef.current(s, target);
     }
     sessionRef.current = null;
+    snapshotsRef.current = [];
+    snapshotDirtyRef.current = false;
+    if (rafIdRef.current != null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
     setSession(null);
     setInsertTarget(null);
     document.body.style.userSelect = '';
 
     window.removeEventListener('pointermove', handlePointerMove);
     window.removeEventListener('pointerup', handlePointerUp);
-  }, []);
+    window.removeEventListener('scroll', invalidateSnapshots, true);
+    window.removeEventListener('resize', invalidateSnapshots);
+  }, [refreshSnapshots, invalidateSnapshots]);
 
   function handlePointerMove(e: PointerEvent) {
     const pos = { x: e.clientX, y: e.clientY };
     pointerPosRef.current = pos;
-    setPointerPos(pos);
-    const s = sessionRef.current;
-    if (!s) return;
-    const target = findInsertTarget(roomsRef.current, pos, s.draggedPaperId);
-    setInsertTarget(target);
+    if (rafIdRef.current != null) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const s = sessionRef.current;
+      if (!s) return;
+      if (snapshotDirtyRef.current) refreshSnapshots();
+      setPointerPos(pointerPosRef.current);
+      setInsertTarget(
+        findInsertTargetFromSnapshots(snapshotsRef.current, pointerPosRef.current, s.draggedPaperId),
+      );
+    });
   }
 
   function handlePointerUp() {
@@ -86,6 +115,7 @@ export function DragProvider({
   const startDrag = useCallback((newSession: DragSession, initial: { x: number; y: number }) => {
     sessionRef.current = newSession;
     pointerPosRef.current = initial;
+    refreshSnapshots();
     setSession(newSession);
     setPointerPos(initial);
     setInsertTarget(null);
@@ -93,7 +123,10 @@ export function DragProvider({
 
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
-  }, []);
+    // Capture-phase scroll catches inner scrollers; resize covers viewport changes.
+    window.addEventListener('scroll', invalidateSnapshots, true);
+    window.addEventListener('resize', invalidateSnapshots);
+  }, [refreshSnapshots, invalidateSnapshots]);
 
   return (
     <DragContext value={{ session, insertTarget, pointerPos, startDrag, endDrag, registerRoom, isDragging: session !== null }}>

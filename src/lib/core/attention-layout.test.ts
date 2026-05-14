@@ -14,6 +14,10 @@ function buildState(papers: Paper[]) {
   return createInitialState(buildPaperMap(papers), defaultPaperCanvasConfig);
 }
 
+function expansion(openChildIds: string[]) {
+  return { openChildIds, openChildSet: new Set(openChildIds) };
+}
+
 describe('attention and layout', () => {
   it('derives explicit visibility states for expanded, indexed, and closed nodes', () => {
     const state = buildState([
@@ -21,7 +25,7 @@ describe('attention and layout', () => {
       { id: 'open', title: 'open', description: '', content: '', parentId: 'root', childIds: [] },
       { id: 'closed', title: 'closed', description: '', content: '', parentId: 'root', childIds: [] },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['open'] });
+    state.expansionMap.set('root', expansion(['open']));
     state.indexedContentIds.add('open');
 
     expect(deriveNodeVisibilityState('root', state)).toBe('expanded');
@@ -46,8 +50,8 @@ describe('attention and layout', () => {
     state.indexedContentIds.add('branch');
     state.indexedContentIds.add('leaf');
 
-    state.expansionMap.set('root', { openChildIds: ['branch', 'leaf'] });
-    state.expansionMap.set('branch', { openChildIds: ['child'] });
+    state.expansionMap.set('root', expansion(['branch', 'leaf']));
+    state.expansionMap.set('branch', expansion(['child']));
 
     const expanded = deriveNodeLayoutPolicy('root', state, defaultPaperCanvasConfig);
     const indexedBranch = deriveNodeLayoutPolicy('branch', state, defaultPaperCanvasConfig);
@@ -99,8 +103,8 @@ describe('attention and layout', () => {
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: ['b'], attentionScore: 100 },
       { id: 'b', title: 'b', description: '', content: '', parentId: 'a', childIds: [], attentionScore: 100 },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['a'] });
-    state.expansionMap.set('a', { openChildIds: ['b'] });
+    state.expansionMap.set('root', expansion(['a']));
+    state.expansionMap.set('a', expansion(['b']));
     state.contentHeightMap.set('a', 300);
     state.contentHeightMap.set('b', 200);
     const context = {
@@ -127,8 +131,8 @@ describe('attention and layout', () => {
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: ['b'], attentionScore: 100 },
       { id: 'b', title: 'b', description: '', content: '', parentId: 'a', childIds: [], attentionScore: 100 },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['a'] });
-    state.expansionMap.set('a', { openChildIds: ['b'] });
+    state.expansionMap.set('root', expansion(['a']));
+    state.expansionMap.set('a', expansion(['b']));
     state.indexedContentIds.add('a');
     state.contentHeightMap.set('a', 300);
     state.contentHeightMap.set('b', 200);
@@ -155,8 +159,8 @@ describe('attention and layout', () => {
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: ['b'], attentionScore: 100 },
       { id: 'b', title: 'b', description: '', content: '', parentId: 'a', childIds: [], attentionScore: 80 },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['a'] });
-    state.expansionMap.set('a', { openChildIds: ['b'] });
+    state.expansionMap.set('root', expansion(['a']));
+    state.expansionMap.set('a', expansion(['b']));
     state.indexedContentIds.add('a');
     state.contentHeightMap.set('a', 500);
     state.contentHeightMap.set('b', 240);
@@ -189,7 +193,7 @@ describe('attention and layout', () => {
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 80 },
       { id: 'b', title: 'b', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 120 },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['a', 'b'] });
+    state.expansionMap.set('root', expansion(['a', 'b']));
     state.indexedContentIds.add('a');
     state.contentHeightMap.set('root', 400);
     state.contentHeightMap.set('a', 240);
@@ -227,7 +231,7 @@ describe('attention and layout', () => {
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 10, pinnedLayout: { minShare: 0.4 } },
       { id: 'b', title: 'b', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 200 },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['a', 'b'] });
+    state.expansionMap.set('root', expansion(['a', 'b']));
     state.contentHeightMap.set('root', 200);
     state.contentHeightMap.set('a', 50);
     state.contentHeightMap.set('b', 500);
@@ -260,7 +264,7 @@ describe('attention and layout', () => {
       { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a'], attentionScore: 300 },
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 20 },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['a'] });
+    state.expansionMap.set('root', expansion(['a']));
     state.contentHeightMap.set('root', 4000);
     state.contentHeightMap.set('a', 120);
 
@@ -293,7 +297,7 @@ describe('attention and layout', () => {
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 1, pinnedLayout: { minShare: 0.2 } },
       { id: 'b', title: 'b', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 2 },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['a', 'b'] });
+    state.expansionMap.set('root', expansion(['a', 'b']));
     state.attentionTimestampMap.set('a', 0);
     state.attentionTimestampMap.set('b', 0);
 
@@ -307,8 +311,8 @@ describe('attention and layout', () => {
       { id: 'target', title: 'target', description: '', content: '', parentId: 'root', childIds: [] },
       { id: 'b', title: 'b', description: '', content: '', parentId: 'a', childIds: [], pinnedLayout: { minShare: 0.3 } },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['a', 'target'] });
-    state.expansionMap.set('a', { openChildIds: ['b'] });
+    state.expansionMap.set('root', expansion(['a', 'target']));
+    state.expansionMap.set('a', expansion(['b']));
 
     state = reduce(state, { type: 'MOVE_NODE', nodeId: 'b', targetParentId: 'root', insertBeforeId: null }, defaultPaperCanvasConfig);
     expect(state.paperMap.get('b')?.pinnedLayout).toBeUndefined();
@@ -331,7 +335,7 @@ describe('attention and layout', () => {
       { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a'] },
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [] },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['a'] });
+    state.expansionMap.set('root', expansion(['a']));
 
     state = reduce(state, { type: 'INDEX_CONTENT', nodeId: 'a' }, defaultPaperCanvasConfig);
     expect(deriveNodeVisibilityState('a', state)).toBe('indexed');
@@ -349,7 +353,7 @@ describe('attention and layout', () => {
       { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a'] },
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [] },
     ]);
-    state.expansionMap.set('root', { openChildIds: ['a'] });
+    state.expansionMap.set('root', expansion(['a']));
     state = reduce(state, { type: 'INDEX_CONTENT', nodeId: 'a' }, defaultPaperCanvasConfig);
     state = reduce(state, { type: 'AUTO_CLOSE_NODE', nodeId: 'a' }, defaultPaperCanvasConfig);
 
@@ -374,11 +378,11 @@ describe('attention and layout', () => {
       ['c', { allocatedRect: { id: 'c', x: 0, y: 80, width: 100, height: 100 }, roomLayout: { contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 }, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 } }],
     ]);
     const policyMap = new Map([
-      ['a', deriveNodeLayoutPolicy('a', { paperMap: papers, expansionMap: new Map([['root', { openChildIds: ['a', 'b', 'c'] }]]), indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
-      ['b', deriveNodeLayoutPolicy('b', { paperMap: papers, expansionMap: new Map([['root', { openChildIds: ['a', 'b', 'c'] }]]), indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
-      ['c', deriveNodeLayoutPolicy('c', { paperMap: papers, expansionMap: new Map([['root', { openChildIds: ['a', 'b', 'c'] }]]), indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
+      ['a', deriveNodeLayoutPolicy('a', { paperMap: papers, expansionMap: new Map([['root', expansion(['a', 'b', 'c'])]]), indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
+      ['b', deriveNodeLayoutPolicy('b', { paperMap: papers, expansionMap: new Map([['root', expansion(['a', 'b', 'c'])]]), indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
+      ['c', deriveNodeLayoutPolicy('c', { paperMap: papers, expansionMap: new Map([['root', expansion(['a', 'b', 'c'])]]), indexedContentIds: new Set(['a', 'b', 'c']) }, defaultPaperCanvasConfig)],
     ]);
-    const expansionMap = new Map([['root', { openChildIds: ['a', 'b', 'c'] }]]);
+    const expansionMap = new Map([['root', expansion(['a', 'b', 'c'])]]);
     const labels = buildPackedLeftIndexLabels(layoutMap as any, papers, expansionMap, new Set(['a', 'b', 'c']), policyMap, defaultPaperCanvasConfig, 240);
     expect(labels).toHaveLength(3);
     const extents = labels.map((label) => label.extent ?? 80);

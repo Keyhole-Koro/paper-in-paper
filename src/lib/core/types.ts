@@ -77,6 +77,8 @@ export type PaperMap = Map<PaperId, Paper>;
 
 export interface NodeExpansion {
   openChildIds: PaperId[];
+  /** Mirror of openChildIds for O(1) membership checks. Internal optimization; must stay in sync. */
+  openChildSet: ReadonlySet<PaperId>;
 }
 
 export type ExpansionMap = Map<PaperId, NodeExpansion>;

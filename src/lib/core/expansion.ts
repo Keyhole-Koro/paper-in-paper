@@ -1,17 +1,21 @@
 import type { ExpansionMap, PaperId, PaperMap } from './types';
 import { getDescendantIds } from './tree';
 
+function makeEntry(openChildIds: PaperId[]): { openChildIds: PaperId[]; openChildSet: ReadonlySet<PaperId> } {
+  return { openChildIds, openChildSet: new Set(openChildIds) };
+}
+
 export function openChild(
   expansionMap: ExpansionMap,
   parentId: PaperId,
   childId: PaperId,
 ): ExpansionMap {
   const current = expansionMap.get(parentId);
+  if (current?.openChildSet.has(childId)) return expansionMap;
   const openChildIds = current?.openChildIds ?? [];
-  if (openChildIds.includes(childId)) return expansionMap;
 
   const next = new Map(expansionMap);
-  next.set(parentId, { openChildIds: [...openChildIds, childId] });
+  next.set(parentId, makeEntry([...openChildIds, childId]));
   return next;
 }
 
@@ -25,9 +29,7 @@ export function closeChild(
   if (!current) return expansionMap;
 
   const next = new Map(expansionMap);
-  next.set(parentId, {
-    openChildIds: current.openChildIds.filter((id) => id !== childId),
-  });
+  next.set(parentId, makeEntry(current.openChildIds.filter((id) => id !== childId)));
 
   // clear subtree expansion
   const descendants = getDescendantIds(paperMap, childId);
@@ -48,9 +50,7 @@ export function removeNodeFromExpansion(
   if (!current) return expansionMap;
 
   const next = new Map(expansionMap);
-  next.set(parentId, {
-    openChildIds: current.openChildIds.filter((id) => id !== nodeId),
-  });
+  next.set(parentId, makeEntry(current.openChildIds.filter((id) => id !== nodeId)));
 
   const descendants = getDescendantIds(paperMap, nodeId);
   for (const id of [nodeId, ...descendants]) {
@@ -80,10 +80,16 @@ export function walkHiddenChain(
   return chain;
 }
 
+const EMPTY_SET: ReadonlySet<PaperId> = new Set();
+
 export function getOpenChildIds(expansionMap: ExpansionMap, parentId: PaperId): PaperId[] {
   return expansionMap.get(parentId)?.openChildIds ?? [];
 }
 
+export function getOpenChildSet(expansionMap: ExpansionMap, parentId: PaperId): ReadonlySet<PaperId> {
+  return expansionMap.get(parentId)?.openChildSet ?? EMPTY_SET;
+}
+
 export function isOpen(expansionMap: ExpansionMap, parentId: PaperId, childId: PaperId): boolean {
-  return getOpenChildIds(expansionMap, parentId).includes(childId);
+  return getOpenChildSet(expansionMap, parentId).has(childId);
 }

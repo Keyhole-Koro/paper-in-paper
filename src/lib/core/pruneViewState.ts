@@ -33,7 +33,11 @@ export function pruneExpansionMap(
     if (!paperMap.has(parentId)) continue;
     const openChildIds = entry.openChildIds.filter((childId) => paperMap.has(childId));
     if (openChildIds.length === 0) continue;
-    next.set(parentId, { ...entry, openChildIds });
+    if (openChildIds.length === entry.openChildIds.length) {
+      next.set(parentId, entry);
+    } else {
+      next.set(parentId, { openChildIds, openChildSet: new Set(openChildIds) });
+    }
   }
   return next;
 }
