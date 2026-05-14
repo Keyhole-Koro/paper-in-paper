@@ -1,29 +1,31 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import type { RefObject } from 'react';
+import type { NodeRoomLayout } from '../../core/layout';
 import type { Paper, PaperId } from '../../core/types';
-import type { RoomLayout } from '../hooks/usePaperLayout';
+import type { NodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
 import type { PaperTone, PaperColorContext } from '../internal/paperColors';
 import { PaperContentFrame } from './PaperContentFrame';
 import { PaperHeader } from './PaperHeader';
 import { PaperNode } from './PaperNode';
 
-const SPRING = { type: 'spring' as const, stiffness: 300, damping: 30, mass: 0.8 };
-
 interface PaperNodeFrameProps {
   nodeId: PaperId;
   parentId: PaperId | null;
   paper: Paper;
-  layout: RoomLayout;
+  layout: NodeRoomLayout;
   tone: PaperTone;
   inheritedColor: PaperColorContext | null;
   overrideCss?: string;
+  currentShare?: number;
   isFocused: boolean;
   isDragTarget: boolean;
-  isContentIndexed: boolean;
+  layoutPolicy: NodeLayoutPolicy;
   debugBadge?: string | null;
   roomRef: RefObject<HTMLDivElement | null>;
   insertBeforeRect?: { x: number; y: number; height: number } | null;
 }
+
+const POSITION_TRANSITION = { type: 'spring' as const, stiffness: 260, damping: 32, mass: 0.7 };
 
 export function PaperNodeFrame({
   nodeId,
@@ -33,9 +35,10 @@ export function PaperNodeFrame({
   tone,
   inheritedColor,
   overrideCss,
+  currentShare,
   isFocused,
   isDragTarget,
-  isContentIndexed,
+  layoutPolicy,
   debugBadge,
   roomRef,
   insertBeforeRect,
@@ -57,7 +60,17 @@ export function PaperNodeFrame({
         boxSizing: 'border-box',
       }}
     >
-      <PaperHeader nodeId={nodeId} parentId={parentId} title={paper.title} tone={tone} isFocused={isFocused} />
+      {layoutPolicy.hasHeader && (
+        <PaperHeader
+          nodeId={nodeId}
+          parentId={parentId}
+          title={paper.title}
+          tone={tone}
+          isFocused={isFocused}
+          isPinned={paper.pinnedLayout?.minShare !== undefined}
+          currentShare={currentShare}
+        />
+      )}
 
       <div
         ref={roomRef}
@@ -74,26 +87,25 @@ export function PaperNodeFrame({
           animate={{
             x: layout.contentRect.x,
             y: layout.contentRect.y,
-            width: layout.contentRect.width,
-            height: layout.contentRect.height,
-            opacity: isContentIndexed ? 0 : 1,
           }}
-          transition={SPRING}
+          transition={POSITION_TRANSITION}
           style={{
             position: 'absolute',
             left: 0,
             top: 0,
+            width: layout.contentRect.width,
+            height: layout.contentRect.height,
             overflow: 'auto',
-            borderRight: layout.childRects.size > 0 && !isContentIndexed ? `1px solid ${tone.divider}` : 'none',
+            borderRight: layout.childRects.size > 0 && layoutPolicy.hasContent ? `1px solid ${tone.divider}` : 'none',
             boxSizing: 'border-box',
-            padding: isContentIndexed ? 0 : 10,
+            padding: layoutPolicy.hasContent ? 10 : 0,
             color: tone.text,
             scrollbarWidth: 'thin',
             scrollbarColor: `${tone.divider} transparent`,
-            pointerEvents: isContentIndexed ? 'none' : 'auto',
+            pointerEvents: layoutPolicy.hasContent ? 'auto' : 'none',
           }}
         >
-          {!isContentIndexed && (
+          {layoutPolicy.hasContent && (
             <PaperContentFrame
               nodeId={nodeId}
               content={paper.content}
@@ -119,14 +131,16 @@ export function PaperNodeFrame({
             <motion.div
               key={childId}
               data-child-id={childId}
-              initial={{ opacity: 0, scale: 0.95, x: rect.x, y: rect.y, width: rect.width, height: rect.height }}
-              animate={{ opacity: 1, scale: 1, x: rect.x, y: rect.y, width: rect.width, height: rect.height }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={SPRING}
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ x: rect.x, y: rect.y, opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.985 }}
+              transition={POSITION_TRANSITION}
               style={{
                 position: 'absolute',
                 left: 0,
                 top: 0,
+                width: rect.width,
+                height: rect.height,
                 overflow: 'hidden',
                 borderLeft: `1px solid ${tone.divider}`,
                 borderTop: rect.y > 0 ? `1px solid ${tone.divider}` : 'none',

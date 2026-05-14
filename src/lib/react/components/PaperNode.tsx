@@ -1,24 +1,43 @@
 import { useEffect, useRef } from 'react';
 import type { PaperId } from '../../core/types';
-import { usePaperStore } from '../context/PaperStoreContext';
+import { usePaperStoreSelector } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
 import { useDebug } from '../context/DebugContext';
-import { useLayoutContext } from '../context/LayoutContext';
-import type { RoomLayout } from '../hooks/usePaperLayout';
-import { derivePaperNodeViewModel } from '../internal/paperNodeView';
-import {
-  getPaperTone,
-  resolvePaperColorContext,
-  type PaperColorContext,
-} from '../internal/paperColors';
+import { useLayoutEntry } from '../context/LayoutContext';
+import type { PaperColorContext } from '../internal/paperColors';
+import { derivePaperNodeRenderModel } from '../internal/paperNodeRenderModel';
 import { PaperNodeFrame } from './PaperNodeFrame';
+import { getEffectiveAttention } from '../../core/attention';
+import type { NodeVisibilityState } from '../../core/nodeVisibility';
+import { deriveNodeVisibilityState } from '../../core/nodeVisibility';
 
-const FALLBACK_LAYOUT: RoomLayout = {
-  contentRect: { id: '__content__', x: 0, y: 0, width: 0, height: 0 },
-  childRects: new Map(),
-  closedChildIds: [],
-  overflowChildCount: 0,
-};
+function shallowEqualNodeSelection(
+  a: {
+    config: any;
+    paper: any;
+    nodeVisibility: NodeVisibilityState;
+    parentVisibility: NodeVisibilityState | null;
+    isFocused: boolean;
+    effectiveAttention: number;
+  },
+  b: {
+    config: any;
+    paper: any;
+    nodeVisibility: NodeVisibilityState;
+    parentVisibility: NodeVisibilityState | null;
+    isFocused: boolean;
+    effectiveAttention: number;
+  },
+) {
+  return (
+    a.config === b.config &&
+    a.paper === b.paper &&
+    a.nodeVisibility === b.nodeVisibility &&
+    a.parentVisibility === b.parentVisibility &&
+    a.isFocused === b.isFocused &&
+    a.effectiveAttention === b.effectiveAttention
+  );
+}
 
 interface PaperNodeProps {
   nodeId: PaperId;
@@ -28,16 +47,30 @@ interface PaperNodeProps {
 }
 
 export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss }: PaperNodeProps) {
-  const { config, state } = usePaperStore();
   const { session, insertTarget, registerRoom } = useDrag();
   const roomRef = useRef<HTMLDivElement>(null);
   const debug = useDebug();
 
-  const layoutMap = useLayoutContext();
-  const entry = layoutMap.get(nodeId);
-  const layout = entry?.roomLayout ?? FALLBACK_LAYOUT;
-  const paper = state.paperMap.get(nodeId);
-  const isRoot = parentId === null;
+  const entry = useLayoutEntry(nodeId);
+  const parentEntry = useLayoutEntry(parentId);
+  const { config, paper, nodeVisibility, parentVisibility, isFocused, effectiveAttention } = usePaperStoreSelector(
+    ({ state, config }) => {
+      const paper = state.paperMap.get(nodeId);
+      const isFocused = state.focusedNodeId === nodeId;
+      const nodeVisibility = deriveNodeVisibilityState(nodeId, state);
+      const parentVisibility = parentId ? deriveNodeVisibilityState(parentId, state) : null;
+      const effectiveAttention = getEffectiveAttention(state, nodeId, config, Date.now());
+      return {
+        config,
+        paper,
+        nodeVisibility,
+        parentVisibility,
+        isFocused,
+        effectiveAttention,
+      };
+    },
+    shallowEqualNodeSelection,
+  );
 
   useEffect(() => {
     registerRoom(nodeId, roomRef.current);
@@ -46,48 +79,39 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
 
   if (!paper) return null;
 
-  const isFocused = state.focusedNodeId === nodeId;
-  const isDragTarget = session !== null && insertTarget?.parentId === nodeId;
-  const isContentIndexed = state.indexedContentIds.has(nodeId);
-  const view = derivePaperNodeViewModel({
+  const renderModel = derivePaperNodeRenderModel({
     nodeId,
+    parentId,
+    config,
+    paper,
     entry,
+    parentEntry,
+    session,
+    insertTarget,
+    inheritedColor,
     isFocused,
-    isDragTarget,
-    isContentIndexed,
-    config: config.paperNode,
+    nodeVisibility,
+    parentVisibility,
+    effectiveAttention,
+    debug,
   });
-
-  const color = resolvePaperColorContext(paper.hue, inheritedColor);
-  const isFocusedView = view.interactionMode === 'focused';
-  const isDragTargetView = view.interactionMode === 'drag-target';
-  const tone = getPaperTone(color, { isRoot, isFocused: isFocusedView });
-
-  const insertBeforeRect = isDragTarget && insertTarget?.insertBeforeId && layout.childRects.has(insertTarget.insertBeforeId)
-    ? (() => {
-        const rect = layout.childRects.get(insertTarget.insertBeforeId);
-        return rect ? { x: rect.x, y: rect.y, height: rect.height } : null;
-      })()
-    : null;
-  const debugBadge = debug
-    ? `${nodeId} • imp ${Math.round(state.importanceMap.get(nodeId) ?? 0)} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} • ${view.interactionMode}${isContentIndexed ? ' • indexed-content' : ''}`
-    : null;
 
   return (
     <PaperNodeFrame
       nodeId={nodeId}
       parentId={parentId}
-      paper={paper}
-      layout={layout}
-      tone={tone}
-      inheritedColor={color}
+      paper={renderModel.paper}
+      layout={renderModel.layout}
+      tone={renderModel.tone}
+      inheritedColor={renderModel.inheritedColor}
       overrideCss={overrideCss}
-      isFocused={isFocusedView}
-      isDragTarget={isDragTargetView}
-      isContentIndexed={isContentIndexed}
-      debugBadge={debugBadge}
+      currentShare={renderModel.currentShare}
+      isFocused={renderModel.isFocusedView}
+      isDragTarget={renderModel.isDragTargetView}
+      layoutPolicy={renderModel.view.layoutPolicy}
+      debugBadge={renderModel.debugBadge}
       roomRef={roomRef}
-      insertBeforeRect={insertBeforeRect}
+      insertBeforeRect={renderModel.insertBeforeRect}
     />
   );
 }

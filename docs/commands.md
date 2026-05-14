@@ -117,7 +117,7 @@ dispatch({
 
 ### `OPEN_NODE`
 
-子ノードを展開します。importance と accessMap が更新され、`focusedNodeId` が子ノードに設定されます。
+子ノードを展開します。attention と accessMap が更新され、`focusedNodeId` が子ノードに設定されます。
 
 ```ts
 dispatch({ type: 'OPEN_NODE', parentId: 'root', childId: 'abc' });
@@ -137,7 +137,7 @@ dispatch({ type: 'CLOSE_NODE', parentId: 'root', childId: 'abc' });
 
 ### `FOCUS_NODE`
 
-ノードをフォーカスします（サイドパネルの表示切り替えなど UI 側の判断に使用）。importance と accessMap を更新します。
+ノードをフォーカスします（サイドパネルの表示切り替えなど UI 側の判断に使用）。attention と accessMap を更新します。
 
 ```ts
 dispatch({ type: 'FOCUS_NODE', nodeId: 'abc' });
@@ -147,7 +147,7 @@ dispatch({ type: 'FOCUS_NODE', nodeId: 'abc' });
 
 ### `AUTO_CLOSE_NODE`
 
-importance が低下したノードをシステムが自動的に閉じるときに使います。通常はライブラリ内部から呼ばれます。
+attention が低下したノードをシステムが自動的に閉じるときに使います。通常はライブラリ内部から呼ばれます。
 
 ```ts
 dispatch({ type: 'AUTO_CLOSE_NODE', nodeId: 'abc' });
@@ -215,10 +215,6 @@ dispatch({ type: '__SYNC_EXPANSION', expansionMap: new Map() });
 dispatch({ type: '__SYNC_FOCUSED', focusedNodeId: null });
 ```
 
-### `TICK_IMPORTANCE`
+### Attention Decay
 
-全ノードの importance を時間減衰させます。定期的に呼ぶことで、長時間アクセスされていないノードが auto-close の対象になります。
-
-```ts
-dispatch({ type: 'TICK_IMPORTANCE', now: Date.now() });
-```
+attention の減衰は command ではなく lazy decay で処理されます。`attentionTimestampMap` を基準に、selector や layout 計算が必要になった時点で現在値へ変換されます。

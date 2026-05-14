@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ContentNode, PaperContent, PaperId } from '../../core/types';
 import type { PaperContentEvent } from '../internal/iframeBridge';
 import { useIframeBridge } from '../hooks/useIframeBridge';
-import { usePaperStore } from '../context/PaperStoreContext';
+import { usePaperDispatch, usePaperStoreSelector } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
+import type { PaperContentHtmlMapEntry } from '../internal/paperContentHtml';
+import { calcContentFontSize, deriveHtmlPresentation } from '../internal/paperContentHtml';
 import { PaperContentNodes } from './PaperContentNodes';
 
 export interface PaperContentTheme {
@@ -26,70 +28,88 @@ interface PaperContentFrameProps {
   overrideCss?: string;
 }
 
-function calcContentFontSize(charCount: number): number {
-  const MIN = 11, MAX = 16;
-  if (charCount === 0) return MIN;
-  return Math.min(MAX, Math.max(MIN, MIN + 2 * Math.log10(charCount)));
-}
+const EMPTY_OPEN_IDS: PaperId[] = [];
+const EMPTY_CHILD_TITLES = new Map<PaperId, string>();
 
-function appendRelatedLinks(content: string, nodeId: PaperId, paperMap: Map<PaperId, { title: string; childIds: PaperId[] }>): string {
-  const paper = paperMap.get(nodeId);
-  if (!paper) return content;
-
-  const unmentioned = paper.childIds.filter((id) => !content.includes(`data-paper-id="${id}"`));
-  if (unmentioned.length === 0) return content;
-
-  const links = unmentioned.map((id) => {
-    const childPaper = paperMap.get(id);
-    const title = childPaper ? childPaper.title : id;
-    return `<a data-paper-id="${id}">${title}</a>`;
-  });
-
-  return `${content}<hr/><div style="margin-top: 16px;"><p class="eyebrow">Related</p><p style="display: flex; flex-wrap: wrap; gap: 8px;">${links.join('')}</p></div>`;
-}
-
-function deriveHtmlPresentation(content: string, nodeId: PaperId, paperMap: Map<PaperId, { title: string; childIds: PaperId[] }>) {
-  const finalContent = appendRelatedLinks(content, nodeId, paperMap);
-  // HTMLタグを除去してテキスト文字数をフォントサイズ計算に使う
-  const plainText = finalContent.replace(/<[^>]+>/g, '');
-  const fontSize = calcContentFontSize(plainText.length);
-  return { finalContent, fontSize };
+function shallowEqualContentSelection(
+  a: {
+    nodeTitle: string;
+    childTitles: Map<PaperId, string>;
+    openIds: PaperId[];
+  },
+  b: {
+    nodeTitle: string;
+    childTitles: Map<PaperId, string>;
+    openIds: PaperId[];
+  },
+) {
+  if (a.nodeTitle !== b.nodeTitle) return false;
+  if (a.openIds !== b.openIds) return false;
+  if (a.childTitles.size !== b.childTitles.size) return false;
+  for (const [id, title] of a.childTitles) {
+    if (b.childTitles.get(id) !== title) return false;
+  }
+  return true;
 }
 
 export function PaperContentFrame({ nodeId, content, theme, overrideCss }: PaperContentFrameProps) {
-  const { dispatch, state } = usePaperStore();
+  const dispatch = usePaperDispatch();
   const { startDrag, isDragging } = useDrag();
   const [height, setHeight] = useState(60);
+  const lastHeightRef = useRef(60);
   const isStructured = Array.isArray(content);
   const isHtmlString = typeof content === 'string';
+  const { nodeTitle, childTitles, openIds } = usePaperStoreSelector(({ state }) => {
+    const paper = state.paperMap.get(nodeId);
+    if (!paper) {
+      return { nodeTitle: nodeId, childTitles: EMPTY_CHILD_TITLES, openIds: EMPTY_OPEN_IDS };
+    }
+    const childTitles = new Map<PaperId, string>();
+    for (const childId of paper.childIds) {
+      childTitles.set(childId, state.paperMap.get(childId)?.title ?? childId);
+    }
+    return {
+      nodeTitle: paper.title,
+      childTitles,
+      openIds: state.expansionMap.get(nodeId)?.openChildIds ?? EMPTY_OPEN_IDS,
+    };
+  }, shallowEqualContentSelection);
 
   const htmlPresentation = useMemo(() => {
     if (!isHtmlString) {
       return { finalContent: '', fontSize: calcContentFontSize(0) };
     }
-    return deriveHtmlPresentation(content, nodeId, state.paperMap as Map<PaperId, { title: string; childIds: PaperId[] }>);
-  }, [content, isHtmlString, nodeId, state.paperMap]);
+    const paperMap = new Map<PaperId, PaperContentHtmlMapEntry>();
+    paperMap.set(nodeId, {
+      title: nodeTitle,
+      childIds: Array.from(childTitles.keys()),
+    });
+    for (const [childId, childTitle] of childTitles) {
+      paperMap.set(childId, { title: childTitle, childIds: [] });
+    }
+    return deriveHtmlPresentation(content, nodeId, paperMap);
+  }, [content, isHtmlString, nodeId, nodeTitle, childTitles]);
 
   const handleEvent = useCallback(
     (event: PaperContentEvent) => {
       if (event.type === 'open') {
         dispatch({ type: 'OPEN_NODE', parentId: nodeId, childId: event.paperId });
       } else if (event.type === 'resize') {
+        if (Math.abs(lastHeightRef.current - event.height) < 8) return;
+        lastHeightRef.current = event.height;
         setHeight(event.height);
         dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: event.height });
       } else if (event.type === 'dragstart') {
-        const paper = state.paperMap.get(event.paperId);
-        if (!paper) return;
+        const title = childTitles.get(event.paperId);
+        if (!title) return;
         startDrag(
-          { draggedPaperId: event.paperId, sourceParentId: nodeId, mode: 'content-link', draggedTitle: paper.title },
+          { draggedPaperId: event.paperId, sourceParentId: nodeId, mode: 'content-link', draggedTitle: title },
           { x: event.clientX, y: event.clientY },
         );
       }
     },
-    [nodeId, dispatch, startDrag, state.paperMap],
+    [nodeId, dispatch, startDrag, childTitles],
   );
-
-  const openIds = state.expansionMap.get(nodeId)?.openChildIds ?? [];
 
   const { iframeRef, srcDoc } = useIframeBridge({
     content: htmlPresentation.finalContent,
@@ -146,25 +166,35 @@ interface PaperContentStructuredProps {
 }
 
 function PaperContentStructured({ nodeId, nodes, theme, onOpen }: PaperContentStructuredProps) {
-  const { dispatch } = usePaperStore();
+  const dispatch = usePaperDispatch();
   const containerRef = useRef<HTMLDivElement>(null);
   const lastHeightRef = useRef<number | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    let raf = 0;
     function reportHeight() {
       const nextEl = containerRef.current;
       if (!nextEl) return;
       const nextHeight = nextEl.scrollHeight;
-      if (lastHeightRef.current === nextHeight) return;
+      if (lastHeightRef.current !== null && Math.abs(lastHeightRef.current - nextHeight) < 8) return;
       lastHeightRef.current = nextHeight;
       dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: nextHeight });
     }
-    const observer = new ResizeObserver(reportHeight);
+    const observer = new ResizeObserver(() => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        reportHeight();
+      });
+    });
     observer.observe(el);
     reportHeight();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [dispatch, nodeId]);
 
   return (
@@ -183,27 +213,37 @@ interface PaperContentReactProps {
 }
 
 function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
-  const { dispatch } = usePaperStore();
+  const dispatch = usePaperDispatch();
   const containerRef = useRef<HTMLDivElement>(null);
   const lastHeightRef = useRef<number | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    let raf = 0;
 
     function reportHeight() {
       const nextEl = containerRef.current;
       if (!nextEl) return;
       const nextHeight = nextEl.scrollHeight;
-      if (lastHeightRef.current === nextHeight) return;
+      if (lastHeightRef.current !== null && Math.abs(lastHeightRef.current - nextHeight) < 8) return;
       lastHeightRef.current = nextHeight;
       dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: nextHeight });
     }
 
-    const observer = new ResizeObserver(reportHeight);
+    const observer = new ResizeObserver(() => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        reportHeight();
+      });
+    });
     observer.observe(el);
     reportHeight();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [dispatch, nodeId, content]);
 
   const handlePaperOpen = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {

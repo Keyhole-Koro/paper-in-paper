@@ -1,9 +1,7 @@
-import { useMemo } from 'react';
 import type { PaperId } from '../../core/types';
 import { walkHiddenChain } from '../../core/expansion';
 import { applyRules, ruleBreakChainAt } from '../../core/expansionRules';
-import { usePaperStore } from '../context/PaperStoreContext';
-import { useLayoutContext } from '../context/LayoutContext';
+import { usePaperDispatch, usePaperStoreSelector } from '../context/PaperStoreContext';
 import type { PaperTone } from '../internal/paperColors';
 
 interface PaperBreadcrumbsProps {
@@ -13,19 +11,49 @@ interface PaperBreadcrumbsProps {
   tone: PaperTone;
 }
 
-export function PaperBreadcrumbs({ nodeId, parentId, title, tone }: PaperBreadcrumbsProps) {
-  const { state, dispatch } = usePaperStore();
-  const layoutMap = useLayoutContext();
+function shallowEqualBreadcrumbSelection(
+  a: {
+    breadcrumbs: { id: PaperId; title: string }[];
+    expansionMap: unknown;
+    paperMap: unknown;
+  },
+  b: {
+    breadcrumbs: { id: PaperId; title: string }[];
+    expansionMap: unknown;
+    paperMap: unknown;
+  },
+) {
+  if (a.expansionMap !== b.expansionMap || a.paperMap !== b.paperMap) return false;
+  if (a.breadcrumbs.length !== b.breadcrumbs.length) return false;
+  for (let i = 0; i < a.breadcrumbs.length; i += 1) {
+    if (a.breadcrumbs[i].id !== b.breadcrumbs[i].id || a.breadcrumbs[i].title !== b.breadcrumbs[i].title) {
+      return false;
+    }
+  }
+  return true;
+}
 
-  const breadcrumbs = useMemo(() => {
+export function PaperBreadcrumbs({ nodeId, parentId, title, tone }: PaperBreadcrumbsProps) {
+  const dispatch = usePaperDispatch();
+  const { breadcrumbs, expansionMap, paperMap } = usePaperStoreSelector(({ state }) => {
     const parentPaper = state.paperMap.get(parentId);
-    if (!parentPaper) return [];
+    if (!parentPaper) {
+      return {
+        breadcrumbs: [] as { id: PaperId; title: string }[],
+        expansionMap: state.expansionMap,
+        paperMap: state.paperMap,
+      };
+    }
     const hiddenIds = walkHiddenChain(parentId, nodeId, state.expansionMap);
-    return [parentId, ...hiddenIds, nodeId].map(id => ({
-      id,
-      title: state.paperMap.get(id)?.title ?? '',
-    }));
-  }, [parentId, nodeId, state.paperMap, state.expansionMap, title, layoutMap]);
+    return {
+      breadcrumbs: [parentId, ...hiddenIds, nodeId].map((id) => ({
+        id,
+        title: state.paperMap.get(id)?.title ?? '',
+      })),
+      expansionMap: state.expansionMap,
+      paperMap: state.paperMap,
+    };
+  }, shallowEqualBreadcrumbSelection);
 
   if (breadcrumbs.length === 0) {
     return (
@@ -63,8 +91,23 @@ export function PaperBreadcrumbs({ nodeId, parentId, title, tone }: PaperBreadcr
               onClick={e => {
                 e.stopPropagation();
                 if (!isClickable) return;
-                const next = applyRules(state.expansionMap, state.paperMap, crumb.id, ruleBreakChainAt);
-                dispatch({ type: '__SYNC_EXPANSION', expansionMap: next });
+                const next = applyRules(expansionMap, paperMap, crumb.id, ruleBreakChainAt);
+                for (const [currentParentId, entry] of expansionMap) {
+                  const nextOpenIds = next.get(currentParentId)?.openChildIds ?? [];
+                  for (const childId of entry.openChildIds) {
+                    if (!nextOpenIds.includes(childId)) {
+                      dispatch({ type: 'CLOSE_NODE', parentId: currentParentId, childId });
+                    }
+                  }
+                }
+                for (const [nextParentId, entry] of next) {
+                  const currentOpenIds = expansionMap.get(nextParentId)?.openChildIds ?? [];
+                  for (const childId of entry.openChildIds) {
+                    if (!currentOpenIds.includes(childId)) {
+                      dispatch({ type: 'OPEN_NODE', parentId: nextParentId, childId });
+                    }
+                  }
+                }
                 dispatch({ type: 'FOCUS_NODE', nodeId: crumb.id });
               }}
               style={{

@@ -44,6 +44,11 @@ export interface PaperLayoutResult {
 
 export type PaperLayoutFn = (ctx: PaperLayoutContext) => PaperLayoutResult;
 
+export interface PinnedLayout {
+  minShare?: number;
+  pinnedAt?: number;
+}
+
 export interface Paper {
   id: PaperId;
   title: string;
@@ -61,6 +66,8 @@ export interface Paper {
   minWidth?: number;
   /** content を表示するのに最低必要な高さ（px）。auto-collapse 判定に使われる。 */
   minHeight?: number;
+  attentionScore?: number;
+  pinnedLayout?: PinnedLayout;
   parentId: PaperId | null;
   childIds: PaperId[];
   overrideCss?: string;
@@ -75,6 +82,9 @@ export interface NodeExpansion {
 export type ExpansionMap = Map<PaperId, NodeExpansion>;
 
 export type UnplacedNodeIds = PaperId[];
+
+export type AttentionMap = Map<PaperId, number>;
+export type AttentionTimestampMap = Map<PaperId, number>;
 
 export interface GridPosition {
   x: number;
@@ -97,7 +107,8 @@ export interface PaperViewState {
   unplacedNodeIds: PaperId[];
   focusedNodeId: PaperId | null;
   accessMap: AccessMap;
-  importanceMap: ImportanceMap;
+  attentionMap: AttentionMap;
+  attentionTimestampMap: AttentionTimestampMap;
   manualPlacementMap: PlacementMap;
   contentHeightMap: Map<PaperId, number>;
   protectedUntilMap: Map<PaperId, number>;

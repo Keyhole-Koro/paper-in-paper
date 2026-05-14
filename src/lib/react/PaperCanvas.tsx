@@ -1,111 +1,45 @@
 import { useCallback, useImperativeHandle, useMemo } from 'react';
 import type { Ref } from 'react';
-import { createPortal } from 'react-dom';
-import type { ExpansionMap, Paper, PaperId, PaperMap, PaperViewState } from '../core/types';
-import type { PaperCanvasConfig, PaperCanvasConfigInput } from '../config/paperCanvasConfig';
+import type { PaperId, PaperMap, PaperViewState } from '../core/types';
+import type { Command, DefaultOpenState } from '../core/commands';
+import type { PaperCanvasConfigInput } from '../config/paperCanvasConfig';
 import { resolvePaperCanvasConfig } from '../config/paperCanvasConfig';
 import { getRootId } from '../core/tree';
-import { PaperStoreProvider, usePaperStore } from './context/PaperStoreContext';
+import { PaperStoreProvider, usePaperDispatch, usePaperStoreApi, usePaperStoreSelector } from './context/PaperStoreContext';
 import { DragProvider, type DragSession } from './context/DragContext';
 import { DebugContext } from './context/DebugContext';
 import { CreateChildContext, type OnCreateChild } from './context/CreateChildContext';
-import { LayoutContextProvider, type NodeLayoutEntry } from './context/LayoutContext';
+import { LayoutContextProvider } from './context/LayoutContext';
 import type { InsertTarget } from './internal/hitTest';
+import { PaperCanvasDebugPanel } from './components/PaperCanvasDebugPanel';
 import { PaperNode } from './components/PaperNode';
 import { FloatingLayer } from './components/FloatingLayer';
-import { IndexLabel, type IndexLabelNode } from './components/IndexLabel';
+import { IndexLabel } from './components/IndexLabel';
 import { useRoomSize } from './hooks/useRoomSize';
 import { useDebug } from './context/DebugContext';
-import { computeNodeLayout } from './hooks/usePaperLayout';
-import { useAutoCollapse } from './hooks/useAutoCollapse';
-import type { LayoutRect } from '../core/layout';
+import { buildCanvasDebugText, buildFocusedDebugText } from './internal/canvasDebug';
+import { useCanvasLayoutSnapshot } from './hooks/useCanvasLayoutSnapshot';
+import { useIndexLabels } from './hooks/useIndexLabels';
+import { useOverflowAutoClose } from './hooks/useOverflowAutoClose';
 
 export interface PaperCanvasHandle {
-  upsertPapers: (papers: Paper[]) => void;
-  mergePapers: (papers: Paper[]) => void;
-  removePaper: (id: PaperId) => void;
+  dispatch: (command: Command) => void;
+  dispatchAll: (commands: Command[]) => void;
+  getState: () => PaperViewState;
+  subscribe: (listener: () => void) => () => void;
 }
 
 export interface PaperCanvasProps {
   config?: PaperCanvasConfigInput;
   paperMap: PaperMap;
   rootId?: PaperId;
-  expansionMap?: ExpansionMap;
-  focusedNodeId?: PaperId | null;
+  defaultOpenState?: DefaultOpenState;
   isFullscreen?: boolean;
   debug?: boolean;
   overrideCss?: string;
   onCreateChild?: OnCreateChild;
   onPaperMapChange?: (paperMap: PaperMap) => void;
-  onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
-  onFocusedNodeIdChange?: (paperId: PaperId | null) => void;
   onFullscreenChange?: (fullscreen: boolean) => void;
-}
-
-function computeRecursiveLayout(
-  nodeId: PaperId,
-  allocatedRect: LayoutRect,
-  state: PaperViewState,
-  config: PaperCanvasConfig,
-): Map<PaperId, NodeLayoutEntry> {
-  const result = new Map<PaperId, NodeLayoutEntry>();
-  fillRecursiveLayout(nodeId, allocatedRect, state, config, result);
-  return result;
-}
-
-function fillRecursiveLayout(
-  nodeId: PaperId,
-  allocatedRect: LayoutRect,
-  state: PaperViewState,
-  config: PaperCanvasConfig,
-  result: Map<PaperId, NodeLayoutEntry>,
-) {
-  const roomW = Math.max(0, allocatedRect.width - config.paperNode.borderWidth);
-  const roomH = Math.max(0, allocatedRect.height - config.paperNode.headerHeight - config.paperNode.borderWidth);
-
-  const roomLayout = computeNodeLayout(
-    nodeId, roomW, roomH,
-    state.paperMap, state.expansionMap, state.importanceMap, state.accessMap, state.contentHeightMap,
-    state.indexedContentIds,
-  );
-
-  result.set(nodeId, { allocatedRect, roomLayout });
-
-  for (const [childId, childRect] of roomLayout.childRects) {
-    const borderLeft = 1;
-    const borderTop = childRect.y > 0 ? 1 : 0;
-
-    const childAllocated: LayoutRect = {
-      id: childId,
-      x: allocatedRect.x + childRect.x,
-      y: allocatedRect.y + config.paperNode.headerHeight + childRect.y,
-      width: Math.max(0, childRect.width - borderLeft),
-      height: Math.max(0, childRect.height - borderTop),
-    };
-    fillRecursiveLayout(childId, childAllocated, state, config, result);
-  }
-}
-
-function buildIndexLabels(
-  state: PaperViewState,
-  layoutMap: Map<PaperId, NodeLayoutEntry>,
-): IndexLabelNode[] {
-  const labels: IndexLabelNode[] = [];
-  for (const id of state.indexedContentIds) {
-    const paper = state.paperMap.get(id);
-    const entry = layoutMap.get(id);
-    if (!paper || !entry) continue;
-
-    const { allocatedRect } = entry;
-    labels.push({
-      id,
-      title: paper.title,
-      side: 'right',
-      centerX: allocatedRect.x + allocatedRect.width / 2,
-      centerY: allocatedRect.y + allocatedRect.height / 2,
-    });
-  }
-  return labels;
 }
 
 function PaperCanvasInner({
@@ -117,86 +51,35 @@ function PaperCanvasInner({
   overrideCss?: string;
   ref?: Ref<PaperCanvasHandle>;
 }) {
-  const { config, state, dispatch } = usePaperStore();
+  const { config, state } = usePaperStoreSelector(
+    ({ state, config }) => ({ state, config }),
+    (a, b) => a.state === b.state && a.config === b.config,
+  );
+  const store = usePaperStoreApi();
+  const dispatch = usePaperDispatch();
 
   useImperativeHandle(ref, () => ({
-    upsertPapers: (papers) => dispatch({ type: 'UPSERT_PAPERS', papers }),
-    mergePapers: (papers) => dispatch({ type: 'MERGE_PAPERS', papers }),
-    removePaper: (id) => dispatch({ type: 'DELETE_NODE', nodeId: id }),
-  }), [dispatch]);
+    dispatch,
+    dispatchAll: (commands) => {
+      for (const command of commands) dispatch(command);
+    },
+    getState: () => store.getSnapshot().state,
+    subscribe: (listener) => store.subscribe(listener),
+  }), [dispatch, store]);
   const rootId = explicitRootId ?? getRootId(state.paperMap);
   const [canvasRef, canvasSize] = useRoomSize();
   const debug = useDebug();
-
-  const layoutMap = useMemo(() => {
-    if (canvasSize.width === 0 || canvasSize.height === 0) return new Map<PaperId, NodeLayoutEntry>();
-    const inset = state.indexedContentIds.size > 0 ? config.indexLabelThick : 0;
-    return computeRecursiveLayout(
-      rootId,
-      {
-        id: rootId,
-        x: 0,
-        y: 0,
-        width: Math.max(0, canvasSize.width - inset),
-        height: canvasSize.height,
-      },
-      state,
-      config,
-    );
-  }, [
-    rootId,
-    canvasSize,
-    state,
-    config,
-  ]);
-
-  useAutoCollapse({ rootId, layoutMap });
-
-  const indexLabels = useMemo(
-    () => buildIndexLabels(state, layoutMap),
-    [state, layoutMap],
-  );
-
-  const handleIndexLabelClick = useCallback((nodeId: PaperId) => {
-    dispatch({ type: 'UNINDEX_CONTENT', nodeId });
-    dispatch({ type: 'LABEL_CLICK_BOOST', nodeId });
-  }, [dispatch]);
+  const { layoutMap, demandSnapshot } = useCanvasLayoutSnapshot(rootId, canvasSize, state, config);
+  const indexLabels = useIndexLabels(canvasSize.height, layoutMap, state, demandSnapshot, config);
+  useOverflowAutoClose(layoutMap, state, config, dispatch);
 
   const copyDebugInfo = useCallback(() => {
-    const formatPercent = (part: number, whole: number) => {
-      if (whole <= 0) return '0.0%';
-      return `${((part / whole) * 100).toFixed(1)}%`;
-    };
-
-    const lines: string[] = [`canvas: ${canvasSize.width}×${canvasSize.height}`, ''];
-    for (const [id, entry] of layoutMap) {
-      const { allocatedRect: a, roomLayout: r } = entry;
-      const roomArea = Math.max(0, a.width - config.paperNode.borderWidth) * Math.max(0, a.height - config.paperNode.headerHeight - config.paperNode.borderWidth);
-      const contentArea = r.contentRect.width * r.contentRect.height;
-      lines.push(`[${id}]`);
-      lines.push(`  allocated: ${a.width}×${a.height} @ (${a.x}, ${a.y})`);
-      lines.push(`  content:   ${r.contentRect.width}×${r.contentRect.height} @ (${r.contentRect.x}, ${r.contentRect.y}) ${formatPercent(contentArea, roomArea)}`);
-      lines.push(`  children open: ${r.childRects.size}, closed: ${r.closedChildIds.length}`);
-      for (const [cid, cr] of r.childRects) {
-        const childArea = cr.width * cr.height;
-        lines.push(`    child[${cid}]: ${cr.width}×${cr.height} @ (${cr.x}, ${cr.y}) ${formatPercent(childArea, roomArea)}`);
-      }
-      lines.push('');
-    }
-    navigator.clipboard.writeText(lines.join('\n'));
-  }, [canvasSize, layoutMap, config]);
-
-  const focusedDebugEntry = state.focusedNodeId ? layoutMap.get(state.focusedNodeId) : undefined;
-  const focusedPaper = state.focusedNodeId ? state.paperMap.get(state.focusedNodeId) : undefined;
-  const focusedRoomArea =
-    focusedDebugEntry == null
-      ? 0
-      : Math.max(0, focusedDebugEntry.allocatedRect.width - config.paperNode.borderWidth) *
-        Math.max(0, focusedDebugEntry.allocatedRect.height - config.paperNode.headerHeight - config.paperNode.borderWidth);
-  const focusedContentArea =
-    focusedDebugEntry == null
-      ? 0
-      : focusedDebugEntry.roomLayout.contentRect.width * focusedDebugEntry.roomLayout.contentRect.height;
+    navigator.clipboard.writeText(buildCanvasDebugText(canvasSize, layoutMap, state, config, demandSnapshot));
+  }, [canvasSize, layoutMap, demandSnapshot.policyMap, state, config]);
+  const debugText = useMemo(
+    () => buildFocusedDebugText(state.focusedNodeId, layoutMap, state, config, demandSnapshot),
+    [state.focusedNodeId, layoutMap, state, config, demandSnapshot],
+  );
 
   function handleDrop(session: DragSession, target: InsertTarget) {
     if (session.mode === 'move-parent' || session.mode === 'content-link') {
@@ -210,90 +93,28 @@ function PaperCanvasInner({
     }
   }
 
+  function handleIndexLabelClick(nodeId: PaperId) {
+    dispatch({ type: 'UNINDEX_CONTENT', nodeId });
+    dispatch({ type: 'FOCUS_NODE', nodeId });
+  }
+
   return (
     <DragProvider onDrop={handleDrop}>
       <LayoutContextProvider layoutMap={layoutMap}>
         <div ref={canvasRef} style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', inset: 0, right: indexLabels.length > 0 ? config.indexLabelThick : 0 }}>
-            <PaperNode nodeId={rootId} parentId={null} overrideCss={overrideCss} />
-          </div>
-          {indexLabels.map((label) => (
+          <PaperNode nodeId={rootId} parentId={null} overrideCss={overrideCss} />
+          {indexLabels.map((node) => (
             <IndexLabel
-              key={label.id}
-              node={label}
+              key={node.id}
+              node={node}
+              canvasWidth={canvasSize.width}
               canvasHeight={canvasSize.height}
               onClick={handleIndexLabelClick}
             />
           ))}
         </div>
         <FloatingLayer />
-        {debug && createPortal(
-          <div
-            style={{
-              position: 'fixed',
-              right: 16,
-              bottom: 16,
-              zIndex: 99999,
-              width: 320,
-              maxWidth: 'calc(100vw - 32px)',
-              background: 'rgba(0,0,0,0.78)',
-              color: '#0f0',
-              fontFamily: 'monospace',
-              fontSize: 11,
-              lineHeight: 1.5,
-              border: '1px solid #0f0',
-              borderRadius: 6,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                padding: '8px 10px',
-                borderBottom: '1px solid rgba(0,255,0,0.25)',
-              }}
-            >
-              <strong style={{ fontSize: 11 }}>debug</strong>
-              <button
-                onClick={copyDebugInfo}
-                style={{
-                  padding: '3px 8px',
-                  background: 'transparent',
-                  color: '#0f0',
-                  fontFamily: 'inherit',
-                  fontSize: 11,
-                  border: '1px solid rgba(0,255,0,0.5)',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                }}
-              >
-                copy
-              </button>
-            </div>
-            <div style={{ padding: '10px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              {focusedDebugEntry && focusedPaper ? (
-                [
-                  `focused: ${state.focusedNodeId}`,
-                  `title: ${focusedPaper.title}`,
-                  `allocated: ${focusedDebugEntry.allocatedRect.width}×${focusedDebugEntry.allocatedRect.height} @ (${focusedDebugEntry.allocatedRect.x}, ${focusedDebugEntry.allocatedRect.y})`,
-                  `content: ${focusedDebugEntry.roomLayout.contentRect.width}×${focusedDebugEntry.roomLayout.contentRect.height} @ (${focusedDebugEntry.roomLayout.contentRect.x}, ${focusedDebugEntry.roomLayout.contentRect.y}) ${focusedRoomArea > 0 ? `${((focusedContentArea / focusedRoomArea) * 100).toFixed(1)}%` : '0.0%'}`,
-                  `importance: ${Math.round(state.importanceMap.get(state.focusedNodeId ?? '') ?? 0)}`,
-                  `children: ${focusedDebugEntry.roomLayout.childRects.size} open / ${focusedDebugEntry.roomLayout.closedChildIds.length} closed`,
-                  ...Array.from(focusedDebugEntry.roomLayout.childRects.entries()).map(([childId, rect]) => {
-                    const childArea = rect.width * rect.height;
-                    const pct = focusedRoomArea > 0 ? `${((childArea / focusedRoomArea) * 100).toFixed(1)}%` : '0.0%';
-                    return `child[${childId}]: ${rect.width}×${rect.height} @ (${rect.x}, ${rect.y}) ${pct}`;
-                  }),
-                ].join('\n')
-              ) : 'no focused node'}
-            </div>
-          </div>,
-          document.body,
-        )}
+        {debug && <PaperCanvasDebugPanel debugText={debugText} onCopy={copyDebugInfo} />}
       </LayoutContextProvider>
     </DragProvider>
   );
@@ -303,15 +124,12 @@ export function PaperCanvas({
   config: configInput,
   paperMap,
   rootId,
-  expansionMap,
-  focusedNodeId,
+  defaultOpenState,
   isFullscreen,
   debug = false,
   overrideCss,
   onCreateChild,
   onPaperMapChange,
-  onExpansionMapChange,
-  onFocusedNodeIdChange,
   onFullscreenChange,
   ref,
 }: PaperCanvasProps & { ref?: Ref<PaperCanvasHandle> }) {
@@ -323,12 +141,9 @@ export function PaperCanvas({
     <PaperStoreProvider
       config={config}
       paperMap={paperMap}
-      expansionMap={expansionMap}
-      focusedNodeId={focusedNodeId}
+      defaultOpenState={defaultOpenState}
       isFullscreen={isFullscreen}
       onPaperMapChange={onPaperMapChange}
-      onExpansionMapChange={onExpansionMapChange}
-      onFocusedNodeIdChange={onFocusedNodeIdChange}
       onFullscreenChange={onFullscreenChange}
     >
       <PaperCanvasInner rootId={rootId} overrideCss={overrideCss} ref={ref} />

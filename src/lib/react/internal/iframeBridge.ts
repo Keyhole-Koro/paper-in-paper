@@ -25,15 +25,27 @@ function escapeInlineStyleText(css: string): string {
 const BOOTSTRAP_SCRIPT = `
 (function () {
   var DRAG_THRESHOLD = 5;
+  var lastHeight = 0;
+  var resizeRaf = 0;
+
+  function postHeight() {
+    var h = document.documentElement.scrollHeight;
+    if (Math.abs(h - lastHeight) < 8) return;
+    lastHeight = h;
+    parent.postMessage({ type: 'resize', height: h }, '*');
+  }
 
   function notifyHeight() {
-    var h = document.documentElement.scrollHeight;
-    parent.postMessage({ type: 'resize', height: h }, '*');
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(function () {
+      resizeRaf = 0;
+      postHeight();
+    });
   }
 
   var observer = new ResizeObserver(notifyHeight);
   observer.observe(document.body);
-  notifyHeight();
+  postHeight();
 
   var downEl = null;
   var downX = 0;
