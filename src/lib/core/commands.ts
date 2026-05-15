@@ -39,6 +39,11 @@ export type Command =
   | { type: 'UNPIN_NODE'; nodeId: PaperId }
   | { type: 'LABEL_CLICK_BOOST'; nodeId: PaperId }
   | { type: '__SYNC_PAPER_MAP'; paperMap: PaperViewState['paperMap'] }
+  | {
+      type: '__SYNC_OPEN_STATE';
+      expansionMap?: PaperViewState['expansionMap'];
+      focusedNodeId?: PaperViewState['focusedNodeId'];
+    }
   | { type: '__SYNC_UNPLACED'; unplacedNodeIds: PaperViewState['unplacedNodeIds'] };
 
 function clearPinOnNode(paperMap: PaperViewState['paperMap'], nodeId: PaperId) {
@@ -365,6 +370,20 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
         contentHeightMap: pruneIdKeyedMap(state.contentHeightMap, nextPaperMap),
         manualPlacementMap: pruneManualPlacementMap(state.manualPlacementMap, nextPaperMap),
       };
+    }
+
+    case '__SYNC_OPEN_STATE': {
+      const expansionMap = command.expansionMap
+        ? pruneExpansionMap(normalizeExpansionMap(command.expansionMap), state.paperMap)
+        : state.expansionMap;
+      const focusedNodeId =
+        command.focusedNodeId === undefined
+          ? state.focusedNodeId
+          : command.focusedNodeId !== null && !state.paperMap.has(command.focusedNodeId)
+            ? null
+            : command.focusedNodeId;
+      if (expansionMap === state.expansionMap && focusedNodeId === state.focusedNodeId) return state;
+      return { ...state, expansionMap, focusedNodeId };
     }
 
     case '__SYNC_UNPLACED': {

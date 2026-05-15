@@ -1,6 +1,6 @@
 import { useCallback, useImperativeHandle, useMemo } from 'react';
 import type { Ref } from 'react';
-import type { PaperId, PaperMap, PaperViewState } from '../core/types';
+import type { ExpansionMap, PaperId, PaperMap, PaperViewState } from '../core/types';
 import type { Command, DefaultOpenState } from '../core/commands';
 import type { PaperCanvasConfigInput } from '../config/paperCanvasConfig';
 import { resolvePaperCanvasConfig } from '../config/paperCanvasConfig';
@@ -34,11 +34,15 @@ export interface PaperCanvasProps {
   paperMap: PaperMap;
   rootId?: PaperId;
   defaultOpenState?: DefaultOpenState;
+  expansionMap?: ExpansionMap;
+  focusedNodeId?: PaperId | null;
   isFullscreen?: boolean;
   debug?: boolean;
   overrideCss?: string;
   onCreateChild?: OnCreateChild;
   onPaperMapChange?: (paperMap: PaperMap) => void;
+  onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
+  onFocusedNodeIdChange?: (focusedNodeId: PaperId | null) => void;
   onFullscreenChange?: (fullscreen: boolean) => void;
 }
 
@@ -125,15 +129,26 @@ export function PaperCanvas({
   paperMap,
   rootId,
   defaultOpenState,
+  expansionMap,
+  focusedNodeId,
   isFullscreen,
   debug = false,
   overrideCss,
   onCreateChild,
   onPaperMapChange,
+  onExpansionMapChange,
+  onFocusedNodeIdChange,
   onFullscreenChange,
   ref,
 }: PaperCanvasProps & { ref?: Ref<PaperCanvasHandle> }) {
   const config = useMemo(() => resolvePaperCanvasConfig(configInput), [configInput]);
+  const initialOpenState = useMemo<DefaultOpenState | undefined>(() => {
+    if (expansionMap === undefined && focusedNodeId === undefined) return defaultOpenState;
+    return {
+      expansionMap: expansionMap ?? defaultOpenState?.expansionMap,
+      focusedNodeId: focusedNodeId === undefined ? defaultOpenState?.focusedNodeId : focusedNodeId,
+    };
+  }, [defaultOpenState, expansionMap, focusedNodeId]);
 
   return (
     <DebugContext.Provider value={debug}>
@@ -141,9 +156,13 @@ export function PaperCanvas({
     <PaperStoreProvider
       config={config}
       paperMap={paperMap}
-      defaultOpenState={defaultOpenState}
+      defaultOpenState={initialOpenState}
+      expansionMap={expansionMap}
+      focusedNodeId={focusedNodeId}
       isFullscreen={isFullscreen}
       onPaperMapChange={onPaperMapChange}
+      onExpansionMapChange={onExpansionMapChange}
+      onFocusedNodeIdChange={onFocusedNodeIdChange}
       onFullscreenChange={onFullscreenChange}
     >
       <PaperCanvasInner rootId={rootId} overrideCss={overrideCss} ref={ref} />

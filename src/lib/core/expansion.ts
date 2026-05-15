@@ -11,7 +11,7 @@ export function openChild(
   childId: PaperId,
 ): ExpansionMap {
   const current = expansionMap.get(parentId);
-  if (current?.openChildSet.has(childId)) return expansionMap;
+  if ((current?.openChildSet ?? new Set(current?.openChildIds ?? [])).has(childId)) return expansionMap;
   const openChildIds = current?.openChildIds ?? [];
 
   const next = new Map(expansionMap);
@@ -87,7 +87,8 @@ export function getOpenChildIds(expansionMap: ExpansionMap, parentId: PaperId): 
 }
 
 export function getOpenChildSet(expansionMap: ExpansionMap, parentId: PaperId): ReadonlySet<PaperId> {
-  return expansionMap.get(parentId)?.openChildSet ?? EMPTY_SET;
+  const entry = expansionMap.get(parentId);
+  return entry?.openChildSet ?? (entry ? new Set(entry.openChildIds) : EMPTY_SET);
 }
 
 export function isOpen(expansionMap: ExpansionMap, parentId: PaperId, childId: PaperId): boolean {

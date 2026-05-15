@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { PaperMap, PaperViewState } from '../../core/types';
+import type { ExpansionMap, PaperId, PaperMap, PaperViewState } from '../../core/types';
 import type { PaperCanvasConfig } from '../../config/paperCanvasConfig';
 import { type Command, type DefaultOpenState, createInitialState, reduce } from '../../core/commands';
 
@@ -8,8 +8,12 @@ export interface PaperStoreProviderProps {
   config: PaperCanvasConfig;
   paperMap: PaperMap;
   defaultOpenState?: DefaultOpenState;
+  expansionMap?: ExpansionMap;
+  focusedNodeId?: PaperId | null;
   isFullscreen?: boolean;
   onPaperMapChange?: (paperMap: PaperMap) => void;
+  onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
+  onFocusedNodeIdChange?: (focusedNodeId: PaperId | null) => void;
   onFullscreenChange?: (fullscreen: boolean) => void;
   children: ReactNode;
 }
@@ -37,8 +41,12 @@ export function PaperStoreProvider({
   config,
   paperMap,
   defaultOpenState,
+  expansionMap,
+  focusedNodeId,
   isFullscreen,
   onPaperMapChange,
+  onExpansionMapChange,
+  onFocusedNodeIdChange,
   onFullscreenChange,
   children,
 }: PaperStoreProviderProps) {
@@ -80,6 +88,11 @@ export function PaperStoreProvider({
     }
   }, [paperMap]);
 
+  useEffect(() => {
+    if (expansionMap === undefined && focusedNodeId === undefined) return;
+    rawDispatch({ type: '__SYNC_OPEN_STATE', expansionMap, focusedNodeId });
+  }, [expansionMap, focusedNodeId]);
+
   // wrap dispatch to fire callbacks after each command
   const dispatch = useCallback(
     (command: Command) => {
@@ -94,6 +107,14 @@ export function PaperStoreProvider({
     lastSyncedPaperMapRef.current = state.paperMap;
     onPaperMapChange(state.paperMap);
   }, [state.paperMap, onPaperMapChange]);
+
+  useEffect(() => {
+    onExpansionMapChange?.(state.expansionMap);
+  }, [state.expansionMap, onExpansionMapChange]);
+
+  useEffect(() => {
+    onFocusedNodeIdChange?.(state.focusedNodeId);
+  }, [state.focusedNodeId, onFocusedNodeIdChange]);
 
   useEffect(() => {
     if (!selectorStoreRef.current) return;
