@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import type { PaperId, PaperViewState } from '../../core/types';
 import type { PaperCanvasConfig } from '../../config/paperCanvasConfig';
 import {
@@ -69,12 +69,36 @@ export interface CanvasLayoutSnapshot {
   demandSnapshot: DemandSnapshot;
 }
 
+function rectEqual(a: LayoutRect, b: LayoutRect): boolean {
+  return a.id === b.id && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+function childRectsEqual(a: Map<PaperId, LayoutRect>, b: Map<PaperId, LayoutRect>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [id, ar] of a) {
+    const br = b.get(id);
+    if (br === undefined || !rectEqual(ar, br)) return false;
+  }
+  return true;
+}
+
+function entryEqual(a: NodeLayoutEntry, b: NodeLayoutEntry): boolean {
+  if (!rectEqual(a.allocatedRect, b.allocatedRect)) return false;
+  if (a.roomLayout.overflowChildCount !== b.roomLayout.overflowChildCount) return false;
+  if (!rectEqual(a.roomLayout.contentRect, b.roomLayout.contentRect)) return false;
+  if (a.roomLayout.closedChildIds.length !== b.roomLayout.closedChildIds.length) return false;
+  if (!childRectsEqual(a.roomLayout.childRects, b.roomLayout.childRects)) return false;
+  return true;
+}
+
 export function useCanvasLayoutSnapshot(
   rootId: PaperId,
   canvasSize: { width: number; height: number },
   state: PaperViewState,
   config: PaperCanvasConfig,
 ): CanvasLayoutSnapshot {
+  const prevLayoutMapRef = useRef<Map<PaperId, NodeLayoutEntry>>(new Map());
+
   return useMemo(() => {
     const emptySnapshot: DemandSnapshot = {
       policyMap: new Map(),
@@ -83,7 +107,8 @@ export function useCanvasLayoutSnapshot(
       effectiveAttentionMap: new Map(),
     };
     if (canvasSize.width === 0 || canvasSize.height === 0) {
-      return { layoutMap: new Map<PaperId, NodeLayoutEntry>(), demandSnapshot: emptySnapshot };
+      prevLayoutMapRef.current = new Map();
+      return { layoutMap: prevLayoutMapRef.current, demandSnapshot: emptySnapshot };
     }
 
     const nowMs = Date.now();
@@ -99,7 +124,7 @@ export function useCanvasLayoutSnapshot(
       nowMs,
     });
     const demandSnapshot = buildDemandSnapshot(rootId, demandContext);
-    const layoutMap = computeRecursiveLayout(
+    const rawLayoutMap = computeRecursiveLayout(
       rootId,
       { id: rootId, x: 0, y: 0, width: canvasSize.width, height: canvasSize.height },
       state,
@@ -107,6 +132,21 @@ export function useCanvasLayoutSnapshot(
       nowMs,
       demandSnapshot,
     );
+
+    // Stabilize entry references: reuse the previous NodeLayoutEntry object
+    // when the layout values are identical so useSyncExternalStore consumers
+    // (useLayoutEntry) skip re-renders for nodes whose layout didn't change.
+    const prev = prevLayoutMapRef.current;
+    const layoutMap = new Map<PaperId, NodeLayoutEntry>();
+    for (const [id, next] of rawLayoutMap) {
+      const old = prev.get(id);
+      if (old !== undefined && entryEqual(old, next)) {
+        layoutMap.set(id, old);
+      } else {
+        layoutMap.set(id, next);
+      }
+    }
+    prevLayoutMapRef.current = layoutMap;
     return { layoutMap, demandSnapshot };
   }, [
     rootId,

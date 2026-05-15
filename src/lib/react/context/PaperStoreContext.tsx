@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { ExpansionMap, PaperId, PaperMap, PaperViewState } from '../../core/types';
 import type { PaperCanvasConfig } from '../../config/paperCanvasConfig';
@@ -50,8 +50,6 @@ export function PaperStoreProvider({
   onFullscreenChange,
   children,
 }: PaperStoreProviderProps) {
-  // Optimization store for node-level selectors. This runs alongside the
-  // normal React context so existing non-recursive consumers can stay simple.
   const selectorStoreRef = useRef<{
     listeners: Set<PaperStoreListener>;
     snapshot: PaperStoreSnapshot;
@@ -79,6 +77,14 @@ export function PaperStoreProvider({
     };
   }
 
+  // Keep snapshot current during render so getSnapshot() is always up-to-date.
+  if (
+    selectorStoreRef.current.snapshot.state !== state ||
+    selectorStoreRef.current.snapshot.config !== config
+  ) {
+    selectorStoreRef.current.snapshot = { state, config };
+  }
+
   const lastSyncedPaperMapRef = useRef(paperMap);
 
   useEffect(() => {
@@ -93,13 +99,19 @@ export function PaperStoreProvider({
     rawDispatch({ type: '__SYNC_OPEN_STATE', expansionMap, focusedNodeId });
   }, [expansionMap, focusedNodeId]);
 
-  // wrap dispatch to fire callbacks after each command
   const dispatch = useCallback(
     (command: Command) => {
       rawDispatch(command);
     },
     [],
   );
+
+  // Notify useSyncExternalStore subscribers after React commits the new snapshot.
+  useEffect(() => {
+    for (const listener of selectorStoreRef.current!.listeners) {
+      listener();
+    }
+  }, [state, config]);
 
   // fire callbacks when relevant state slices change
   useEffect(() => {
@@ -115,14 +127,6 @@ export function PaperStoreProvider({
   useEffect(() => {
     onFocusedNodeIdChange?.(state.focusedNodeId);
   }, [state.focusedNodeId, onFocusedNodeIdChange]);
-
-  useEffect(() => {
-    if (!selectorStoreRef.current) return;
-    selectorStoreRef.current.snapshot = { state, config };
-    for (const listener of selectorStoreRef.current.listeners) {
-      listener();
-    }
-  }, [state, config]);
 
   return (
     <PaperStoreSelectorContext.Provider value={selectorStoreRef.current.api}>
@@ -153,20 +157,27 @@ export function usePaperStoreSelector<T>(
   const isEqualRef = useRef(isEqual);
   isEqualRef.current = isEqual;
 
-  const [selected, setSelected] = useState(() => selector(store.getSnapshot()));
+  // Cache the last selected value so the getSnapshot function can return a
+  // stable reference when the selected value hasn't changed — this lets
+  // useSyncExternalStore skip re-renders even when the full snapshot changed.
+  const cachedRef = useRef<{ snap: PaperStoreSnapshot; value: T } | null>(null);
 
-  useEffect(() => {
-    // Optimization: update selector results only when the subscription store
-    // publishes a new snapshot, and drop no-op updates with isEqual.
-    const update = () => {
-      const next = selectorRef.current(store.getSnapshot());
-      setSelected((prev) => (isEqualRef.current(prev, next) ? prev : next));
-    };
-    update();
-    return store.subscribe(update);
-  }, [store]);
-
-  return selected;
+  return useSyncExternalStore(
+    store.subscribe,
+    () => {
+      const snap = store.getSnapshot();
+      if (cachedRef.current !== null && cachedRef.current.snap === snap) {
+        return cachedRef.current.value;
+      }
+      const next = selectorRef.current(snap);
+      if (cachedRef.current !== null && isEqualRef.current(cachedRef.current.value, next)) {
+        cachedRef.current = { snap, value: cachedRef.current.value };
+        return cachedRef.current.value;
+      }
+      cachedRef.current = { snap, value: next };
+      return next;
+    },
+  );
 }
 
 export function usePaperStoreApi() {
