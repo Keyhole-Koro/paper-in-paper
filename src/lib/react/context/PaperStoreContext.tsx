@@ -86,6 +86,8 @@ export function PaperStoreProvider({
   }
 
   const lastSyncedPaperMapRef = useRef(paperMap);
+  const lastSyncedExpansionMapRef = useRef(expansionMap);
+  const lastSyncedFocusedNodeIdRef = useRef(focusedNodeId);
 
   useEffect(() => {
     if (paperMap !== lastSyncedPaperMapRef.current) {
@@ -96,6 +98,17 @@ export function PaperStoreProvider({
 
   useEffect(() => {
     if (expansionMap === undefined && focusedNodeId === undefined) return;
+    // Skip echoes: when the incoming props match what we last pushed back out
+    // via onExpansionMapChange/onFocusedNodeIdChange, re-dispatching would only
+    // reproduce the same state and feed the callback→prop→effect loop.
+    if (
+      expansionMap === lastSyncedExpansionMapRef.current &&
+      focusedNodeId === lastSyncedFocusedNodeIdRef.current
+    ) {
+      return;
+    }
+    lastSyncedExpansionMapRef.current = expansionMap;
+    lastSyncedFocusedNodeIdRef.current = focusedNodeId;
     rawDispatch({ type: '__SYNC_OPEN_STATE', expansionMap, focusedNodeId });
   }, [expansionMap, focusedNodeId]);
 

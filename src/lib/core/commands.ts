@@ -373,9 +373,16 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
     }
 
     case '__SYNC_OPEN_STATE': {
-      const expansionMap = command.expansionMap
+      const nextExpansionMap = command.expansionMap
         ? pruneExpansionMap(normalizeExpansionMap(command.expansionMap), state.paperMap)
         : state.expansionMap;
+      // normalizeExpansionMap always allocates a fresh Map, so the reference
+      // never matches state.expansionMap. Fall back to a structural compare so
+      // an unchanged incoming map does not produce a new state object (which
+      // would echo back out through onExpansionMapChange and loop forever).
+      const expansionMap = expansionMapsEqual(nextExpansionMap, state.expansionMap)
+        ? state.expansionMap
+        : nextExpansionMap;
       const focusedNodeId =
         command.focusedNodeId === undefined
           ? state.focusedNodeId
@@ -411,6 +418,25 @@ function normalizeExpansionMap(input?: PaperViewState['expansionMap']): PaperVie
     }
   }
   return next;
+}
+
+function expansionMapsEqual(
+  a: PaperViewState['expansionMap'],
+  b: PaperViewState['expansionMap'],
+): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const [parentId, entryA] of a) {
+    const entryB = b.get(parentId);
+    if (!entryB) return false;
+    const idsA = entryA.openChildIds;
+    const idsB = entryB.openChildIds;
+    if (idsA.length !== idsB.length) return false;
+    for (let i = 0; i < idsA.length; i++) {
+      if (idsA[i] !== idsB[i]) return false;
+    }
+  }
+  return true;
 }
 
 export function createInitialState(
