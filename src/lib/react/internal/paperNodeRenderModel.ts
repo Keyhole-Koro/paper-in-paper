@@ -68,7 +68,8 @@ export function derivePaperNodeRenderModel({
   const layout = entry?.roomLayout ?? FALLBACK_LAYOUT;
   const isRoot = parentId === null;
   const isDragTarget = session !== null && insertTarget?.parentId === nodeId;
-  const layoutPolicy = deriveNodeLayoutPolicyFromVisibility((paper.childIds.length ?? 0) > 0, nodeVisibility, config);
+  const hasOpenChildren = layout.childRects.size > 0;
+  const layoutPolicy = deriveNodeLayoutPolicyFromVisibility(hasOpenChildren, nodeVisibility, config);
   const currentRect = parentEntry?.roomLayout.childRects.get(nodeId);
   const parentHeaderHeight = parentId && parentVisibility === 'indexed' ? 0 : config.paperNode.headerHeight;
   const parentRoomArea = parentEntry

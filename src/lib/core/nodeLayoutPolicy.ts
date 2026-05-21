@@ -1,5 +1,6 @@
 import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import type { PaperId, PaperMap } from './types';
+import { getOpenChildIds } from './expansion';
 import {
   deriveNodeVisibilityState,
   type NodeVisibilityContext,
@@ -24,19 +25,23 @@ export interface NodeLayoutPolicy {
 }
 
 export function deriveNodeDisplayMode(
-  hasChildren: boolean,
+  hasOpenChildren: boolean,
   visibility: NodeVisibilityState,
 ): NodeDisplayMode {
   if (visibility !== 'indexed') return 'expanded';
-  return hasChildren ? 'indexed-branch' : 'indexed-leaf';
+  // An indexed node with no children currently open has nothing to show
+  // inside its room — neither its own content (indexed → escapes to label)
+  // nor any child paper. Reserving room for it just steals width from the
+  // siblings without conveying anything, so collapse it to a leaf.
+  return hasOpenChildren ? 'indexed-branch' : 'indexed-leaf';
 }
 
 export function deriveNodeLayoutPolicyFromVisibility(
-  hasChildren: boolean,
+  hasOpenChildren: boolean,
   visibility: NodeVisibilityState,
   config: PaperCanvasConfig,
 ): NodeLayoutPolicy {
-  const mode = deriveNodeDisplayMode(hasChildren, visibility);
+  const mode = deriveNodeDisplayMode(hasOpenChildren, visibility);
   if (mode === 'expanded') {
     return {
       mode,
@@ -80,8 +85,7 @@ export function deriveNodeLayoutPolicy(
   context: NodeLayoutPolicyContext,
   config: PaperCanvasConfig,
 ): NodeLayoutPolicy {
-  const paper = context.paperMap.get(nodeId);
-  const hasChildren = (paper?.childIds.length ?? 0) > 0;
+  const hasOpenChildren = getOpenChildIds(context.expansionMap, nodeId).length > 0;
   const visibility = deriveNodeVisibilityState(nodeId, context);
-  return deriveNodeLayoutPolicyFromVisibility(hasChildren, visibility, config);
+  return deriveNodeLayoutPolicyFromVisibility(hasOpenChildren, visibility, config);
 }
