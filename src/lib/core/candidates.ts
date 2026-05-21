@@ -16,7 +16,13 @@ export function selectLowImportanceCandidates(
     .filter((id) => {
       const protectedUntil = state.protectedUntilMap.get(id) ?? 0;
       const paper = state.paperMap.get(id);
-      return protectedUntil < nowMs && paper?.pinnedLayout?.minShare === undefined;
+      // Already-indexed children contribute 0 room demand; closing them
+      // won't actually reduce overflow, but useOverflowAutoClose would
+      // still dispatch AUTO_CLOSE_NODE for them on each layout snapshot,
+      // producing visible jitter as the same node toggles between
+      // indexed and closed.
+      const isIndexed = state.indexedContentIds.has(id);
+      return !isIndexed && protectedUntil < nowMs && paper?.pinnedLayout?.minShare === undefined;
     })
     .sort((a, b) => {
       const ia = getEffectiveAttention(state, a, config, nowMs);

@@ -92,6 +92,9 @@ export function PaperStoreProvider({
 
   const dispatch = useCallback(
     (command: Command) => {
+      if (typeof window !== 'undefined' && (window as { __pipDebug?: boolean }).__pipDebug) {
+        console.log('[pip-debug] dispatch', command.type, 'nodeId' in command ? command.nodeId : '');
+      }
       rawDispatch(command);
     },
     [],

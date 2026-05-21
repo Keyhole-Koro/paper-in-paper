@@ -27,12 +27,19 @@ export function closeChild(
 ): ExpansionMap {
   const current = expansionMap.get(parentId);
   if (!current) return expansionMap;
+  // If childId isn't actually open under parentId, and no descendants are
+  // tracked in expansionMap, there is literally nothing to close. Returning
+  // a fresh Map here would churn state.expansionMap identity for no reason
+  // and feed useEffects that watch it.
+  const wasOpen = current.openChildIds.includes(childId);
+  const descendants = getDescendantIds(paperMap, childId);
+  const hasDescendantEntries = descendants.some((id) => expansionMap.has(id)) || expansionMap.has(childId);
+  if (!wasOpen && !hasDescendantEntries) return expansionMap;
 
   const next = new Map(expansionMap);
-  next.set(parentId, makeEntry(current.openChildIds.filter((id) => id !== childId)));
-
-  // clear subtree expansion
-  const descendants = getDescendantIds(paperMap, childId);
+  if (wasOpen) {
+    next.set(parentId, makeEntry(current.openChildIds.filter((id) => id !== childId)));
+  }
   for (const id of [childId, ...descendants]) {
     next.delete(id);
   }

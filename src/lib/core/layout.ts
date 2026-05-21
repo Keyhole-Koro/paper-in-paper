@@ -56,11 +56,18 @@ export interface DemandSnapshot {
 }
 
 export function getIntrinsicContentDemand(
-  nodeId: PaperId,
-  contentHeightMap: PaperViewState['contentHeightMap'],
+  _nodeId: PaperId,
+  _contentHeightMap: PaperViewState['contentHeightMap'],
   fallbackIntrinsicHeight: number,
 ): number {
-  return Math.max(contentHeightMap.get(nodeId) ?? 0, fallbackIntrinsicHeight);
+  // Demand intentionally does NOT depend on the measured contentHeightMap.
+  // Tying demand to scrollHeight created a ResizeObserver ↔ layout feedback
+  // loop: a tighter room width produced a taller scrollHeight, which raised
+  // demand, which widened the room, which shortened the scrollHeight, ...
+  // The visible result was a several-second "settling but not settling"
+  // jitter. Layout now uses a stable per-policy fallback; content overflow
+  // is handled by the existing overflow:auto on the room itself.
+  return fallbackIntrinsicHeight;
 }
 
 export function getContentDemand(

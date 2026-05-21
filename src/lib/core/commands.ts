@@ -305,7 +305,18 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
 
     case 'REPORT_CONTENT_HEIGHT': {
       const prev = state.contentHeightMap.get(command.nodeId);
-      if (prev !== undefined && Math.abs(prev - command.height) / prev < 0.1) return state;
+      if (prev !== undefined) {
+        // Two gates: relative (10%) AND absolute (12px). The relative gate
+        // alone failed at the boundary — when computed-vs-applied height
+        // diff is exactly 10%, the layout would update, resize, update,
+        // resize... feedback-looping forever as long as the new room width
+        // produced a slightly different content height than the previous
+        // one. The absolute floor breaks that loop for normal-sized
+        // content while still letting big content changes through.
+        const relDelta = Math.abs(prev - command.height) / prev;
+        const absDelta = Math.abs(prev - command.height);
+        if (relDelta < 0.1 || absDelta < 12) return state;
+      }
       const contentHeightMap = new Map(state.contentHeightMap);
       contentHeightMap.set(command.nodeId, command.height);
       return { ...state, contentHeightMap };

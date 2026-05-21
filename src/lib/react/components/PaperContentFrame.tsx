@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ContentNode, PaperContent, PaperId } from '../../core/types';
 import type { PaperContentEvent } from '../internal/iframeBridge';
 import { useIframeBridge } from '../hooks/useIframeBridge';
@@ -165,40 +165,9 @@ interface PaperContentStructuredProps {
   onOpen: (paperId: PaperId) => void;
 }
 
-function PaperContentStructured({ nodeId, nodes, theme, onOpen }: PaperContentStructuredProps) {
-  const dispatch = usePaperDispatch();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const lastHeightRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    let raf = 0;
-    function reportHeight() {
-      const nextEl = containerRef.current;
-      if (!nextEl) return;
-      const nextHeight = nextEl.scrollHeight;
-      if (lastHeightRef.current !== null && Math.abs(lastHeightRef.current - nextHeight) < 8) return;
-      lastHeightRef.current = nextHeight;
-      dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: nextHeight });
-    }
-    const observer = new ResizeObserver(() => {
-      if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        reportHeight();
-      });
-    });
-    observer.observe(el);
-    reportHeight();
-    return () => {
-      observer.disconnect();
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [dispatch, nodeId]);
-
+function PaperContentStructured({ nodes, theme, onOpen }: PaperContentStructuredProps) {
   return (
-    <div ref={containerRef}>
+    <div>
       <PaperContentNodes nodes={nodes} theme={theme} onOpen={onOpen} />
     </div>
   );
@@ -215,36 +184,6 @@ interface PaperContentReactProps {
 function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
   const dispatch = usePaperDispatch();
   const containerRef = useRef<HTMLDivElement>(null);
-  const lastHeightRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    let raf = 0;
-
-    function reportHeight() {
-      const nextEl = containerRef.current;
-      if (!nextEl) return;
-      const nextHeight = nextEl.scrollHeight;
-      if (lastHeightRef.current !== null && Math.abs(lastHeightRef.current - nextHeight) < 8) return;
-      lastHeightRef.current = nextHeight;
-      dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: nextHeight });
-    }
-
-    const observer = new ResizeObserver(() => {
-      if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        reportHeight();
-      });
-    });
-    observer.observe(el);
-    reportHeight();
-    return () => {
-      observer.disconnect();
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [dispatch, nodeId]);
 
   const handlePaperOpen = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
     if (e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') return;
