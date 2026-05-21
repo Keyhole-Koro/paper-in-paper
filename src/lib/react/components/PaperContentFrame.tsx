@@ -244,7 +244,7 @@ function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
       observer.disconnect();
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [dispatch, nodeId, content]);
+  }, [dispatch, nodeId]);
 
   const handlePaperOpen = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
     if (e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') return;

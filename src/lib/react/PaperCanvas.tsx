@@ -34,8 +34,6 @@ export interface PaperCanvasProps {
   paperMap: PaperMap;
   rootId?: PaperId;
   defaultOpenState?: DefaultOpenState;
-  expansionMap?: ExpansionMap;
-  focusedNodeId?: PaperId | null;
   isFullscreen?: boolean;
   debug?: boolean;
   overrideCss?: string;
@@ -129,8 +127,6 @@ export function PaperCanvas({
   paperMap,
   rootId,
   defaultOpenState,
-  expansionMap,
-  focusedNodeId,
   isFullscreen,
   debug = false,
   overrideCss,
@@ -142,13 +138,6 @@ export function PaperCanvas({
   ref,
 }: PaperCanvasProps & { ref?: Ref<PaperCanvasHandle> }) {
   const config = useMemo(() => resolvePaperCanvasConfig(configInput), [configInput]);
-  const initialOpenState = useMemo<DefaultOpenState | undefined>(() => {
-    if (expansionMap === undefined && focusedNodeId === undefined) return defaultOpenState;
-    return {
-      expansionMap: expansionMap ?? defaultOpenState?.expansionMap,
-      focusedNodeId: focusedNodeId === undefined ? defaultOpenState?.focusedNodeId : focusedNodeId,
-    };
-  }, [defaultOpenState, expansionMap, focusedNodeId]);
 
   return (
     <DebugContext.Provider value={debug}>
@@ -156,9 +145,7 @@ export function PaperCanvas({
     <PaperStoreProvider
       config={config}
       paperMap={paperMap}
-      defaultOpenState={initialOpenState}
-      expansionMap={expansionMap}
-      focusedNodeId={focusedNodeId}
+      defaultOpenState={defaultOpenState}
       isFullscreen={isFullscreen}
       onPaperMapChange={onPaperMapChange}
       onExpansionMapChange={onExpansionMapChange}

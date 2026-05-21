@@ -125,16 +125,35 @@ export function syncAttentionForPaperMap(
 ): { attentionMap: PaperViewState['attentionMap']; attentionTimestampMap: PaperViewState['attentionTimestampMap'] } {
   const attentionMap = new Map<PaperId, number>();
   const attentionTimestampMap = new Map<PaperId, number>();
+  let attentionMutated = false;
+  let timestampMutated = false;
 
   for (const [id, paper] of nextPaperMap) {
     if (paper.attentionScore !== undefined) {
-      attentionMap.set(id, resolveInitialAttention(paper, config));
+      const nextValue = resolveInitialAttention(paper, config);
+      attentionMap.set(id, nextValue);
       attentionTimestampMap.set(id, now);
+      if (state.attentionMap.get(id) !== nextValue) attentionMutated = true;
+      if (state.attentionTimestampMap.get(id) !== now) timestampMutated = true;
       continue;
     }
-    attentionMap.set(id, state.attentionMap.get(id) ?? resolveInitialAttention(paper, config));
-    attentionTimestampMap.set(id, state.attentionTimestampMap.get(id) ?? now);
+    const prevValue = state.attentionMap.get(id);
+    const nextValue = prevValue ?? resolveInitialAttention(paper, config);
+    attentionMap.set(id, nextValue);
+    if (prevValue === undefined) attentionMutated = true;
+
+    const prevTs = state.attentionTimestampMap.get(id);
+    const nextTs = prevTs ?? now;
+    attentionTimestampMap.set(id, nextTs);
+    if (prevTs === undefined) timestampMutated = true;
   }
 
-  return { attentionMap, attentionTimestampMap };
+  // If size also matches and nothing was added/changed, keep prior references.
+  const attentionSizeChanged = attentionMap.size !== state.attentionMap.size;
+  const timestampSizeChanged = attentionTimestampMap.size !== state.attentionTimestampMap.size;
+
+  return {
+    attentionMap: attentionMutated || attentionSizeChanged ? attentionMap : state.attentionMap,
+    attentionTimestampMap: timestampMutated || timestampSizeChanged ? attentionTimestampMap : state.attentionTimestampMap,
+  };
 }

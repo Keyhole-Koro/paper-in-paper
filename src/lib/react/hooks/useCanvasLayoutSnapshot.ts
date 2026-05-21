@@ -100,6 +100,8 @@ export function useCanvasLayoutSnapshot(
   const prevLayoutMapRef = useRef<Map<PaperId, NodeLayoutEntry>>(new Map());
 
   return useMemo(() => {
+    const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+    const debugOn = typeof window !== 'undefined' && (window as { __pipDebug?: boolean }).__pipDebug;
     const emptySnapshot: DemandSnapshot = {
       policyMap: new Map(),
       contentDemandMap: new Map(),
@@ -147,6 +149,10 @@ export function useCanvasLayoutSnapshot(
       }
     }
     prevLayoutMapRef.current = layoutMap;
+    if (debugOn) {
+      const ms = (typeof performance !== 'undefined' ? performance.now() : 0) - t0;
+      console.log('[pip-debug] useCanvasLayoutSnapshot recompute', { ms: Math.round(ms * 100) / 100, nodes: rawLayoutMap.size });
+    }
     return { layoutMap, demandSnapshot };
   }, [
     rootId,

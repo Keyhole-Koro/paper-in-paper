@@ -8,8 +8,6 @@ export interface PaperStoreProviderProps {
   config: PaperCanvasConfig;
   paperMap: PaperMap;
   defaultOpenState?: DefaultOpenState;
-  expansionMap?: ExpansionMap;
-  focusedNodeId?: PaperId | null;
   isFullscreen?: boolean;
   onPaperMapChange?: (paperMap: PaperMap) => void;
   onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
@@ -41,8 +39,6 @@ export function PaperStoreProvider({
   config,
   paperMap,
   defaultOpenState,
-  expansionMap,
-  focusedNodeId,
   isFullscreen,
   onPaperMapChange,
   onExpansionMapChange,
@@ -86,8 +82,6 @@ export function PaperStoreProvider({
   }
 
   const lastSyncedPaperMapRef = useRef(paperMap);
-  const lastSyncedExpansionMapRef = useRef(expansionMap);
-  const lastSyncedFocusedNodeIdRef = useRef(focusedNodeId);
 
   useEffect(() => {
     if (paperMap !== lastSyncedPaperMapRef.current) {
@@ -95,22 +89,6 @@ export function PaperStoreProvider({
       rawDispatch({ type: '__SYNC_PAPER_MAP', paperMap });
     }
   }, [paperMap]);
-
-  useEffect(() => {
-    if (expansionMap === undefined && focusedNodeId === undefined) return;
-    // Skip echoes: when the incoming props match what we last pushed back out
-    // via onExpansionMapChange/onFocusedNodeIdChange, re-dispatching would only
-    // reproduce the same state and feed the callback→prop→effect loop.
-    if (
-      expansionMap === lastSyncedExpansionMapRef.current &&
-      focusedNodeId === lastSyncedFocusedNodeIdRef.current
-    ) {
-      return;
-    }
-    lastSyncedExpansionMapRef.current = expansionMap;
-    lastSyncedFocusedNodeIdRef.current = focusedNodeId;
-    rawDispatch({ type: '__SYNC_OPEN_STATE', expansionMap, focusedNodeId });
-  }, [expansionMap, focusedNodeId]);
 
   const dispatch = useCallback(
     (command: Command) => {

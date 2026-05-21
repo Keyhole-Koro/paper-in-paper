@@ -1,5 +1,5 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import type { RefObject } from 'react';
+import { AnimatePresence, motion, type TargetAndTransition } from 'framer-motion';
+import { useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import type { NodeRoomLayout } from '../../core/layout';
 import type { Paper, PaperId } from '../../core/types';
 import type { NodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
@@ -26,6 +26,49 @@ interface PaperNodeFrameProps {
 }
 
 const POSITION_TRANSITION = { type: 'spring' as const, stiffness: 260, damping: 32, mass: 0.7 };
+const LARGE_MOVE_TRANSITION = { type: 'tween' as const, duration: 0.28, ease: [0.22, 1, 0.36, 1] as const };
+const LARGE_MOVE_THRESHOLD = 240;
+
+function pickTransition(prev: { x: number; y: number } | null, next: { x: number; y: number }) {
+  if (!prev) return POSITION_TRANSITION;
+  const dx = next.x - prev.x;
+  const dy = next.y - prev.y;
+  return Math.hypot(dx, dy) > LARGE_MOVE_THRESHOLD ? LARGE_MOVE_TRANSITION : POSITION_TRANSITION;
+}
+
+function AnimatedRect({
+  x,
+  y,
+  initial,
+  exit,
+  style,
+  children,
+  dataAttrs,
+}: {
+  x: number;
+  y: number;
+  initial?: TargetAndTransition;
+  exit?: TargetAndTransition;
+  style: CSSProperties;
+  children: ReactNode;
+  dataAttrs?: Record<string, string | undefined>;
+}) {
+  const prev = useRef<{ x: number; y: number } | null>(null);
+  const transition = pickTransition(prev.current, { x, y });
+  prev.current = { x, y };
+  return (
+    <motion.div
+      initial={initial}
+      animate={{ x, y, opacity: 1, scale: 1 }}
+      exit={exit}
+      transition={transition}
+      style={style}
+      {...dataAttrs}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 export function PaperNodeFrame({
   nodeId,
@@ -83,12 +126,9 @@ export function PaperNodeFrame({
           transition: 'outline 0.1s',
         }}
       >
-        <motion.div
-          animate={{
-            x: layout.contentRect.x,
-            y: layout.contentRect.y,
-          }}
-          transition={POSITION_TRANSITION}
+        <AnimatedRect
+          x={layout.contentRect.x}
+          y={layout.contentRect.y}
           style={{
             position: 'absolute',
             left: 0,
@@ -124,17 +164,17 @@ export function PaperNodeFrame({
               }}
             />
           )}
-        </motion.div>
+        </AnimatedRect>
 
         <AnimatePresence>
           {Array.from(layout.childRects.entries()).map(([childId, rect]) => (
-            <motion.div
+            <AnimatedRect
               key={childId}
-              data-child-id={childId}
+              x={rect.x}
+              y={rect.y}
               initial={{ opacity: 0, scale: 0.985 }}
-              animate={{ x: rect.x, y: rect.y, opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.985 }}
-              transition={POSITION_TRANSITION}
+              dataAttrs={{ 'data-child-id': childId }}
               style={{
                 position: 'absolute',
                 left: 0,
@@ -148,7 +188,7 @@ export function PaperNodeFrame({
               }}
             >
               <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={inheritedColor} overrideCss={overrideCss} />
-            </motion.div>
+            </AnimatedRect>
           ))}
         </AnimatePresence>
 

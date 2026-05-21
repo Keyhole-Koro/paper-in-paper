@@ -348,6 +348,9 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
 
     case '__SYNC_PAPER_MAP': {
       if (command.paperMap === state.paperMap) return state;
+      if (typeof window !== 'undefined' && (window as { __pipDebug?: boolean }).__pipDebug) {
+        console.log('[pip-debug] __SYNC_PAPER_MAP fired', { size: command.paperMap.size });
+      }
       const now = Date.now();
       const nextPaperMap = command.paperMap;
       const { attentionMap, attentionTimestampMap } = syncAttentionForPaperMap(state, nextPaperMap, config, now);
@@ -357,18 +360,42 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
           ? null
           : state.focusedNodeId;
 
+      const expansionMap = pruneExpansionMap(state.expansionMap, nextPaperMap);
+      const accessMap = pruneIdKeyedMap(state.accessMap, nextPaperMap);
+      const indexedContentIds = pruneIdSet(state.indexedContentIds, nextPaperMap);
+      const protectedUntilMap = pruneIdKeyedMap(state.protectedUntilMap, nextPaperMap);
+      const contentHeightMap = pruneIdKeyedMap(state.contentHeightMap, nextPaperMap);
+      const manualPlacementMap = pruneManualPlacementMap(state.manualPlacementMap, nextPaperMap);
+
+      // If nothing actually changed except the paperMap reference identity,
+      // keep the prior state object so downstream useEffects don't echo.
+      if (
+        focusedNodeId === state.focusedNodeId &&
+        expansionMap === state.expansionMap &&
+        attentionMap === state.attentionMap &&
+        attentionTimestampMap === state.attentionTimestampMap &&
+        accessMap === state.accessMap &&
+        indexedContentIds === state.indexedContentIds &&
+        protectedUntilMap === state.protectedUntilMap &&
+        contentHeightMap === state.contentHeightMap &&
+        manualPlacementMap === state.manualPlacementMap &&
+        paperMapsEqual(state.paperMap, nextPaperMap)
+      ) {
+        return state;
+      }
+
       return {
         ...state,
         paperMap: nextPaperMap,
-        expansionMap: pruneExpansionMap(state.expansionMap, nextPaperMap),
+        expansionMap,
         focusedNodeId,
         attentionMap,
         attentionTimestampMap,
-        accessMap: pruneIdKeyedMap(state.accessMap, nextPaperMap),
-        indexedContentIds: pruneIdSet(state.indexedContentIds, nextPaperMap),
-        protectedUntilMap: pruneIdKeyedMap(state.protectedUntilMap, nextPaperMap),
-        contentHeightMap: pruneIdKeyedMap(state.contentHeightMap, nextPaperMap),
-        manualPlacementMap: pruneManualPlacementMap(state.manualPlacementMap, nextPaperMap),
+        accessMap,
+        indexedContentIds,
+        protectedUntilMap,
+        contentHeightMap,
+        manualPlacementMap,
       };
     }
 
@@ -405,6 +432,18 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
 
 export function reduce(state: PaperViewState, command: Command, config: PaperCanvasConfig): PaperViewState {
   return reduceCore(state, command, config);
+}
+
+function paperMapsEqual(
+  a: PaperViewState['paperMap'],
+  b: PaperViewState['paperMap'],
+): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const [id, paper] of a) {
+    if (b.get(id) !== paper) return false;
+  }
+  return true;
 }
 
 function normalizeExpansionMap(input?: PaperViewState['expansionMap']): PaperViewState['expansionMap'] {
