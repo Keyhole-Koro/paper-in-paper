@@ -321,7 +321,14 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
 
     case 'UNINDEX_CONTENT': {
       if (!state.indexedContentIds.has(command.nodeId)) return state;
-      return { ...state, indexedContentIds: removeIndexedContent(state.indexedContentIds, command.nodeId) };
+      // Without protection, the layout recompute that follows this unindex
+      // immediately re-evaluates overflow and useOverflowAutoClose will pick
+      // the same node again, leaving it indexed-looking from the user's view.
+      // Shield it for protectDurationMs so the manual action takes effect.
+      const indexedContentIds = removeIndexedContent(state.indexedContentIds, command.nodeId);
+      const protectedUntilMap = new Map(state.protectedUntilMap);
+      protectedUntilMap.set(command.nodeId, Date.now() + config.attention.protectDurationMs);
+      return { ...state, indexedContentIds, protectedUntilMap };
     }
 
     case 'PIN_NODE': {
