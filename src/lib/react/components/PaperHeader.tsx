@@ -8,6 +8,30 @@ import { PaperBreadcrumbs } from './PaperBreadcrumbs';
 
 const DRAG_THRESHOLD = 5;
 
+function PinSymbol({ isPinned }: { isPinned: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="13"
+      height="13"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      style={{ display: 'block' }}
+    >
+      <path d="M12 17v5" />
+      <path
+        d="M5 17h14v-2.75a2 2 0 0 0-.59-1.42L16 10.42V4h1a1 1 0 0 0 0-2H7a1 1 0 0 0 0 2h1v6.42l-2.41 2.41A2 2 0 0 0 5 14.25Z"
+        fill={isPinned ? 'currentColor' : 'none'}
+        fillOpacity={isPinned ? 0.16 : undefined}
+      />
+    </svg>
+  );
+}
+
 interface PaperHeaderProps {
   nodeId: PaperId;
   parentId: PaperId | null;
@@ -153,17 +177,19 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned
             onPointerUp={stopPointerEvent}
             onClick={handlePinToggle}
             style={{
-              fontSize: 11,
+              width: 18,
+              height: 18,
+              display: 'grid',
+              placeItems: 'center',
               color: isPinned ? tone.accent : tone.mutedText,
               cursor: 'pointer',
               lineHeight: 1,
-              padding: '0 2px',
+              padding: 0,
               border: 'none',
               background: 'transparent',
-              fontWeight: isPinned ? 700 : 400,
             }}
           >
-            P
+            <PinSymbol isPinned={isPinned} />
           </button>
         )}
         {!isRoot && (
