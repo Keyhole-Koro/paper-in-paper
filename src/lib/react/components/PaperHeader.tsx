@@ -149,7 +149,7 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned
           {title}
         </span>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
         {onCreateChild && (
           <button
             type="button"
@@ -161,7 +161,12 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned
               color: tone.mutedText,
               cursor: 'pointer',
               lineHeight: 1,
-              padding: '0 2px',
+              width: 28,
+              height: 28,
+              display: 'grid',
+              placeItems: 'center',
+              padding: 0,
+              borderRadius: 6,
               border: 'none',
               background: 'transparent',
             }}
@@ -177,14 +182,15 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned
             onPointerUp={stopPointerEvent}
             onClick={handlePinToggle}
             style={{
-              width: 18,
-              height: 18,
+              width: 28,
+              height: 28,
               display: 'grid',
               placeItems: 'center',
               color: isPinned ? tone.accent : tone.mutedText,
               cursor: 'pointer',
               lineHeight: 1,
               padding: 0,
+              borderRadius: 6,
               border: 'none',
               background: 'transparent',
             }}
@@ -200,11 +206,16 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned
             onPointerUp={stopPointerEvent}
             onClick={handleClose}
             style={{
-              fontSize: 11,
+              width: 28,
+              height: 28,
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: 12,
               color: tone.mutedText,
               cursor: 'pointer',
               lineHeight: 1,
-              padding: '0 2px',
+              padding: 0,
+              borderRadius: 6,
               border: 'none',
               background: 'transparent',
             }}
