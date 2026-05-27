@@ -25,6 +25,7 @@ import { useOverflowAutoClose } from './hooks/useOverflowAutoClose';
 export interface PaperCanvasHandle {
   dispatch: (command: Command) => void;
   dispatchAll: (commands: Command[]) => void;
+  revealNode: (nodeId: PaperId) => void;
   getState: () => PaperViewState;
   subscribe: (listener: () => void) => () => void;
 }
@@ -64,6 +65,28 @@ function PaperCanvasInner({
     dispatch,
     dispatchAll: (commands) => {
       for (const command of commands) dispatch(command);
+    },
+    revealNode: (nodeId) => {
+      const snapshot = store.getSnapshot().state;
+      const target = snapshot.paperMap.get(nodeId);
+      if (!target) return;
+
+      const path: { parentId: PaperId; childId: PaperId }[] = [];
+      let current = target;
+      const visited = new Set<PaperId>();
+      while (current.parentId !== null) {
+        if (visited.has(current.id)) return;
+        visited.add(current.id);
+        path.push({ parentId: current.parentId, childId: current.id });
+        const parent = snapshot.paperMap.get(current.parentId);
+        if (!parent) return;
+        current = parent;
+      }
+
+      for (const edge of path.reverse()) {
+        dispatch({ type: 'OPEN_NODE', parentId: edge.parentId, childId: edge.childId });
+      }
+      dispatch({ type: 'FOCUS_NODE', nodeId });
     },
     getState: () => store.getSnapshot().state,
     subscribe: (listener) => store.subscribe(listener),
