@@ -245,7 +245,7 @@ export function buildSrcDoc(content: string, theme: IframeTheme, fontSize: numbe
     border-bottom: 1px solid var(--soft-line);
   }
   th {
-    font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    font-family: "Noto Sans JP", ui-sans-serif, system-ui, sans-serif;
     font-size: 0.82em;
     text-transform: uppercase;
     letter-spacing: 0.05em;

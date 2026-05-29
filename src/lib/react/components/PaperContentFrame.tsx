@@ -216,7 +216,7 @@ function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
         color: theme.text,
         display: 'grid',
         gap: 12,
-        fontFamily: 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
+        fontFamily: 'inherit',
         lineHeight: 1.7,
       }}
     >
