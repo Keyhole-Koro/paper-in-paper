@@ -3,6 +3,10 @@ const DEFAULT_HUE = 220;
 export interface PaperColorContext {
   hue: number;
   depth: number;
+  // saturationScale multiplies every tone's HSL saturation (default 1).
+  // 0 makes the paper render as a neutral white/grey surface regardless of hue;
+  // useful for papers that host arbitrary content meant to read on white.
+  saturationScale?: number;
 }
 
 export interface PaperTone {
@@ -29,16 +33,22 @@ function normalizeHue(hue: number) {
 export function resolvePaperColorContext(
   paperHue: number | undefined,
   inherited: PaperColorContext | null,
+  saturationScale?: number,
 ): PaperColorContext {
   if (paperHue !== undefined) {
-    return { hue: normalizeHue(paperHue), depth: 0 };
+    return { hue: normalizeHue(paperHue), depth: 0, saturationScale };
   }
 
   if (inherited) {
-    return { hue: inherited.hue, depth: inherited.depth + 1 };
+    // Children inherit the parent's saturation scale unless they set their own.
+    return {
+      hue: inherited.hue,
+      depth: inherited.depth + 1,
+      saturationScale: saturationScale ?? inherited.saturationScale,
+    };
   }
 
-  return { hue: DEFAULT_HUE, depth: 0 };
+  return { hue: DEFAULT_HUE, depth: 0, saturationScale };
 }
 
 export function getPaperTone(
@@ -55,16 +65,26 @@ export function getPaperTone(
   const mutedLightness = clamp(48 + depth * 2, 48, 62);
   const accentLightness = options?.isFocused ? 56 : 50;
 
+  // sat scales the base saturation by the context's saturationScale (default 1),
+  // so saturationScale: 0 collapses every tone to a neutral grey of the same
+  // lightness — a white-ish paper surface independent of hue.
+  const scale = clamp(color.saturationScale ?? 1, 0, 1);
+  const sat = (base: number) => base * scale;
+  // satHeader keeps the title bar (headerBackground) at its full hue regardless
+  // of saturationScale: even when the body is neutralized to white, the header
+  // stays the paper's original tinted surface. At scale 1 this is unchanged.
+  const satHeader = (base: number) => base;
+
   return {
-    accent: `hsl(${color.hue}, 62%, ${accentLightness}%)`,
-    background: `hsl(${color.hue}, 36%, ${surfaceLightness}%)`,
-    backgroundHover: `hsl(${color.hue}, 40%, ${clamp(surfaceLightness - 1.2, 93, 98)}%)`,
-    border: `hsl(${color.hue}, 26%, ${borderLightness}%)`,
-    divider: `hsl(${color.hue}, 24%, ${dividerLightness}%)`,
-    headerBackground: `hsl(${color.hue}, 32%, ${headerLightness}%)`,
-    headerBackgroundFocused: `hsl(${color.hue}, 55%, ${clamp(headerLightness - 2, 88, 96)}%)`,
-    mutedText: `hsl(${color.hue}, 18%, ${mutedLightness}%)`,
-    text: `hsl(${color.hue}, 24%, ${textLightness}%)`,
-    title: `hsl(${color.hue}, 72%, ${titleLightness}%)`,
+    accent: `hsl(${color.hue}, ${sat(62)}%, ${accentLightness}%)`,
+    background: `hsl(${color.hue}, ${sat(36)}%, ${surfaceLightness}%)`,
+    backgroundHover: `hsl(${color.hue}, ${sat(40)}%, ${clamp(surfaceLightness - 1.2, 93, 98)}%)`,
+    border: `hsl(${color.hue}, ${sat(26)}%, ${borderLightness}%)`,
+    divider: `hsl(${color.hue}, ${sat(24)}%, ${dividerLightness}%)`,
+    headerBackground: `hsl(${color.hue}, ${satHeader(32)}%, ${headerLightness}%)`,
+    headerBackgroundFocused: `hsl(${color.hue}, ${satHeader(55)}%, ${clamp(headerLightness - 2, 88, 96)}%)`,
+    mutedText: `hsl(${color.hue}, ${sat(18)}%, ${mutedLightness}%)`,
+    text: `hsl(${color.hue}, ${sat(24)}%, ${textLightness}%)`,
+    title: `hsl(${color.hue}, ${sat(72)}%, ${titleLightness}%)`,
   };
 }

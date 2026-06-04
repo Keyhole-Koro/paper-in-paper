@@ -10,6 +10,7 @@ export interface PaperUpsertInput {
   description?: string;
   content: PaperContent;
   hue?: number;
+  saturationScale?: number;
   attentionScore?: number;
   overrideCss?: string;
   /** Children as id strings or Paper-like objects (anything with `.id`). */
@@ -39,6 +40,7 @@ export class PaperMapBuilder extends Map<PaperId, Paper> {
       description: input.description ?? '',
       content: input.content,
       hue: input.hue,
+      saturationScale: input.saturationScale,
       attentionScore: input.attentionScore,
       overrideCss: input.overrideCss,
       parentId: existing?.parentId ?? null,

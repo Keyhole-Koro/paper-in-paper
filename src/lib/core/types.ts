@@ -55,6 +55,8 @@ export interface Paper {
   description: string;
   content: PaperContent;
   hue?: number;
+  /** HSL彩度の倍率（デフォルト1）。0でhueに依らず無彩色（白〜グレー）になる。子は継承する。 */
+  saturationScale?: number;
   importance?: number;
   /** content area が children area に対して占めるweight。デフォルト100。 */
   contentImportance?: number;

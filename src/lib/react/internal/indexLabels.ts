@@ -142,7 +142,7 @@ function resolveColorContextForPaper(
 
   let inherited = null;
   for (let index = lineage.length - 1; index >= 0; index -= 1) {
-    inherited = resolvePaperColorContext(lineage[index].hue, inherited);
+    inherited = resolvePaperColorContext(lineage[index].hue, inherited, lineage[index].saturationScale);
   }
   return inherited ?? resolvePaperColorContext(undefined, null);
 }

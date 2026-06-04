@@ -89,7 +89,7 @@ export function derivePaperNodeRenderModel({
     config: config.paperNode,
   });
 
-  const resolvedColor = resolvePaperColorContext(paper.hue, inheritedColor ?? null);
+  const resolvedColor = resolvePaperColorContext(paper.hue, inheritedColor ?? null, paper.saturationScale);
   const isFocusedView = view.interactionMode === 'focused';
   const isDragTargetView = view.interactionMode === 'drag-target';
   const tone = getPaperTone(resolvedColor, { isRoot, isFocused: isFocusedView });
