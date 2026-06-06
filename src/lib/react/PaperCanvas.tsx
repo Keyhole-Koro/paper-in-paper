@@ -9,6 +9,7 @@ import { PaperStoreProvider, usePaperDispatch, usePaperStoreApi, usePaperStoreSe
 import { DragProvider, type DragSession } from './context/DragContext';
 import { DebugContext } from './context/DebugContext';
 import { CreateChildContext, type OnCreateChild } from './context/CreateChildContext';
+import { LoadImageUrlContext, type LoadImageUrl } from './context/LoadImageUrlContext';
 import { LayoutContextProvider } from './context/LayoutContext';
 import type { InsertTarget } from './internal/hitTest';
 import { PaperCanvasDebugPanel } from './components/PaperCanvasDebugPanel';
@@ -39,6 +40,10 @@ export interface PaperCanvasProps {
   debug?: boolean;
   overrideCss?: string;
   onCreateChild?: OnCreateChild;
+  // loadImageUrl turns a content image's data-file-id marker into a URL.
+  // Without it, marker images stay blank. The host typically supplies an
+  // authenticated, short-lived signed-URL lookup.
+  loadImageUrl?: LoadImageUrl;
   onPaperMapChange?: (paperMap: PaperMap) => void;
   onExpansionMapChange?: (expansionMap: ExpansionMap) => void;
   onFocusedNodeIdChange?: (focusedNodeId: PaperId | null) => void;
@@ -154,6 +159,7 @@ export function PaperCanvas({
   debug = false,
   overrideCss,
   onCreateChild,
+  loadImageUrl,
   onPaperMapChange,
   onExpansionMapChange,
   onFocusedNodeIdChange,
@@ -165,6 +171,7 @@ export function PaperCanvas({
   return (
     <DebugContext.Provider value={debug}>
     <CreateChildContext.Provider value={onCreateChild ?? null}>
+    <LoadImageUrlContext.Provider value={loadImageUrl ?? null}>
     <PaperStoreProvider
       config={config}
       paperMap={paperMap}
@@ -177,6 +184,7 @@ export function PaperCanvas({
     >
       <PaperCanvasInner rootId={rootId} overrideCss={overrideCss} ref={ref} />
     </PaperStoreProvider>
+    </LoadImageUrlContext.Provider>
     </CreateChildContext.Provider>
     </DebugContext.Provider>
   );

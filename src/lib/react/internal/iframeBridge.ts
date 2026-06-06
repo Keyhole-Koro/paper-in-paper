@@ -16,7 +16,11 @@ interface IframeTheme {
 export type PaperContentEvent =
   | { type: 'open'; paperId: PaperId }
   | { type: 'dragstart'; paperId: PaperId; clientX: number; clientY: number }
-  | { type: 'resize'; height: number };
+  | { type: 'resize'; height: number }
+  // Emitted for each <img data-file-id> marker in the content: the host loads
+  // the file id to a URL and replies via a 'setImageUrl' message. The marker has
+  // no src, so the image stays blank until the host answers.
+  | { type: 'loadImage'; fileId: string };
 
 function escapeInlineStyleText(css: string): string {
   return css.replace(/<\/style/gi, '<\\/style');
@@ -93,17 +97,39 @@ const BOOTSTRAP_SCRIPT = `
     didDrag = false;
   });
 
-  window.addEventListener('message', function (e) {
-    if (!e.data || e.data.type !== 'setOpenIds') return;
-    var ids = e.data.openIds;
-    document.querySelectorAll('a[data-paper-id]').forEach(function (el) {
-      if (ids.indexOf(el.getAttribute('data-paper-id')) !== -1) {
-        el.setAttribute('data-open', '');
-      } else {
-        el.removeAttribute('data-open');
-      }
+  // Images are embedded as <img data-file-id> markers with no src. Ask the host
+  // to load each file id into a URL; the host answers with a 'setImageUrl'
+  // message which we apply below. data-requested guards against re-asking.
+  function requestImages() {
+    document.querySelectorAll('img[data-file-id]:not([data-requested])').forEach(function (el) {
+      el.setAttribute('data-requested', '');
+      parent.postMessage({ type: 'loadImage', fileId: el.getAttribute('data-file-id') }, '*');
     });
+  }
+
+  window.addEventListener('message', function (e) {
+    if (!e.data) return;
+    if (e.data.type === 'setOpenIds') {
+      var ids = e.data.openIds;
+      document.querySelectorAll('a[data-paper-id]').forEach(function (el) {
+        if (ids.indexOf(el.getAttribute('data-paper-id')) !== -1) {
+          el.setAttribute('data-open', '');
+        } else {
+          el.removeAttribute('data-open');
+        }
+      });
+    } else if (e.data.type === 'setImageUrl' && e.data.fileId && e.data.url) {
+      var fid = e.data.fileId;
+      var sel = 'img[data-file-id="' + (window.CSS && CSS.escape ? CSS.escape(fid) : fid) + '"]';
+      document.querySelectorAll(sel).forEach(function (el) {
+        el.addEventListener('load', notifyHeight);
+        el.src = e.data.url;
+      });
+    }
   });
+
+  requestImages();
+  window.addEventListener('load', requestImages);
 })();
 `;
 
@@ -387,5 +413,6 @@ export function isPaperContentEvent(data: unknown): data is PaperContentEvent {
   if (d.type === 'open') return typeof d.paperId === 'string';
   if (d.type === 'dragstart') return typeof d.paperId === 'string';
   if (d.type === 'resize') return typeof d.height === 'number';
+  if (d.type === 'loadImage') return typeof d.fileId === 'string';
   return false;
 }

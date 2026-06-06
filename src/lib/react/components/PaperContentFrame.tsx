@@ -4,6 +4,8 @@ import type { PaperContentEvent } from '../internal/iframeBridge';
 import { useIframeBridge } from '../hooks/useIframeBridge';
 import { usePaperDispatch, usePaperStoreSelector } from '../context/PaperStoreContext';
 import { useDrag } from '../context/DragContext';
+import { useLoadImageUrl } from '../context/LoadImageUrlContext';
+import { handleLoadImage } from '../internal/loadImage';
 import type { PaperContentHtmlMapEntry } from '../internal/paperContentHtml';
 import { calcContentFontSize, deriveHtmlPresentation } from '../internal/paperContentHtml';
 import { PaperContentNodes } from './PaperContentNodes';
@@ -55,8 +57,12 @@ function shallowEqualContentSelection(
 export function PaperContentFrame({ nodeId, content, theme, overrideCss }: PaperContentFrameProps) {
   const dispatch = usePaperDispatch();
   const { startDrag, isDragging } = useDrag();
+  const loadImageUrl = useLoadImageUrl();
   const [height, setHeight] = useState(60);
   const lastHeightRef = useRef(60);
+  // Tracks the live iframe element so loadImage replies can be posted back into
+  // it. Kept in sync by composing with the bridge's ref callback below.
+  const frameElRef = useRef<HTMLIFrameElement | null>(null);
   const isStructured = Array.isArray(content);
   const isHtmlString = typeof content === 'string';
   const { nodeTitle, childTitles, openIds } = usePaperStoreSelector(({ state }) => {
@@ -106,9 +112,13 @@ export function PaperContentFrame({ nodeId, content, theme, overrideCss }: Paper
           { draggedPaperId: event.paperId, sourceParentId: nodeId, mode: 'content-link', draggedTitle: title },
           { x: event.clientX, y: event.clientY },
         );
+      } else if (event.type === 'loadImage') {
+        handleLoadImage(loadImageUrl, event.fileId, (message) => {
+          frameElRef.current?.contentWindow?.postMessage(message, '*');
+        });
       }
     },
-    [nodeId, dispatch, startDrag, childTitles],
+    [nodeId, dispatch, startDrag, childTitles, loadImageUrl],
   );
 
   const { iframeRef, srcDoc } = useIframeBridge({
@@ -119,6 +129,16 @@ export function PaperContentFrame({ nodeId, content, theme, overrideCss }: Paper
     openIds,
     onEvent: handleEvent,
   });
+
+  // Compose the bridge's ref callback with our element tracker so we can post
+  // setImageUrl replies back into this specific iframe.
+  const setFrameRef = useCallback(
+    (el: HTMLIFrameElement | null) => {
+      frameElRef.current = el;
+      iframeRef(el);
+    },
+    [iframeRef],
+  );
 
   // ContentNode[] path
   if (isStructured) {
@@ -141,7 +161,7 @@ export function PaperContentFrame({ nodeId, content, theme, overrideCss }: Paper
 
   return (
     <iframe
-      ref={iframeRef}
+      ref={setFrameRef}
       srcDoc={srcDoc}
       style={{
         width: '100%',

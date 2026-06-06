@@ -1,5 +1,6 @@
 export { PaperCanvas } from './react/PaperCanvas';
 export type { PaperCanvasProps, PaperCanvasHandle } from './react/PaperCanvas';
+export type { LoadImageUrl } from './react/context/LoadImageUrlContext';
 export type { PaperCanvasConfig, PaperCanvasConfigInput, PaperNodeConfig, AttentionConfig } from './config/paperCanvasConfig';
 export { defaultPaperCanvasConfig, resolvePaperCanvasConfig } from './config/paperCanvasConfig';
 export type {
