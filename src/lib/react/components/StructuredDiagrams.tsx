@@ -80,12 +80,7 @@ export function FlowDiagram({
       {steps.map((step, index) => {
         const colors = palette(theme, step.tone);
         return (
-          <div
-            key={step.id}
-            style={{
-              display: 'contents',
-            }}
-          >
+          <div key={step.id} style={{ display: 'contents' }}>
             <div style={{ minWidth: vertical ? undefined : 150, flex: 1 }}>
               <div style={{ border: `1px solid ${colors.border}`, borderRadius: 10, background: colors.background, padding: '10px 12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -156,8 +151,8 @@ export function TimelineDiagram({ items, theme }: { items: TimelineItem[]; theme
     const end = item.end === undefined ? start : numericTime(item.end);
     return { item, start: Math.min(start, end), end: Math.max(start, end) };
   });
-  const min = Math.min(...normalized.map((entry) => entry.start), 0);
-  const max = Math.max(...normalized.map((entry) => entry.end), min + 1);
+  const min = normalized.length > 0 ? Math.min(...normalized.map((entry) => entry.start)) : 0;
+  const max = normalized.length > 0 ? Math.max(...normalized.map((entry) => entry.end), min + 1) : 1;
   const span = Math.max(max - min, 1);
 
   return (
