@@ -18,7 +18,19 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Lint
-        run: npm run lint
+        id: lint
+        continue-on-error: true
+        run: npm run lint -- --format json --output-file eslint-report.json
+      - name: Upload ESLint diagnostics
+        if: steps.lint.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eslint-report
+          path: eslint-report.json
+          retention-days: 2
+      - name: Fail on lint errors
+        if: steps.lint.outcome == 'failure'
+        run: exit 1
       - name: Test
         run: npm run test
       - name: Build
