@@ -5,8 +5,15 @@ export type { PaperCanvasConfig, PaperCanvasConfigInput, PaperNodeConfig, Attent
 export { defaultPaperCanvasConfig, resolvePaperCanvasConfig } from './config/paperCanvasConfig';
 export type {
   AccessMap,
+  ComparisonMetric,
+  ComparisonSeries,
+  ComparisonValueFormat,
   ContentNode,
+  DiagramTone,
   ExpansionMap,
+  FlowBranch,
+  FlowStep,
+  FunnelStage,
   ImportanceMap,
   MinSize,
   Paper,
@@ -18,6 +25,7 @@ export type {
   PaperMap,
   PaperViewState,
   PinnedLayout,
+  TimelineItem,
 } from './core/types';
 export { buildPaperMap } from './core/tree';
 export { PaperMapBuilder } from './core/paperMapBuilder';

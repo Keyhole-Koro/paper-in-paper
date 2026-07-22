@@ -4,6 +4,55 @@ export type PaperId = string;
 
 // --- Structured content nodes (LLM-friendly, JSON-serializable) ---
 
+export type DiagramTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+
+export interface FlowBranch {
+  label: string;
+  value?: string;
+  tone?: DiagramTone;
+}
+
+export interface FlowStep {
+  id: string;
+  title: string;
+  description?: string;
+  value?: string;
+  tone?: DiagramTone;
+  branches?: FlowBranch[];
+}
+
+export interface FunnelStage {
+  label: string;
+  value: number;
+  description?: string;
+  tone?: DiagramTone;
+}
+
+export interface TimelineItem {
+  id?: string;
+  label: string;
+  description?: string;
+  start: number | string;
+  end?: number | string;
+  value?: string;
+  tone?: DiagramTone;
+}
+
+export type ComparisonValueFormat = 'number' | 'percent' | 'duration-ms';
+
+export interface ComparisonMetric {
+  key: string;
+  label: string;
+  format?: ComparisonValueFormat;
+}
+
+export interface ComparisonSeries {
+  label: string;
+  description?: string;
+  values: Record<string, number>;
+  tone?: DiagramTone;
+}
+
 export type ContentNode =
   | { type: 'text';       value: string }
   | { type: 'paragraph';  children: ContentNode[] }
@@ -14,6 +63,10 @@ export type ContentNode =
   | { type: 'list';       items: ContentNode[][] }
   | { type: 'table';      headers: string[]; rows: string[][] }
   | { type: 'callout';    children: ContentNode[] }
+  | { type: 'flow';       direction?: 'horizontal' | 'vertical'; steps: FlowStep[] }
+  | { type: 'funnel';     stages: FunnelStage[]; total?: number }
+  | { type: 'timeline';   items: TimelineItem[] }
+  | { type: 'comparison'; metrics: ComparisonMetric[]; series: ComparisonSeries[] };
 
 // ---------------------------------------------------------------
 

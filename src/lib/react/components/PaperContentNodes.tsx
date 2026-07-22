@@ -1,5 +1,11 @@
 import type { ContentNode, PaperId } from '../../core/types';
 import type { PaperContentTheme } from './PaperContentFrame';
+import {
+  ComparisonDiagram,
+  FlowDiagram,
+  FunnelDiagram,
+  TimelineDiagram,
+} from './StructuredDiagrams';
 
 interface Props {
   nodes: ContentNode[];
@@ -158,5 +164,17 @@ function Node({ node, onOpen, theme }: NodeProps) {
           ))}
         </div>
       );
+
+    case 'flow':
+      return <FlowDiagram steps={node.steps} direction={node.direction} theme={theme} />;
+
+    case 'funnel':
+      return <FunnelDiagram stages={node.stages} total={node.total} theme={theme} />;
+
+    case 'timeline':
+      return <TimelineDiagram items={node.items} theme={theme} />;
+
+    case 'comparison':
+      return <ComparisonDiagram metrics={node.metrics} series={node.series} theme={theme} />;
   }
 }

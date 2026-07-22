@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Lint diagram changes
+        run: >-
+          npx eslint
+          src/lib/core/types.ts
+          src/lib/index.ts
+          src/lib/react/components/PaperContentNodes.tsx
+          src/lib/react/components/StructuredDiagrams.tsx
+          src/lib/react/components/StructuredDiagrams.test.tsx
+      - name: Test structured diagrams
+        run: npx vitest run src/lib/react/components/StructuredDiagrams.test.tsx
+      - name: Build library
+        run: npm run build
