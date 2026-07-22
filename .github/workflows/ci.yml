@@ -26,6 +26,18 @@ jobs:
           src/lib/react/components/StructuredDiagrams.tsx
           src/lib/react/components/StructuredDiagrams.test.tsx
       - name: Test
-        run: npm run test
+        id: test
+        continue-on-error: true
+        run: npx vitest run --reporter=json --outputFile=vitest-report.json
+      - name: Upload Vitest diagnostics
+        if: steps.test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-report
+          path: vitest-report.json
+          retention-days: 2
+      - name: Fail on test errors
+        if: steps.test.outcome == 'failure'
+        run: exit 1
       - name: Build
         run: npm run build
