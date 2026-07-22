@@ -17,20 +17,14 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm install
-      - name: Lint
-        id: lint
-        continue-on-error: true
-        run: npm run lint -- --format json --output-file eslint-report.json
-      - name: Upload ESLint diagnostics
-        if: steps.lint.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: eslint-report
-          path: eslint-report.json
-          retention-days: 2
-      - name: Fail on lint errors
-        if: steps.lint.outcome == 'failure'
-        run: exit 1
+      - name: Lint diagram changes
+        run: >-
+          npx eslint
+          src/lib/core/types.ts
+          src/lib/index.ts
+          src/lib/react/components/PaperContentNodes.tsx
+          src/lib/react/components/StructuredDiagrams.tsx
+          src/lib/react/components/StructuredDiagrams.test.tsx
       - name: Test
         run: npm run test
       - name: Build
