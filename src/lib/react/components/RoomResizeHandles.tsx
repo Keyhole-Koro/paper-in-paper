@@ -15,11 +15,31 @@ const MIN_RESIZABLE_PX = 24;
 const EDGE_EPSILON = 1.5;
 
 export type ResizeTargetKind = 'node' | 'content';
-type ResizeAxis = 'x' | 'y';
+type ResizeEdge = 'left' | 'right' | 'top' | 'bottom';
+
+/**
+ * A divider is shared by the two rects it separates, so it carries a grip on
+ * each side. Each grip resizes the rect it belongs to: dragging away from that
+ * rect grows it, dragging into it shrinks it. Either way the divider follows
+ * the pointer, so which side the user grabbed does not change the outcome.
+ */
+const EDGE_AXIS: Record<ResizeEdge, 'x' | 'y'> = {
+  left: 'x',
+  right: 'x',
+  top: 'y',
+  bottom: 'y',
+};
+
+/** Which way the pointer has to travel for the rect to grow. */
+const EDGE_GROW_SIGN: Record<ResizeEdge, 1 | -1> = {
+  left: -1,
+  top: -1,
+  right: 1,
+  bottom: 1,
+};
 
 interface DragSession {
   pointerId: number;
-  axis: ResizeAxis;
   originX: number;
   originY: number;
   baseWidth: number;
@@ -31,7 +51,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 interface ResizeHandleProps {
-  axis: ResizeAxis;
+  edge: ResizeEdge;
   rect: LayoutRect;
   roomWidth: number;
   roomHeight: number;
@@ -49,7 +69,7 @@ interface ResizeHandleProps {
  * settle into a different aspect ratio at the same size.
  */
 function ResizeHandle({
-  axis,
+  edge,
   rect,
   roomWidth,
   roomHeight,
@@ -58,6 +78,8 @@ function ResizeHandle({
   onShareChange,
   onReset,
 }: ResizeHandleProps) {
+  const axis = EDGE_AXIS[edge];
+  const grow = EDGE_GROW_SIGN[edge];
   const sessionRef = useRef<DragSession | null>(null);
   const frameRef = useRef<number | null>(null);
   const pendingShareRef = useRef<number | null>(null);
@@ -96,7 +118,6 @@ function ResizeHandle({
     e.currentTarget.setPointerCapture(e.pointerId);
     sessionRef.current = {
       pointerId: e.pointerId,
-      axis,
       originX: e.clientX,
       originY: e.clientY,
       // The rect moves while dragging, so freeze the starting geometry.
@@ -114,11 +135,11 @@ function ResizeHandle({
 
     const width =
       axis === 'x'
-        ? clamp(session.baseWidth + (e.clientX - session.originX), MIN_RESIZE_PX, roomWidth)
+        ? clamp(session.baseWidth + grow * (e.clientX - session.originX), MIN_RESIZE_PX, roomWidth)
         : session.baseWidth;
     const height =
       axis === 'y'
-        ? clamp(session.baseHeight + (e.clientY - session.originY), MIN_RESIZE_PX, roomHeight)
+        ? clamp(session.baseHeight + grow * (e.clientY - session.originY), MIN_RESIZE_PX, roomHeight)
         : session.baseHeight;
 
     scheduleShare((width * height) / roomArea);
@@ -150,6 +171,7 @@ function ResizeHandle({
       role="separator"
       aria-orientation={axis === 'x' ? 'vertical' : 'horizontal'}
       aria-label={axis === 'x' ? 'Resize width' : 'Resize height'}
+      data-resize-edge={edge}
       title={isManual ? 'Drag to resize · double-click to restore automatic size' : 'Drag to resize'}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -164,11 +186,12 @@ function ResizeHandle({
         touchAction: 'none',
         cursor: axis === 'x' ? 'col-resize' : 'row-resize',
         display: 'flex',
-        alignItems: axis === 'x' ? 'stretch' : 'flex-end',
-        justifyContent: axis === 'x' ? 'flex-end' : 'stretch',
+        // Keep the painted line pinned to the edge the grip sits on.
+        alignItems: axis === 'x' ? 'stretch' : edge === 'top' ? 'flex-start' : 'flex-end',
+        justifyContent: axis === 'x' ? (edge === 'left' ? 'flex-start' : 'flex-end') : 'stretch',
         ...(axis === 'x'
-          ? { top: 0, right: 0, width: HANDLE_THICKNESS, height: '100%' }
-          : { left: 0, bottom: 0, height: HANDLE_THICKNESS, width: '100%' }),
+          ? { top: 0, [edge]: 0, width: HANDLE_THICKNESS, height: '100%' }
+          : { left: 0, [edge]: 0, height: HANDLE_THICKNESS, width: '100%' }),
       }}
     >
       <div
@@ -234,15 +257,26 @@ export function RoomResizeHandles({
 
   if (rect.width < MIN_RESIZABLE_PX || rect.height < MIN_RESIZABLE_PX) return null;
 
-  const hasRightNeighbor = rect.x + rect.width < roomWidth - EDGE_EPSILON;
-  const hasBottomNeighbor = rect.y + rect.height < roomHeight - EDGE_EPSILON;
-  if (!hasRightNeighbor && !hasBottomNeighbor) return null;
+  const interiorEdges: ResizeEdge[] = [];
+  if (rect.x > EDGE_EPSILON) interiorEdges.push('left');
+  if (rect.x + rect.width < roomWidth - EDGE_EPSILON) interiorEdges.push('right');
+  if (rect.y > EDGE_EPSILON) interiorEdges.push('top');
+  if (rect.y + rect.height < roomHeight - EDGE_EPSILON) interiorEdges.push('bottom');
+
+  // A rect sized up far enough can squeeze its siblings until the space
+  // manager indexes them away — and then it is flush on every edge with no
+  // grip left to undo it. Keep a grip on a manually sized rect regardless, so
+  // the user can always drag the space back or double-click to reset.
+  const edges =
+    interiorEdges.length > 0 ? interiorEdges : isManual ? (['right', 'bottom'] as ResizeEdge[]) : [];
+  if (edges.length === 0) return null;
 
   const shared = { rect, roomWidth, roomHeight, isManual, tone, onShareChange, onReset };
   return (
     <>
-      {hasRightNeighbor && <ResizeHandle axis="x" {...shared} />}
-      {hasBottomNeighbor && <ResizeHandle axis="y" {...shared} />}
+      {edges.map((edge) => (
+        <ResizeHandle key={edge} edge={edge} {...shared} />
+      ))}
     </>
   );
 }

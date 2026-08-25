@@ -101,8 +101,11 @@ therefore converted into a target area rather than into an absolute width or hei
 laid out as a single row or column that is exactly the edge the user grabbed; in a room that
 reflows, the rect keeps the size the user asked for but may settle into a different aspect ratio.
 
-Grips only appear on edges that face a sibling. An edge flush against the room boundary has
-nothing to trade area with.
+A divider is shared by the two rects it separates, so it carries a grip on each side; each grip
+resizes the rect it belongs to. Grips otherwise only appear on edges that face a sibling — an edge
+flush against the room boundary has nothing to trade area with. The exception is a manually sized
+rect: it keeps a grip even when it is flush all round, because sizing it up far enough can push
+its siblings into Content Indexing and leave it with no edge to drag back.
 
 ## User Action Priority
 
