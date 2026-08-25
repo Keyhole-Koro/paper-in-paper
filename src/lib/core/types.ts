@@ -104,6 +104,12 @@ export type PlacementMap = Map<PaperId, ManualPlacement>;
 export type AccessMap = Map<PaperId, number>;
 export type ImportanceMap = Map<PaperId, number>;
 
+/**
+ * ユーザーがリサイズハンドルで固定した share（0〜1）。
+ * 面積比としてレイアウトへ渡され、attention 由来の demand より優先される。
+ */
+export type ManualSizeMap = Map<PaperId, number>;
+
 export interface PaperViewState {
   paperMap: PaperMap;
   expansionMap: ExpansionMap;
@@ -114,6 +120,10 @@ export interface PaperViewState {
   attentionMap: AttentionMap;
   attentionTimestampMap: AttentionTimestampMap;
   manualPlacementMap: PlacementMap;
+  /** 手動リサイズされたノードの、親 room に対する固定 share。 */
+  manualSizeMap: ManualSizeMap;
+  /** 手動リサイズされた content 領域の、そのノード自身の room に対する固定 share。 */
+  manualContentSizeMap: ManualSizeMap;
   contentHeightMap: Map<PaperId, number>;
   protectedUntilMap: Map<PaperId, number>;
 }

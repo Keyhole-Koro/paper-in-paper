@@ -3,6 +3,7 @@ import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import { resolveInitialAttention } from './attention';
 import { openChild, closeChild, removeNodeFromExpansion } from './expansion';
 import { deriveNodeVisibilityState, getNextNodeVisibilityState } from './nodeVisibility';
+import { clearManualShare, setManualShare } from './manualSize';
 import { registerNode, syncAttentionForPaperMap, touchNode, unregisterNodes } from './nodeRegistry';
 import {
   pruneExpansionMap,
@@ -35,6 +36,10 @@ export type Command =
   | { type: 'REPORT_CONTENT_HEIGHT'; nodeId: PaperId; height: number }
   | { type: 'INDEX_CONTENT'; nodeId: PaperId }
   | { type: 'UNINDEX_CONTENT'; nodeId: PaperId }
+  | { type: 'RESIZE_NODE'; nodeId: PaperId; share: number }
+  | { type: 'RESET_NODE_SIZE'; nodeId: PaperId }
+  | { type: 'RESIZE_CONTENT'; nodeId: PaperId; share: number }
+  | { type: 'RESET_CONTENT_SIZE'; nodeId: PaperId }
   | { type: 'PIN_NODE'; nodeId: PaperId; minShare?: number }
   | { type: 'UNPIN_NODE'; nodeId: PaperId }
   | { type: 'LABEL_CLICK_BOOST'; nodeId: PaperId }
@@ -52,6 +57,23 @@ function clearPinOnNode(paperMap: PaperViewState['paperMap'], nodeId: PaperId) {
   const next = new Map(paperMap);
   next.set(nodeId, { ...node, pinnedLayout: undefined });
   return next;
+}
+
+/**
+ * A manual size is a share of one specific room. Once a node changes parents
+ * that share means nothing, so drop it along with the pin.
+ */
+function clearManualSizeOnMove(state: PaperViewState, nodeId: PaperId) {
+  return clearManualShare(state.manualSizeMap, nodeId);
+}
+
+/**
+ * A manual resize is a direct user action, so shield the node from the
+ * overflow heuristic for a moment — otherwise the very layout pass that
+ * applies the new size can index the node away again.
+ */
+function protectNode(state: PaperViewState, nodeId: PaperId, config: PaperCanvasConfig) {
+  return new Map(state.protectedUntilMap).set(nodeId, Date.now() + config.attention.protectDurationMs);
 }
 
 function addIndexedContent(indexedContentIds: Set<PaperId>, nodeId: PaperId) {
@@ -252,8 +274,10 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
         command.targetParentId,
         command.insertBeforeId,
       );
+      let manualSizeMap = state.manualSizeMap;
       if (node.parentId !== command.targetParentId) {
         paperMap = clearPinOnNode(paperMap, command.nodeId);
+        manualSizeMap = clearManualSizeOnMove(state, command.nodeId);
       }
 
       const expansionMap = removeNodeFromExpansion(
@@ -268,6 +292,7 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
         ...state,
         paperMap,
         expansionMap: next,
+        manualSizeMap,
         focusedNodeId: command.nodeId,
       };
     }
@@ -298,6 +323,7 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
         ...state,
         paperMap,
         expansionMap,
+        manualSizeMap: clearManualSizeOnMove(state, command.nodeId),
         unplacedNodeIds: state.unplacedNodeIds.filter((id) => id !== command.nodeId),
         focusedNodeId: command.nodeId,
       };
@@ -342,6 +368,42 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
       return { ...state, indexedContentIds, protectedUntilMap };
     }
 
+    case 'RESIZE_NODE': {
+      const node = state.paperMap.get(command.nodeId);
+      // The root fills the canvas; there is no sibling to take share from.
+      if (!node || node.parentId === null) return state;
+      const manualSizeMap = setManualShare(state.manualSizeMap, command.nodeId, command.share);
+      if (manualSizeMap === state.manualSizeMap) return state;
+      return { ...state, manualSizeMap, protectedUntilMap: protectNode(state, command.nodeId, config) };
+    }
+
+    case 'RESET_NODE_SIZE': {
+      const manualSizeMap = clearManualShare(state.manualSizeMap, command.nodeId);
+      if (manualSizeMap === state.manualSizeMap) return state;
+      return { ...state, manualSizeMap };
+    }
+
+    case 'RESIZE_CONTENT': {
+      if (!state.paperMap.has(command.nodeId)) return state;
+      const manualContentSizeMap = setManualShare(
+        state.manualContentSizeMap,
+        command.nodeId,
+        command.share,
+      );
+      if (manualContentSizeMap === state.manualContentSizeMap) return state;
+      return {
+        ...state,
+        manualContentSizeMap,
+        protectedUntilMap: protectNode(state, command.nodeId, config),
+      };
+    }
+
+    case 'RESET_CONTENT_SIZE': {
+      const manualContentSizeMap = clearManualShare(state.manualContentSizeMap, command.nodeId);
+      if (manualContentSizeMap === state.manualContentSizeMap) return state;
+      return { ...state, manualContentSizeMap };
+    }
+
     case 'PIN_NODE': {
       const node = state.paperMap.get(command.nodeId);
       if (!node) return state;
@@ -384,6 +446,8 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
       const protectedUntilMap = pruneIdKeyedMap(state.protectedUntilMap, nextPaperMap);
       const contentHeightMap = pruneIdKeyedMap(state.contentHeightMap, nextPaperMap);
       const manualPlacementMap = pruneManualPlacementMap(state.manualPlacementMap, nextPaperMap);
+      const manualSizeMap = pruneIdKeyedMap(state.manualSizeMap, nextPaperMap);
+      const manualContentSizeMap = pruneIdKeyedMap(state.manualContentSizeMap, nextPaperMap);
 
       // If nothing actually changed except the paperMap reference identity,
       // keep the prior state object so downstream useEffects don't echo.
@@ -397,6 +461,8 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
         protectedUntilMap === state.protectedUntilMap &&
         contentHeightMap === state.contentHeightMap &&
         manualPlacementMap === state.manualPlacementMap &&
+        manualSizeMap === state.manualSizeMap &&
+        manualContentSizeMap === state.manualContentSizeMap &&
         paperMapsEqual(state.paperMap, nextPaperMap)
       ) {
         return state;
@@ -414,6 +480,8 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
         protectedUntilMap,
         contentHeightMap,
         manualPlacementMap,
+        manualSizeMap,
+        manualContentSizeMap,
       };
     }
 
@@ -523,6 +591,8 @@ export function createInitialState(
     attentionMap,
     attentionTimestampMap,
     manualPlacementMap: new Map(),
+    manualSizeMap: new Map(),
+    manualContentSizeMap: new Map(),
     contentHeightMap: new Map(),
     protectedUntilMap: new Map(),
   };

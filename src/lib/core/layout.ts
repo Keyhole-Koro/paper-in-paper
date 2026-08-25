@@ -1,12 +1,14 @@
 import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import { getAttentionMultiplier, getEffectiveAttention } from './attention';
 import { getOpenChildIds, getOpenChildSet } from './expansion';
+import { EMPTY_MANUAL_SIZE_MAP, MAX_MANUAL_SHARE_TOTAL } from './manualSize';
 import { deriveNodeLayoutPolicy, type NodeLayoutPolicy } from './nodeLayoutPolicy';
 import type {
   AccessMap,
   AttentionMap,
   AttentionTimestampMap,
   ExpansionMap,
+  ManualSizeMap,
   PaperId,
   PaperMap,
   PaperViewState,
@@ -327,6 +329,12 @@ interface ShareInput {
   id: string;
   demand: number;
   minShare: number;
+  /**
+   * Share the user fixed by dragging a resize handle. When set, demand and
+   * minShare are ignored for this item and the remaining area is split among
+   * the demand-driven items.
+   */
+  fixedShare?: number;
 }
 
 function getAutoOpenChildMinShare(openChildCount: number): number {
@@ -335,6 +343,55 @@ function getAutoOpenChildMinShare(openChildCount: number): number {
     AUTO_OPEN_CHILD_MIN_SHARE,
     AUTO_OPEN_CHILD_MIN_SHARE_BUDGET / openChildCount,
   );
+}
+
+/**
+ * Splits `available` (0〜1) across demand-driven items, honouring each item's
+ * minShare. The result is expressed relative to the whole room, so a minShare
+ * is a minimum *of what is left over* once manual sizes are taken out.
+ */
+function distributeFlexShares(items: ShareInput[], available: number): Map<string, number> {
+  const relative = normalizeShares(items);
+  if (available >= 1) return relative;
+  const scaled = new Map<string, number>();
+  for (const [id, share] of relative) {
+    scaled.set(id, share * Math.max(0, available));
+  }
+  return scaled;
+}
+
+/**
+ * Assigns every item its slice of the room. Items carrying a `fixedShare`
+ * (manually resized by the user) are honoured first — direct user action wins
+ * over the attention-derived demand — and the remainder goes to the rest.
+ */
+function resolveShares(items: ShareInput[]): Map<string, number> {
+  if (items.length === 0) return new Map();
+
+  const fixedItems = items.filter((item) => item.fixedShare !== undefined);
+  if (fixedItems.length === 0) return normalizeShares(items);
+
+  const flexItems = items.filter((item) => item.fixedShare === undefined);
+  const clampedFixed = fixedItems.map((item) => ({
+    id: item.id,
+    share: Math.min(1, Math.max(0, item.fixedShare ?? 0)),
+  }));
+  const fixedTotal = clampedFixed.reduce((sum, item) => sum + item.share, 0);
+  const budget = flexItems.length === 0 ? 1 : MAX_MANUAL_SHARE_TOTAL;
+  const scale = fixedTotal > budget && fixedTotal > 0 ? budget / fixedTotal : 1;
+
+  const result = new Map<string, number>();
+  let assigned = 0;
+  for (const item of clampedFixed) {
+    const value = item.share * scale;
+    result.set(item.id, value);
+    assigned += value;
+  }
+
+  for (const [id, share] of distributeFlexShares(flexItems, 1 - assigned)) {
+    result.set(id, share);
+  }
+  return result;
 }
 
 function normalizeShares(items: ShareInput[]): Map<string, number> {
@@ -397,6 +454,8 @@ export function computeNodeLayout(
   maxAR = DEFAULT_MAX_AR,
   nowMs: number,
   demandSnapshot?: DemandSnapshot,
+  manualSizeMap: ManualSizeMap = EMPTY_MANUAL_SIZE_MAP,
+  manualContentSizeMap: ManualSizeMap = EMPTY_MANUAL_SIZE_MAP,
 ): NodeRoomLayout {
   const w = Math.max(0, containerWidth);
   const h = Math.max(0, containerHeight);
@@ -459,9 +518,13 @@ export function computeNodeLayout(
   });
   const autoOpenChildMinShare = getAutoOpenChildMinShare(openChildIds.length);
 
+  const manualContentShare = manualContentSizeMap.get(nodeId);
+
   function buildRects() {
     const shareItems: ShareInput[] = [
-      ...(contentDemand > 0 ? [{ id: CONTENT_ID, demand: Math.max(0, contentDemand), minShare: 0 }] : []),
+      ...(contentDemand > 0
+        ? [{ id: CONTENT_ID, demand: Math.max(0, contentDemand), minShare: 0, fixedShare: manualContentShare }]
+        : []),
       ...openChildIds.map((id) => {
         const child = paperMap.get(id);
         const isIndexedLeafChild = indexedLeafChildIds.has(id);
@@ -474,10 +537,13 @@ export function computeNodeLayout(
                 autoOpenChildMinShare,
                 Math.max(0, child?.pinnedLayout?.minShare ?? 0),
               ),
+          // An indexed leaf reserves no room at all, so a stale manual size
+          // must not resurrect it as a zero-content slice.
+          fixedShare: isIndexedLeafChild ? undefined : manualSizeMap.get(id),
         };
-      }).filter((item) => item.demand > 0 || item.minShare > 0),
+      }).filter((item) => item.demand > 0 || item.minShare > 0 || item.fixedShare !== undefined),
     ];
-    const shares = normalizeShares(shareItems);
+    const shares = resolveShares(shareItems);
     return computeRoomLayout(
       shareItems.map((item) => ({
         id: item.id,
@@ -498,7 +564,14 @@ export function computeNodeLayout(
       const childPolicy = getPolicy(childId);
       const child = paperMap.get(childId);
       const current = childDemands.get(childId) ?? ROOM_MIN_WEIGHT;
-      return childPolicy.reservesRoom && child?.pinnedLayout?.minShare === undefined && current > ROOM_MIN_WEIGHT;
+      return (
+        childPolicy.reservesRoom &&
+        child?.pinnedLayout?.minShare === undefined &&
+        // A manually sized child holds a fixed share; shrinking its demand
+        // would do nothing anyway, and the user asked for that size.
+        manualSizeMap.get(childId) === undefined &&
+        current > ROOM_MIN_WEIGHT
+      );
     });
     if (!targetChildId) break;
     const current = childDemands.get(targetChildId) ?? ROOM_MIN_WEIGHT;

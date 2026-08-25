@@ -163,6 +163,8 @@ drive it via the ref or compose your own store.
 | `MOVE_NODE { nodeId, targetParentId, insertBeforeId }`   | reparent / reorder across parents             |
 | `INDEX_CONTENT` / `UNINDEX_CONTENT { nodeId }`           | collapse a node's body into a side label      |
 | `PIN_NODE` / `UNPIN_NODE { nodeId, minShare? }`          | guarantee a node a minimum layout share       |
+| `RESIZE_NODE` / `RESET_NODE_SIZE { nodeId, share }`      | fix a node's share of its parent room         |
+| `RESIZE_CONTENT` / `RESET_CONTENT_SIZE { nodeId, share }`| fix a node's content share of its own room    |
 
 See [`docs/commands.md`](./docs/commands.md) for the complete list and semantics.
 
@@ -223,6 +225,20 @@ open children, proportional to layout *demand* (intrinsic content height ×
 attention multiplier). Children recurse the same way. Custom `layout` functions,
 `childMinShares`, and pinning override the defaults.
 
+### Resizing by hand
+
+Every rectangle that faces a sibling grows a grip on that edge. Dragging it fixes
+that rectangle's share of the room and redistributes the rest to its
+demand-driven neighbours; double-clicking the grip restores automatic sizing.
+The same works on a node's own content area, so the body and the children can be
+rebalanced directly. A hand-set size outranks the attention model: it survives
+decay, is never shrunk by the space-management fallback, and is never picked for
+auto-indexing or auto-close.
+
+Because the room is packed as a treemap, a drag sets the rectangle's *area*. In a
+single-row room that is exactly the edge you grabbed; in a room that reflows, the
+rectangle keeps the size you asked for but may change its aspect ratio.
+
 For the full layout algorithm, demand model, and indexed-node rules, see
 [`docs/layout-spec.md`](./docs/layout-spec.md).
 
@@ -249,11 +265,14 @@ PaperCanvasConfig, PaperCanvasConfigInput, PaperNodeConfig, AttentionConfig
 // Data
 buildPaperMap, PaperMapBuilder, PaperUpsertInput, RemoveMode
 Paper, PaperId, PaperMap, PaperContent, ContentNode
-PaperViewState, ExpansionMap, AccessMap, ImportanceMap, MinSize, PinnedLayout
+PaperViewState, ExpansionMap, AccessMap, ImportanceMap, ManualSizeMap, MinSize, PinnedLayout
 PaperLayoutFn, PaperLayoutContext, PaperLayoutResult
 
 // Store
 createInitialState, reduce, Command, DefaultOpenState
+
+// Manual resize
+clampManualShare, MIN_MANUAL_SHARE, MAX_MANUAL_SHARE, MAX_MANUAL_SHARE_TOTAL
 
 // Hooks
 usePaperDispatch, usePaperStoreSelector

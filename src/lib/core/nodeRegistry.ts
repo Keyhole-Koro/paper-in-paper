@@ -50,6 +50,8 @@ export interface UnregisteredViewState {
   attentionTimestampMap: PaperViewState['attentionTimestampMap'];
   accessMap: PaperViewState['accessMap'];
   indexedContentIds: PaperViewState['indexedContentIds'];
+  manualSizeMap: PaperViewState['manualSizeMap'];
+  manualContentSizeMap: PaperViewState['manualContentSizeMap'];
 }
 
 export interface TouchNodeOptions {
@@ -102,13 +104,24 @@ export function unregisterNodes(
   const attentionTimestampMap = new Map(state.attentionTimestampMap);
   const accessMap = new Map(state.accessMap);
   const indexedContentIds = new Set(state.indexedContentIds);
+  const manualSizeMap = new Map(state.manualSizeMap);
+  const manualContentSizeMap = new Map(state.manualContentSizeMap);
   for (const id of removedIds) {
     attentionMap.delete(id);
     attentionTimestampMap.delete(id);
     accessMap.delete(id);
     indexedContentIds.delete(id);
+    manualSizeMap.delete(id);
+    manualContentSizeMap.delete(id);
   }
-  return { attentionMap, attentionTimestampMap, accessMap, indexedContentIds };
+  return {
+    attentionMap,
+    attentionTimestampMap,
+    accessMap,
+    indexedContentIds,
+    manualSizeMap,
+    manualContentSizeMap,
+  };
 }
 
 /**

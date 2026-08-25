@@ -40,6 +40,8 @@ function computeRecursiveLayout(
     undefined,
     nowMs,
     demandSnapshot,
+    state.manualSizeMap,
+    state.manualContentSizeMap,
   );
 
   const result = new Map<PaperId, NodeLayoutEntry>();
@@ -165,6 +167,8 @@ export function useCanvasLayoutSnapshot(
     state.accessMap,
     state.contentHeightMap,
     state.indexedContentIds,
+    state.manualSizeMap,
+    state.manualContentSizeMap,
     config,
   ]);
 }

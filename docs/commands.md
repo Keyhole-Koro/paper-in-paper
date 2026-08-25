@@ -192,6 +192,44 @@ dispatch({
 });
 ```
 
+### `RESIZE_NODE`
+
+ノードが親 room の中で占める share（面積比 0〜1）を手動で固定します。リサイズハンドルのドラッグから内部で呼ばれます。
+
+```ts
+dispatch({ type: 'RESIZE_NODE', nodeId: 'abc', share: 0.4 });
+```
+
+- share は `MIN_MANUAL_SHARE`(0.05) 〜 `MAX_MANUAL_SHARE`(0.9) にクランプされる
+- attention 由来の demand より優先される
+- ルートは兄弟を持たないため無視される
+- 対象ノードは `protectDurationMs` の間 auto-index / auto-close から保護される
+- 親が変わる（`MOVE_NODE` / `ATTACH_UNPLACED_NODE`）と破棄される
+
+### `RESET_NODE_SIZE`
+
+`RESIZE_NODE` で固定した share を解除し、attention 由来の自動サイズへ戻します。
+
+```ts
+dispatch({ type: 'RESET_NODE_SIZE', nodeId: 'abc' });
+```
+
+### `RESIZE_CONTENT`
+
+そのノードの content 領域が、自身の room の中で占める share を手動で固定します。子ノードとの取り分を直接調整したいときに使います。
+
+```ts
+dispatch({ type: 'RESIZE_CONTENT', nodeId: 'abc', share: 0.6 });
+```
+
+### `RESET_CONTENT_SIZE`
+
+`RESIZE_CONTENT` で固定した share を解除します。
+
+```ts
+dispatch({ type: 'RESET_CONTENT_SIZE', nodeId: 'abc' });
+```
+
 ### `REPORT_CONTENT_HEIGHT`
 
 ノードのコンテンツ領域の高さをレイアウトエンジンに伝えます。ライブラリ内部から呼ばれます。

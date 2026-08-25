@@ -7,6 +7,7 @@ import type { PaperTone, PaperColorContext } from '../internal/paperColors';
 import { PaperContentFrame } from './PaperContentFrame';
 import { PaperHeader } from './PaperHeader';
 import { PaperNode } from './PaperNode';
+import { RoomResizeHandles } from './RoomResizeHandles';
 
 interface PaperNodeFrameProps {
   nodeId: PaperId;
@@ -20,6 +21,9 @@ interface PaperNodeFrameProps {
   isFocused: boolean;
   isDragTarget: boolean;
   layoutPolicy: NodeLayoutPolicy;
+  /** Room dimensions in px — the coordinate space `layout`'s rects live in. */
+  roomWidth: number;
+  roomHeight: number;
   debugBadge?: string | null;
   roomRef: RefObject<HTMLDivElement | null>;
   insertBeforeRect?: { x: number; y: number; height: number } | null;
@@ -82,6 +86,8 @@ export function PaperNodeFrame({
   isFocused,
   isDragTarget,
   layoutPolicy,
+  roomWidth,
+  roomHeight,
   debugBadge,
   roomRef,
   insertBeforeRect,
@@ -135,33 +141,52 @@ export function PaperNodeFrame({
             top: 0,
             width: layout.contentRect.width,
             height: layout.contentRect.height,
-            overflow: 'auto',
+            overflow: 'hidden',
             borderRight: layout.childRects.size > 0 && layoutPolicy.hasContent ? `1px solid ${tone.divider}` : 'none',
             boxSizing: 'border-box',
-            padding: layoutPolicy.hasContent ? 10 : 0,
-            color: tone.text,
-            scrollbarWidth: 'thin',
-            scrollbarColor: `${tone.divider} transparent`,
             pointerEvents: layoutPolicy.hasContent ? 'auto' : 'none',
           }}
         >
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              overflow: 'auto',
+              boxSizing: 'border-box',
+              padding: layoutPolicy.hasContent ? 10 : 0,
+              color: tone.text,
+              scrollbarWidth: 'thin',
+              scrollbarColor: `${tone.divider} transparent`,
+            }}
+          >
+            {layoutPolicy.hasContent && (
+              <PaperContentFrame
+                nodeId={nodeId}
+                content={paper.content}
+                overrideCss={paper.overrideCss ?? overrideCss}
+                theme={{
+                  surface: tone.background,
+                  surfaceAlt: tone.backgroundHover,
+                  surfaceRaised: tone.headerBackground,
+                  text: tone.text,
+                  mutedText: tone.mutedText,
+                  divider: tone.divider,
+                  linkBackground: tone.headerBackground,
+                  linkBackgroundHover: tone.backgroundHover,
+                  linkBorder: tone.border,
+                  linkText: tone.title,
+                }}
+              />
+            )}
+          </div>
           {layoutPolicy.hasContent && (
-            <PaperContentFrame
+            <RoomResizeHandles
+              kind="content"
               nodeId={nodeId}
-              content={paper.content}
-              overrideCss={paper.overrideCss ?? overrideCss}
-              theme={{
-                surface: tone.background,
-                surfaceAlt: tone.backgroundHover,
-                surfaceRaised: tone.headerBackground,
-                text: tone.text,
-                mutedText: tone.mutedText,
-                divider: tone.divider,
-                linkBackground: tone.headerBackground,
-                linkBackgroundHover: tone.backgroundHover,
-                linkBorder: tone.border,
-                linkText: tone.title,
-              }}
+              rect={layout.contentRect}
+              roomWidth={roomWidth}
+              roomHeight={roomHeight}
+              tone={tone}
             />
           )}
         </AnimatedRect>
@@ -188,6 +213,14 @@ export function PaperNodeFrame({
               }}
             >
               <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={inheritedColor} overrideCss={overrideCss} />
+              <RoomResizeHandles
+                kind="node"
+                nodeId={childId}
+                rect={rect}
+                roomWidth={roomWidth}
+                roomHeight={roomHeight}
+                tone={tone}
+              />
             </AnimatedRect>
           ))}
         </AnimatePresence>

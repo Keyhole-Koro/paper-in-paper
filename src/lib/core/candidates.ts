@@ -22,7 +22,16 @@ export function selectLowImportanceCandidates(
       // producing visible jitter as the same node toggles between
       // indexed and closed.
       const isIndexed = state.indexedContentIds.has(id);
-      return !isIndexed && protectedUntil < nowMs && paper?.pinnedLayout?.minShare === undefined;
+      // A manually resized node holds a share the user chose explicitly.
+      // Direct user action outranks automatic space management, so it is
+      // never picked as an index/close candidate.
+      const isManuallySized = state.manualSizeMap.get(id) !== undefined;
+      return (
+        !isIndexed &&
+        !isManuallySized &&
+        protectedUntil < nowMs &&
+        paper?.pinnedLayout?.minShare === undefined
+      );
     })
     .sort((a, b) => {
       const ia = getEffectiveAttention(state, a, config, nowMs);

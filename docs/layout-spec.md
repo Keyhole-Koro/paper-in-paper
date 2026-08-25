@@ -78,7 +78,34 @@ When room space becomes constrained, as determined by the layout engine:
     2. **Auto Close**: Fully close the node by removing it from `openChildIds`. This recovers the full area occupied by the node's frame.
 - Attention scores themselves are preserved after collapse so they are still available when the node is reopened
 
+## Manual Resize
+
+A user can resize a paper directly by dragging the grip on one of its edges. Manual size is
+authoritative: it bypasses the attention -> demand -> share pipeline entirely.
+
+- A resized node holds a fixed `share` of its parent room, stored in `manualSizeMap`
+- A node's content area can be sized the same way against its own children, stored in `manualContentSizeMap`
+- The remaining area is redistributed to the demand-driven items in that room
+- Manual shares are clamped to `[MIN_MANUAL_SHARE, MAX_MANUAL_SHARE]`, and their sum inside one
+  room is capped at `MAX_MANUAL_SHARE_TOTAL` so demand-driven siblings always keep a usable slice.
+  A room where nothing else competes lifts the cap to the whole room.
+- The shrink fallback never targets a manually sized node
+- A manually sized node is never selected as a Content Indexing / Auto Close candidate
+- Double-clicking the grip clears the manual size and returns the node to automatic sizing
+- The share is dropped when the node changes parents, since it described one specific room
+
+### Resize is area-based, not edge-based
+
+The room is packed by a squarified treemap, which decides positions from *area*. A drag is
+therefore converted into a target area rather than into an absolute width or height. In a room
+laid out as a single row or column that is exactly the edge the user grabbed; in a room that
+reflows, the rect keeps the size the user asked for but may settle into a different aspect ratio.
+
+Grips only appear on edges that face a sibling. An edge flush against the room boundary has
+nothing to trade area with.
+
 ## User Action Priority
 
 - If the user manually opens a node, exclude it from automatic collapse for a fixed period
 - If the user manually places a node, automatic layout must not overwrite that position
+- If the user manually resizes a node, automatic space management must not resize or collapse it

@@ -14,6 +14,7 @@ src/lib/
     expansionRules.ts        高レベル展開ルール（collapse/break chain）
     commands.ts              Command 型 + reduce + createInitialState
     nodeLayoutPolicy.ts      indexed / branch / leaf の表示ポリシー導出
+    manualSize.ts            手動リサイズ share のクランプ / 更新ヘルパー
     layout.ts                demand snapshot + roomLayout アルゴリズム
     autoClose.ts             auto-close 候補選出
   react/
@@ -47,6 +48,7 @@ src/lib/
       PaperContentNodes      ContentNode[] 専用レンダラー
       PaperCanvasDebugPanel  debug overlay
       FloatingLayer          ドラッグゴースト
+      RoomResizeHandles      room 内 rect の辺に出るリサイズグリップ
 ```
 
 ---
@@ -68,6 +70,8 @@ src/lib/
 | `contentHeightMap` | `Map<PaperId, number>` | コンテンツ高さ（iframe resize 追跡用）|
 | `unplacedNodeIds` | `PaperId[]` | 未配置ノードのリスト |
 | `manualPlacementMap` | `Map<PaperId, ManualPlacement>` | 手動配置情報 |
+| `manualSizeMap` | `Map<PaperId, number>` | 手動リサイズされたノードの、親 room に対する固定 share |
+| `manualContentSizeMap` | `Map<PaperId, number>` | 手動リサイズされた content の、自身の room に対する固定 share |
 
 ### attention の動き
 
@@ -129,6 +133,21 @@ roomDemand(node) = contentDemand(node) + Σ roomDemand(open children)
 
 1.  **INDEX_CONTENT**: 重要度の低いノードの本文を畳み、スペースを空ける。
 2.  **AUTO_CLOSE_NODE**: 本文を畳んでもなお不足する場合、ノードを完全に閉じ（通常のカード化）、親の展開リストから外す。
+
+### 手動リサイズ（`manualSize.ts` / `RoomResizeHandles`）
+
+room 内の rect の辺をドラッグすると、その rect の面積比が `manualSizeMap` /
+`manualContentSizeMap` に固定 share として記録される。固定 share は demand より優先され、
+残りの面積が demand 駆動のアイテムへ再配分される。
+
+- クランプ: 単体 `0.05〜0.9`、1つの room 内の合計 `0.92`（競合相手がいなければ 1.0）
+- shrink フォールバックと auto-index / auto-close の対象から外れる
+- グリップのダブルクリックで解除し、自動サイズへ戻る
+- 親が変わると破棄される（share は特定の room に対する値のため）
+
+レイアウトは squarified treemap なので、ドラッグ距離は「幅・高さ」ではなく「面積」へ変換される。
+1行・1列に収まる room では掴んだ辺そのものになるが、行が組み替わる room では
+指定した大きさのまま縦横比が変わることがある。
 
 ### shrink フォールバック（`layout.ts`）
 

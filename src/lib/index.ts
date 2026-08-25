@@ -8,6 +8,7 @@ export type {
   ContentNode,
   ExpansionMap,
   ImportanceMap,
+  ManualSizeMap,
   MinSize,
   Paper,
   PaperContent,
@@ -24,6 +25,12 @@ export { PaperMapBuilder } from './core/paperMapBuilder';
 export type { PaperUpsertInput } from './core/paperMapBuilder';
 export type { RemoveMode } from './core/tree';
 export { createInitialState, reduce } from './core/commands';
+export {
+  MAX_MANUAL_SHARE,
+  MAX_MANUAL_SHARE_TOTAL,
+  MIN_MANUAL_SHARE,
+  clampManualShare,
+} from './core/manualSize';
 export type { Command, DefaultOpenState } from './core/commands';
 export { usePaperDispatch, usePaperStoreSelector } from './react/context/PaperStoreContext';
 export { useSiblingShare } from './react/hooks/useSiblingShare';
