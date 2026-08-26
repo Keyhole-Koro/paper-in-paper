@@ -186,6 +186,7 @@ export function PaperNodeFrame({
               rect={layout.contentRect}
               roomWidth={roomWidth}
               roomHeight={roomHeight}
+              singleAxis={layout.singleAxis}
               tone={tone}
             />
           )}
@@ -219,6 +220,7 @@ export function PaperNodeFrame({
                 rect={rect}
                 roomWidth={roomWidth}
                 roomHeight={roomHeight}
+                singleAxis={layout.singleAxis}
                 tone={tone}
               />
             </AnimatedRect>

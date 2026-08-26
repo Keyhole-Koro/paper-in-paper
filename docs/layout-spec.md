@@ -89,17 +89,35 @@ authoritative: it bypasses the attention -> demand -> share pipeline entirely.
 - Manual shares are clamped to `[MIN_MANUAL_SHARE, MAX_MANUAL_SHARE]`, and their sum inside one
   room is capped at `MAX_MANUAL_SHARE_TOTAL` so demand-driven siblings always keep a usable slice.
   A room where nothing else competes lifts the cap to the whole room.
-- The shrink fallback never targets a manually sized node
+- The shrink fallback never targets a manually sized node, and stands down entirely in a split room
 - A manually sized node is never selected as a Content Indexing / Auto Close candidate
 - Double-clicking the grip clears the manual size and returns the node to automatic sizing
 - The share is dropped when the node changes parents, since it described one specific room
 
-### Resize is area-based, not edge-based
+### A hand-sized room becomes a split
 
-The room is packed by a squarified treemap, which decides positions from *area*. A drag is
-therefore converted into a target area rather than into an absolute width or height. In a room
-laid out as a single row or column that is exactly the edge the user grabbed; in a room that
-reflows, the rect keeps the size the user asked for but may settle into a different aspect ratio.
+The squarified packer decides positions from *area*, and its row breaks make a small share change
+flip a rect from a wide block into a narrow column. That is fine for automatic layout and useless
+for direct manipulation, so a room the user has sized by hand switches to a **single-axis split**:
+one item per row, laid out along the room's dominant axis — side by side in a wide room, stacked
+in a tall one. In that mode a dragged edge lands exactly under the pointer.
+
+The mode is decided per room and only from things that cannot change mid-drag:
+
+- the room holds a manual share, **and**
+- it holds at most `SINGLE_AXIS_MAX_ITEMS` (4) items — beyond that a split is a strip of slivers,
+  so a bigger room keeps the packer
+
+Because the item count only changes when a child opens or closes, a room never switches modes
+under the user's pointer.
+
+Entering split mode does move things once: a rect that was a wide block becomes a column of the
+same area. That snap happens on pointer-down, before the pointer moves, so the drag itself still
+tracks the pointer exactly.
+
+A room in split mode is treated as user-managed: the shrink fallback and the overflow signal both
+stand down for it, so narrow columns the user asked for are not treated as pressure to index the
+siblings away.
 
 A divider is shared by the two rects it separates, so it carries a grip on each side; each grip
 resizes the rect it belongs to. Grips otherwise only appear on edges that face a sibling — an edge

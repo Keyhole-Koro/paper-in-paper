@@ -235,9 +235,12 @@ rebalanced directly. A hand-set size outranks the attention model: it survives
 decay, is never shrunk by the space-management fallback, and is never picked for
 auto-indexing or auto-close.
 
-Because the room is packed as a treemap, a drag sets the rectangle's *area*. In a
-single-row room that is exactly the edge you grabbed; in a room that reflows, the
-rectangle keeps the size you asked for but may change its aspect ratio.
+Rooms are normally packed as a treemap, which is good at filling space and bad at
+being dragged — its row breaks re-flow a rectangle's shape as soon as its share
+moves. So a room you have sized by hand switches to a single-axis split, laid out
+along the room's long side, where a dragged edge lands under the pointer. Rooms
+holding more than four items stay on the packer, since a split there is just a
+strip of slivers.
 
 For the full layout algorithm, demand model, and indexed-node rules, see
 [`docs/layout-spec.md`](./docs/layout-spec.md).

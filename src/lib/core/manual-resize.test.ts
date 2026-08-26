@@ -17,6 +17,17 @@ function buildState(papers: Paper[], openChildIds: Record<string, string[]> = {}
   return state;
 }
 
+function twoChildren() {
+  return buildState(
+    [
+      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a', 'b'] },
+      { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [] },
+      { id: 'b', title: 'b', description: '', content: '', parentId: 'root', childIds: [] },
+    ],
+    { root: ['a', 'b'] },
+  );
+}
+
 function threeChildren() {
   return buildState(
     [
@@ -168,6 +179,76 @@ describe('manual resize', () => {
     const candidates = selectLowImportanceCandidates(state, 'root', Date.now(), config);
     expect(candidates).not.toContain('a');
     expect(candidates).toContain('b');
+  });
+
+  it('splits a hand-sized room along one axis so a dragged edge stays put', () => {
+    const state = reduce(twoChildren(), { type: 'RESIZE_NODE', nodeId: 'a', share: 0.5 }, config);
+    const layout = layoutRoom(state);
+    const rects = [layout.contentRect, ...layout.childRects.values()];
+
+    // The room is wider than tall, so every rect becomes a full-height column
+    // and the columns tile it left to right with no gaps.
+    for (const rect of rects) {
+      expect(rect.height).toBeCloseTo(ROOM_H, 4);
+      expect(rect.y).toBeCloseTo(0, 4);
+    }
+    let edge = 0;
+    for (const rect of rects.slice().sort((p, q) => p.x - q.x)) {
+      expect(rect.x).toBeCloseTo(edge, 4);
+      edge += rect.width;
+    }
+    expect(edge).toBeCloseTo(ROOM_W, 4);
+  });
+
+  it('stacks a hand-sized room that is taller than it is wide', () => {
+    const state = reduce(twoChildren(), { type: 'RESIZE_NODE', nodeId: 'a', share: 0.5 }, config);
+    const layout = computeNodeLayout(
+      'root', 400, 900,
+      state.paperMap, state.expansionMap, state.attentionMap, state.attentionTimestampMap,
+      state.accessMap, state.contentHeightMap, state.indexedContentIds, config,
+      undefined, undefined, 1_000, undefined, state.manualSizeMap, state.manualContentSizeMap,
+    );
+    for (const rect of [layout.contentRect, ...layout.childRects.values()]) {
+      expect(rect.width).toBeCloseTo(400, 4);
+      expect(rect.x).toBeCloseTo(0, 4);
+    }
+  });
+
+  it('keeps the dragged edge under the pointer instead of re-packing', () => {
+    let state = reduce(twoChildren(), { type: 'RESIZE_NODE', nodeId: 'a', share: 0.3 }, config);
+    const before = layoutRoom(state).childRects.get('a')!;
+
+    // Replay what a drag does: widen the rect by 120px and ask for that area.
+    const targetWidth = before.width + 120;
+    const targetShare = (targetWidth * before.height) / (ROOM_W * ROOM_H);
+    state = reduce(state, { type: 'RESIZE_NODE', nodeId: 'a', share: targetShare }, config);
+    const after = layoutRoom(state).childRects.get('a')!;
+
+    expect(after.width).toBeCloseTo(targetWidth, 3);
+    expect(after.height).toBeCloseTo(before.height, 3);
+  });
+
+  it('keeps the packer for a hand-sized room with too many items to strip', () => {
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f'];
+    let state = buildState(
+      [
+        { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ids },
+        ...ids.map((id) => ({ id, title: id, description: '', content: '', parentId: 'root', childIds: [] })),
+      ],
+      { root: ids },
+    );
+    state = reduce(state, { type: 'RESIZE_NODE', nodeId: 'a', share: 0.2 }, config);
+
+    // A single-axis room puts every rect at y = 0; a packed one does not.
+    const rects = [...layoutRoom(state).childRects.values()];
+    expect(rects.some((rect) => rect.y > 0.5)).toBe(true);
+  });
+
+  it('does not report overflow for the narrow columns the user asked for', () => {
+    // 0.05 of a 1000x600 room is a 50px column — far outside the aspect-ratio
+    // bounds, and previously enough to trigger auto-indexing of the siblings.
+    const state = reduce(twoChildren(), { type: 'RESIZE_NODE', nodeId: 'a', share: MIN_MANUAL_SHARE }, config);
+    expect(layoutRoom(state).overflowChildCount).toBe(0);
   });
 
   it('ignores a resize of the root, which has no siblings to trade with', () => {

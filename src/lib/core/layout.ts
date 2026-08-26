@@ -36,6 +36,12 @@ export interface NodeRoomLayout {
   childRects: Map<PaperId, LayoutRect>;
   closedChildIds: PaperId[];
   overflowChildCount: number;
+  /**
+   * True when this room is laid out as a single-axis split because the user
+   * hand-sized something in it. Resize grips read it to know whether the room
+   * is already in split mode or has yet to snap into it.
+   */
+  singleAxis: boolean;
 }
 
 interface RoomDemandContext {
@@ -236,26 +242,12 @@ function worstAspectRatio(
   return worst;
 }
 
-export function computeRoomLayout(
+function packRows(
   items: LayoutItem[],
-  containerWidth: number,
-  containerHeight: number,
-  _minAR: number,
-  _maxAR: number,
-): RoomLayoutResult {
-  if (items.length === 0 || containerWidth <= 0 || containerHeight <= 0) {
-    return { rects: [] };
-  }
-
-  const useColumns = containerWidth > containerHeight;
-  const w = useColumns ? containerHeight : containerWidth;
-  const h = useColumns ? containerWidth : containerHeight;
-
-  const totalWeight = items.reduce((s, i) => s + i.weight, 0);
-  if (totalWeight <= 0) {
-    return { rects: [] };
-  }
-
+  totalWeight: number,
+  w: number,
+  h: number,
+): LayoutItem[][] {
   const rows: LayoutItem[][] = [];
   let currentRow: LayoutItem[] = [];
   let currentRowWeight = 0;
@@ -282,7 +274,16 @@ export function computeRoomLayout(
     }
   }
   if (currentRow.length > 0) rows.push(currentRow);
+  return rows;
+}
 
+function placeRows(
+  rows: LayoutItem[][],
+  totalWeight: number,
+  w: number,
+  h: number,
+  useColumns: boolean,
+): LayoutRect[] {
   const rects: LayoutRect[] = [];
   let y = 0;
 
@@ -301,11 +302,42 @@ export function computeRoomLayout(
   }
 
   if (useColumns) {
-    return {
-      rects: rects.map((r) => ({ id: r.id, x: r.y, y: r.x, width: r.height, height: r.width })),
-    };
+    return rects.map((r) => ({ id: r.id, x: r.y, y: r.x, width: r.height, height: r.width }));
   }
-  return { rects };
+  return rects;
+}
+
+export function computeRoomLayout(
+  items: LayoutItem[],
+  containerWidth: number,
+  containerHeight: number,
+  _minAR: number,
+  _maxAR: number,
+  /**
+   * Put every item in its own row, laying the room out along its dominant
+   * axis: side by side in a wide room, stacked in a tall one. The packer's
+   * row breaks are what make a small weight change flip a rect from a wide
+   * block into a narrow column, so a room the user sizes by hand asks for
+   * this instead — there a dragged edge has to follow the pointer. The caller
+   * decides when to ask for it; see SINGLE_AXIS_MAX_ITEMS.
+   */
+  singleAxis = false,
+): RoomLayoutResult {
+  if (items.length === 0 || containerWidth <= 0 || containerHeight <= 0) {
+    return { rects: [] };
+  }
+
+  const useColumns = containerWidth > containerHeight;
+  const w = useColumns ? containerHeight : containerWidth;
+  const h = useColumns ? containerWidth : containerHeight;
+
+  const totalWeight = items.reduce((s, i) => s + i.weight, 0);
+  if (totalWeight <= 0) {
+    return { rects: [] };
+  }
+
+  const rows = singleAxis ? items.map((item) => [item]) : packRows(items, totalWeight, w, h);
+  return { rects: placeRows(rows, totalWeight, w, h, useColumns) };
 }
 
 const DEFAULT_MIN_AR = 0.25;
@@ -314,6 +346,13 @@ const CONTENT_ID = '__content__';
 const SHRINK_STEP = 0.84;
 const MAX_SHRINK_PASSES = 6;
 const ROOM_MIN_WEIGHT = 1;
+/**
+ * Above this many items a single-axis room is a strip of slivers, so a
+ * hand-sized room that big keeps the packer. The count only changes when a
+ * child opens or closes — never mid-drag — so the room cannot switch layout
+ * modes under the user's pointer.
+ */
+const SINGLE_AXIS_MAX_ITEMS = 4;
 const AUTO_OPEN_CHILD_MIN_SHARE = 0.18;
 const AUTO_OPEN_CHILD_MIN_SHARE_BUDGET = 0.72;
 
@@ -464,7 +503,7 @@ export function computeNodeLayout(
 
   const parent = paperMap.get(nodeId);
   if (!parent) {
-    return { contentRect: zeroContent, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 };
+    return { contentRect: zeroContent, childRects: new Map(), closedChildIds: [], overflowChildCount: 0, singleAxis: false };
   }
 
   const openChildIds = getOpenChildIds(expansionMap, nodeId);
@@ -478,6 +517,7 @@ export function computeNodeLayout(
       childRects: new Map(),
       closedChildIds,
       overflowChildCount: 0,
+      singleAxis: false,
     };
   }
 
@@ -519,6 +559,9 @@ export function computeNodeLayout(
   const autoOpenChildMinShare = getAutoOpenChildMinShare(openChildIds.length);
 
   const manualContentShare = manualContentSizeMap.get(nodeId);
+  // Set by buildRects; a single-axis room is one the user is managing, so the
+  // automatic space machinery below stands down for it.
+  let singleAxis = false;
 
   function buildRects() {
     const shareItems: ShareInput[] = [
@@ -544,6 +587,12 @@ export function computeNodeLayout(
       }).filter((item) => item.demand > 0 || item.minShare > 0 || item.fixedShare !== undefined),
     ];
     const shares = resolveShares(shareItems);
+    // Once anything in a small enough room is hand-sized, the whole room
+    // switches to a single-axis split so a dragged edge follows the pointer
+    // instead of being re-packed.
+    singleAxis =
+      shareItems.length <= SINGLE_AXIS_MAX_ITEMS &&
+      shareItems.some((item) => item.fixedShare !== undefined);
     return computeRoomLayout(
       shareItems.map((item) => ({
         id: item.id,
@@ -553,13 +602,16 @@ export function computeNodeLayout(
       h,
       minAR,
       maxAR,
+      singleAxis,
     ).rects;
   }
 
   let rects = buildRects();
   let pass = 0;
 
-  while (roomNeedsShrink(rects, minAR, maxAR) && pass < MAX_SHRINK_PASSES) {
+  // The shrink fallback narrows a column further, which can never repair a
+  // single-axis room's aspect ratio — it would only churn.
+  while (!singleAxis && roomNeedsShrink(rects, minAR, maxAR) && pass < MAX_SHRINK_PASSES) {
     const targetChildId = roomPriority.find((childId) => {
       const childPolicy = getPolicy(childId);
       const child = paperMap.get(childId);
@@ -582,7 +634,10 @@ export function computeNodeLayout(
     pass += 1;
   }
 
-  const overflowChildCount = roomNeedsShrink(rects, minAR, maxAR) ? 1 : 0;
+  // Narrow columns in a hand-sized room are what the user asked for, so they
+  // do not count as overflow — otherwise the space manager would index the
+  // siblings away right after a resize.
+  const overflowChildCount = !singleAxis && roomNeedsShrink(rects, minAR, maxAR) ? 1 : 0;
   const contentRect = rects.find((r) => r.id === CONTENT_ID) ?? zeroContent;
   const childRects = new Map<PaperId, LayoutRect>(
     rects.filter((r) => r.id !== CONTENT_ID).map((r) => [r.id, r]),
@@ -593,5 +648,5 @@ export function computeNodeLayout(
     }
   }
 
-  return { contentRect, childRects, closedChildIds, overflowChildCount };
+  return { contentRect, childRects, closedChildIds, overflowChildCount, singleAxis };
 }

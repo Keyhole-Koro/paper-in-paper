@@ -19,6 +19,7 @@ const FALLBACK_LAYOUT: NodeRoomLayout = {
   childRects: new Map(),
   closedChildIds: [],
   overflowChildCount: 0,
+  singleAxis: false,
 };
 
 export interface PaperNodeRenderModel {

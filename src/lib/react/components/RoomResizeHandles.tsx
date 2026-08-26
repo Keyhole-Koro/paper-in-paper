@@ -42,8 +42,14 @@ interface DragSession {
   pointerId: number;
   originX: number;
   originY: number;
-  baseWidth: number;
-  baseHeight: number;
+  /**
+   * Geometry the drag is measured against. Null until the room has snapped
+   * into its single-axis split — see handlePointerDown.
+   */
+  base: { width: number; height: number } | null;
+  /** Rect size at pointer-down, used to notice when that snap has landed. */
+  downWidth: number;
+  downHeight: number;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -55,6 +61,8 @@ interface ResizeHandleProps {
   rect: LayoutRect;
   roomWidth: number;
   roomHeight: number;
+  /** Whether the room is already laid out as a single-axis split. */
+  singleAxis: boolean;
   isManual: boolean;
   tone: PaperTone;
   onShareChange: (share: number) => void;
@@ -73,6 +81,7 @@ function ResizeHandle({
   rect,
   roomWidth,
   roomHeight,
+  singleAxis,
   isManual,
   tone,
   onShareChange,
@@ -116,15 +125,25 @@ function ResizeHandle({
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
+    const roomArea = roomWidth * roomHeight;
     sessionRef.current = {
       pointerId: e.pointerId,
       originX: e.clientX,
       originY: e.clientY,
-      // The rect moves while dragging, so freeze the starting geometry.
-      baseWidth: rect.width,
-      baseHeight: rect.height,
+      // The rect moves while dragging, so freeze the starting geometry — but
+      // only once the room is in split mode. A packed room snaps into that
+      // split the moment it gets its first manual share, and measuring the
+      // drag against the packed geometry would send the edge the wrong way.
+      base: singleAxis ? { width: rect.width, height: rect.height } : null,
+      downWidth: rect.width,
+      downHeight: rect.height,
     };
     setIsActive(true);
+    if (!singleAxis && roomArea > 0) {
+      // Same size as now, so nothing visibly resizes — this only asks the room
+      // to switch to its split layout before the pointer starts moving.
+      onShareChange((rect.width * rect.height) / roomArea);
+    }
   }
 
   function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
@@ -133,14 +152,24 @@ function ResizeHandle({
     const roomArea = roomWidth * roomHeight;
     if (roomArea <= 0) return;
 
+    if (session.base === null) {
+      // Still waiting for the snap-to-split relayout. Once the rect moves,
+      // re-base the drag on the new geometry and start measuring from here.
+      if (rect.width === session.downWidth && rect.height === session.downHeight) return;
+      session.base = { width: rect.width, height: rect.height };
+      session.originX = e.clientX;
+      session.originY = e.clientY;
+      return;
+    }
+
     const width =
       axis === 'x'
-        ? clamp(session.baseWidth + grow * (e.clientX - session.originX), MIN_RESIZE_PX, roomWidth)
-        : session.baseWidth;
+        ? clamp(session.base.width + grow * (e.clientX - session.originX), MIN_RESIZE_PX, roomWidth)
+        : session.base.width;
     const height =
       axis === 'y'
-        ? clamp(session.baseHeight + grow * (e.clientY - session.originY), MIN_RESIZE_PX, roomHeight)
-        : session.baseHeight;
+        ? clamp(session.base.height + grow * (e.clientY - session.originY), MIN_RESIZE_PX, roomHeight)
+        : session.base.height;
 
     scheduleShare((width * height) / roomArea);
   }
@@ -219,6 +248,8 @@ interface RoomResizeHandlesProps {
   rect: LayoutRect;
   roomWidth: number;
   roomHeight: number;
+  /** Whether the room is already laid out as a single-axis split. */
+  singleAxis: boolean;
   tone: PaperTone;
 }
 
@@ -233,6 +264,7 @@ export function RoomResizeHandles({
   rect,
   roomWidth,
   roomHeight,
+  singleAxis,
   tone,
 }: RoomResizeHandlesProps) {
   const dispatch = usePaperDispatch();
@@ -271,7 +303,7 @@ export function RoomResizeHandles({
     interiorEdges.length > 0 ? interiorEdges : isManual ? (['right', 'bottom'] as ResizeEdge[]) : [];
   if (edges.length === 0) return null;
 
-  const shared = { rect, roomWidth, roomHeight, isManual, tone, onShareChange, onReset };
+  const shared = { rect, roomWidth, roomHeight, singleAxis, isManual, tone, onShareChange, onReset };
   return (
     <>
       {edges.map((edge) => (
