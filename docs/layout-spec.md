@@ -119,6 +119,11 @@ A room in split mode is treated as user-managed: the shrink fallback and the ove
 stand down for it, so narrow columns the user asked for are not treated as pressure to index the
 siblings away.
 
+While a grip is being dragged, iframes across the page stop taking pointer events. A paper's
+content can be an iframe, and an iframe hit-test swallows the pointer: without this the drag dies
+silently the moment it crosses one — pointer capture on the grip does not help, because the capture
+lives in the outer document and the hit-test never reaches it.
+
 A divider is shared by the two rects it separates, so it carries a grip on each side; each grip
 resizes the rect it belongs to. Grips otherwise only appear on edges that face a sibling — an edge
 flush against the room boundary has nothing to trade area with. The exception is a manually sized

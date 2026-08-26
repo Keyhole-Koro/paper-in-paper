@@ -56,6 +56,38 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * A paper's content can be an iframe, and an iframe hit-test swallows the
+ * pointer: the moment a drag crosses one, the top document stops receiving
+ * pointermove and the resize silently dies mid-gesture — setPointerCapture on
+ * the grip does not save it, because the capture lives in the outer document
+ * and the hit-test never gets there. So for the duration of a drag, iframes
+ * stop taking pointer events. The same rule carries the resize cursor and
+ * suppresses text selection across the whole page.
+ */
+const RESIZING_ATTR = 'data-pip-resizing';
+let resizeStyleEl: HTMLStyleElement | null = null;
+
+function beginGlobalResize(axis: 'x' | 'y') {
+  if (typeof document === 'undefined') return;
+  if (!resizeStyleEl) {
+    resizeStyleEl = document.createElement('style');
+    resizeStyleEl.textContent = [
+      `[${RESIZING_ATTR}] iframe { pointer-events: none !important; }`,
+      `[${RESIZING_ATTR}] { user-select: none !important; }`,
+      `[${RESIZING_ATTR}="x"] * { cursor: col-resize !important; }`,
+      `[${RESIZING_ATTR}="y"] * { cursor: row-resize !important; }`,
+    ].join('\n');
+    document.head.appendChild(resizeStyleEl);
+  }
+  document.documentElement.setAttribute(RESIZING_ATTR, axis);
+}
+
+function endGlobalResize() {
+  if (typeof document === 'undefined') return;
+  document.documentElement.removeAttribute(RESIZING_ATTR);
+}
+
 interface ResizeHandleProps {
   edge: ResizeEdge;
   rect: LayoutRect;
@@ -102,7 +134,12 @@ function ResizeHandle({
     pendingShareRef.current = null;
   }, []);
 
-  useEffect(() => cancelFrame, [cancelFrame]);
+  useEffect(() => () => {
+    cancelFrame();
+    // Unmounting mid-drag (the layout can replace this rect) must not leave
+    // the page stuck with iframes inert and a resize cursor.
+    if (sessionRef.current) endGlobalResize();
+  }, [cancelFrame]);
 
   // Pointermove fires far more often than the layout can usefully recompute,
   // so coalesce to one dispatch per frame.
@@ -125,6 +162,7 @@ function ResizeHandle({
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
+    beginGlobalResize(axis);
     const roomArea = roomWidth * roomHeight;
     sessionRef.current = {
       pointerId: e.pointerId,
@@ -179,6 +217,7 @@ function ResizeHandle({
     if (!session || session.pointerId !== e.pointerId) return;
     sessionRef.current = null;
     setIsActive(false);
+    endGlobalResize();
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
