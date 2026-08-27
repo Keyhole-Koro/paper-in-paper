@@ -8,6 +8,7 @@ import { PaperContentFrame } from './PaperContentFrame';
 import { PaperHeader } from './PaperHeader';
 import { PaperNode } from './PaperNode';
 import { RoomResizeHandles } from './RoomResizeHandles';
+import { CONTENT_ITEM_ID } from '../../core/roomSplit';
 
 interface PaperNodeFrameProps {
   nodeId: PaperId;
@@ -21,9 +22,6 @@ interface PaperNodeFrameProps {
   isFocused: boolean;
   isDragTarget: boolean;
   layoutPolicy: NodeLayoutPolicy;
-  /** Room dimensions in px — the coordinate space `layout`'s rects live in. */
-  roomWidth: number;
-  roomHeight: number;
   debugBadge?: string | null;
   roomRef: RefObject<HTMLDivElement | null>;
   insertBeforeRect?: { x: number; y: number; height: number } | null;
@@ -86,8 +84,6 @@ export function PaperNodeFrame({
   isFocused,
   isDragTarget,
   layoutPolicy,
-  roomWidth,
-  roomHeight,
   debugBadge,
   roomRef,
   insertBeforeRect,
@@ -181,12 +177,12 @@ export function PaperNodeFrame({
           </div>
           {layoutPolicy.hasContent && (
             <RoomResizeHandles
-              kind="content"
-              nodeId={nodeId}
+              roomId={nodeId}
+              itemId={CONTENT_ITEM_ID}
               rect={layout.contentRect}
-              roomWidth={roomWidth}
-              roomHeight={roomHeight}
-              singleAxis={layout.singleAxis}
+              split={layout.split}
+              dividers={layout.dividers.get(CONTENT_ITEM_ID)}
+              isManual={layout.isManualSplit}
               tone={tone}
             />
           )}
@@ -215,12 +211,12 @@ export function PaperNodeFrame({
             >
               <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={inheritedColor} overrideCss={overrideCss} />
               <RoomResizeHandles
-                kind="node"
-                nodeId={childId}
+                roomId={nodeId}
+                itemId={childId}
                 rect={rect}
-                roomWidth={roomWidth}
-                roomHeight={roomHeight}
-                singleAxis={layout.singleAxis}
+                split={layout.split}
+                dividers={layout.dividers.get(childId)}
+                isManual={layout.isManualSplit}
                 tone={tone}
               />
             </AnimatedRect>

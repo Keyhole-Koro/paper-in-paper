@@ -19,7 +19,9 @@ const FALLBACK_LAYOUT: NodeRoomLayout = {
   childRects: new Map(),
   closedChildIds: [],
   overflowChildCount: 0,
-  singleAxis: false,
+  split: null,
+  isManualSplit: false,
+  dividers: new Map(),
 };
 
 export interface PaperNodeRenderModel {
@@ -49,7 +51,6 @@ export function derivePaperNodeRenderModel({
   nodeVisibility,
   parentVisibility,
   effectiveAttention,
-  manualShare,
   debug,
 }: {
   nodeId: PaperId;
@@ -65,8 +66,6 @@ export function derivePaperNodeRenderModel({
   nodeVisibility: NodeVisibilityState;
   parentVisibility: NodeVisibilityState | null;
   effectiveAttention: number;
-  /** Manually pinned share of the parent room, if the user resized this node. */
-  manualShare?: number;
   debug: boolean;
 }): PaperNodeRenderModel {
   const layout = entry?.roomLayout ?? FALLBACK_LAYOUT;
@@ -104,7 +103,7 @@ export function derivePaperNodeRenderModel({
       })()
     : null;
   const debugBadge = debug
-    ? `${nodeId} • att ${Math.round(effectiveAttention)} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} • ${view.interactionMode} • ${nodeVisibility}/${layoutPolicy.mode}${paper.pinnedLayout?.minShare !== undefined ? ' • pinned' : ''}${manualShare !== undefined ? ` • sized ${Math.round(manualShare * 100)}%` : ''}`
+    ? `${nodeId} • att ${Math.round(effectiveAttention)} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} • ${view.interactionMode} • ${nodeVisibility}/${layoutPolicy.mode}${paper.pinnedLayout?.minShare !== undefined ? ' • pinned' : ''}${entry?.roomLayout.isManualSplit ? ' • split' : ''}`
     : null;
 
   return {

@@ -1,14 +1,21 @@
 import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import { getAttentionMultiplier, getEffectiveAttention } from './attention';
 import { getOpenChildIds, getOpenChildSet } from './expansion';
-import { EMPTY_MANUAL_SIZE_MAP, MAX_MANUAL_SHARE_TOTAL } from './manualSize';
 import { deriveNodeLayoutPolicy, type NodeLayoutPolicy } from './nodeLayoutPolicy';
+import {
+  CONTENT_ITEM_ID,
+  buildRoomSplit,
+  placeRoomSplit,
+  reconcileRoomSplit,
+  type RoomDividerMap,
+  type RoomSplit,
+  type RoomSplitMap,
+} from './roomSplit';
 import type {
   AccessMap,
   AttentionMap,
   AttentionTimestampMap,
   ExpansionMap,
-  ManualSizeMap,
   PaperId,
   PaperMap,
   PaperViewState,
@@ -37,11 +44,16 @@ export interface NodeRoomLayout {
   closedChildIds: PaperId[];
   overflowChildCount: number;
   /**
-   * True when this room is laid out as a single-axis split because the user
-   * hand-sized something in it. Resize grips read it to know whether the room
-   * is already in split mode or has yet to snap into it.
+   * The split this room was laid out from. When the room has no stored split
+   * this is the one the packer just produced — freezing it reproduces the
+   * current arrangement exactly, which is how a grip turns an automatic room
+   * into a hand-arranged one without anything moving.
    */
-  singleAxis: boolean;
+  split: RoomSplit | null;
+  /** True when `split` came from the store rather than from the packer. */
+  isManualSplit: boolean;
+  /** Per item, the divider each of its edges maps to. */
+  dividers: RoomDividerMap;
 }
 
 interface RoomDemandContext {
@@ -277,34 +289,26 @@ function packRows(
   return rows;
 }
 
-function placeRows(
-  rows: LayoutItem[][],
-  totalWeight: number,
-  w: number,
-  h: number,
-  useColumns: boolean,
-): LayoutRect[] {
-  const rects: LayoutRect[] = [];
-  let y = 0;
+/**
+ * Pack `items` and return the arrangement as a split. Every room is laid out
+ * from a split — the packer's job is now to propose one — so freezing a room
+ * for hand-editing reproduces exactly what was already on screen.
+ */
+export function packRoomSplit(
+  items: LayoutItem[],
+  containerWidth: number,
+  containerHeight: number,
+): RoomSplit | null {
+  if (items.length === 0 || containerWidth <= 0 || containerHeight <= 0) return null;
 
-  for (const row of rows) {
-    const rowWeight = row.reduce((s, i) => s + i.weight, 0);
-    const rowHeight = (rowWeight / totalWeight) * h;
+  const useColumns = containerWidth > containerHeight;
+  const w = useColumns ? containerHeight : containerWidth;
+  const h = useColumns ? containerWidth : containerHeight;
 
-    let x = 0;
-    for (const item of row) {
-      const width = (item.weight / rowWeight) * w;
-      const height = rowHeight;
-      rects.push({ id: item.id, x, y, width, height });
-      x += width;
-    }
-    y += rowHeight;
-  }
+  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+  if (totalWeight <= 0) return null;
 
-  if (useColumns) {
-    return rects.map((r) => ({ id: r.id, x: r.y, y: r.x, width: r.height, height: r.width }));
-  }
-  return rects;
+  return buildRoomSplit(packRows(items, totalWeight, w, h), useColumns);
 }
 
 export function computeRoomLayout(
@@ -313,36 +317,26 @@ export function computeRoomLayout(
   containerHeight: number,
   _minAR: number,
   _maxAR: number,
-  /**
-   * Put every item in its own row, laying the room out along its dominant
-   * axis: side by side in a wide room, stacked in a tall one. The packer's
-   * row breaks are what make a small weight change flip a rect from a wide
-   * block into a narrow column, so a room the user sizes by hand asks for
-   * this instead — there a dragged edge has to follow the pointer. The caller
-   * decides when to ask for it; see SINGLE_AXIS_MAX_ITEMS.
-   */
-  singleAxis = false,
 ): RoomLayoutResult {
-  if (items.length === 0 || containerWidth <= 0 || containerHeight <= 0) {
-    return { rects: [] };
-  }
-
-  const useColumns = containerWidth > containerHeight;
-  const w = useColumns ? containerHeight : containerWidth;
-  const h = useColumns ? containerWidth : containerHeight;
-
-  const totalWeight = items.reduce((s, i) => s + i.weight, 0);
-  if (totalWeight <= 0) {
-    return { rects: [] };
-  }
-
-  const rows = singleAxis ? items.map((item) => [item]) : packRows(items, totalWeight, w, h);
-  return { rects: placeRows(rows, totalWeight, w, h, useColumns) };
+  const split = packRoomSplit(items, containerWidth, containerHeight);
+  if (!split) return { rects: [] };
+  return { rects: placeRoomSplit(split, containerWidth, containerHeight).rects };
 }
+
+const EMPTY_ROOM_SPLIT_MAP: RoomSplitMap = new Map();
+const EMPTY_ROOM_LAYOUT: NodeRoomLayout = {
+  contentRect: { id: CONTENT_ITEM_ID, x: 0, y: 0, width: 0, height: 0 },
+  childRects: new Map(),
+  closedChildIds: [],
+  overflowChildCount: 0,
+  split: null,
+  isManualSplit: false,
+  dividers: new Map(),
+};
 
 const DEFAULT_MIN_AR = 0.25;
 const DEFAULT_MAX_AR = 2.0;
-const CONTENT_ID = '__content__';
+const CONTENT_ID = CONTENT_ITEM_ID;
 const SHRINK_STEP = 0.84;
 const MAX_SHRINK_PASSES = 6;
 const ROOM_MIN_WEIGHT = 1;
@@ -361,12 +355,6 @@ interface ShareInput {
   id: string;
   demand: number;
   minShare: number;
-  /**
-   * Share the user fixed by dragging a resize handle. When set, demand and
-   * minShare are ignored for this item and the remaining area is split among
-   * the demand-driven items.
-   */
-  fixedShare?: number;
 }
 
 function getAutoOpenChildMinShare(openChildCount: number): number {
@@ -375,61 +363,6 @@ function getAutoOpenChildMinShare(openChildCount: number): number {
     AUTO_OPEN_CHILD_MIN_SHARE,
     AUTO_OPEN_CHILD_MIN_SHARE_BUDGET / openChildCount,
   );
-}
-
-/**
- * Splits `available` (0〜1) across demand-driven items, honouring each item's
- * minShare. The result is expressed relative to the whole room, so a minShare
- * is a minimum *of what is left over* once manual sizes are taken out.
- */
-function distributeFlexShares(items: ShareInput[], available: number): Map<string, number> {
-  const relative = normalizeShares(items);
-  if (available >= 1) return relative;
-  const scaled = new Map<string, number>();
-  for (const [id, share] of relative) {
-    scaled.set(id, share * Math.max(0, available));
-  }
-  return scaled;
-}
-
-/**
- * Assigns every item its slice of the room. Items carrying a `fixedShare`
- * (manually resized by the user) are honoured first — direct user action wins
- * over the attention-derived demand — and the remainder goes to the rest.
- */
-function resolveShares(items: ShareInput[]): Map<string, number> {
-  if (items.length === 0) return new Map();
-
-  const fixedItems = items.filter((item) => item.fixedShare !== undefined);
-  if (fixedItems.length === 0) return normalizeShares(items);
-
-  const flexItems = items.filter((item) => item.fixedShare === undefined);
-  const clampedFixed = fixedItems.map((item) => ({
-    id: item.id,
-    share: Math.min(1, Math.max(0, item.fixedShare ?? 0)),
-  }));
-  // Resizes are capped as they are accepted (getAvailableManualShare), so the
-  // fixed shares normally fit as-is and pass through untouched — that is what
-  // keeps a hand-set size from drifting when a sibling is resized. This only
-  // bites when a room has nothing but manual shares and they do not fill it,
-  // or when several siblings sit at the per-item floor: the room has to be
-  // tiled completely, so there is no choice but to scale.
-  const fixedTotal = clampedFixed.reduce((sum, item) => sum + item.share, 0);
-  const budget = flexItems.length === 0 ? 1 : MAX_MANUAL_SHARE_TOTAL;
-  const scale = fixedTotal > budget && fixedTotal > 0 ? budget / fixedTotal : 1;
-
-  const result = new Map<string, number>();
-  let assigned = 0;
-  for (const item of clampedFixed) {
-    const value = item.share * scale;
-    result.set(item.id, value);
-    assigned += value;
-  }
-
-  for (const [id, share] of distributeFlexShares(flexItems, 1 - assigned)) {
-    result.set(id, share);
-  }
-  return result;
 }
 
 function normalizeShares(items: ShareInput[]): Map<string, number> {
@@ -492,8 +425,7 @@ export function computeNodeLayout(
   maxAR = DEFAULT_MAX_AR,
   nowMs: number,
   demandSnapshot?: DemandSnapshot,
-  manualSizeMap: ManualSizeMap = EMPTY_MANUAL_SIZE_MAP,
-  manualContentSizeMap: ManualSizeMap = EMPTY_MANUAL_SIZE_MAP,
+  roomSplitMap: RoomSplitMap = EMPTY_ROOM_SPLIT_MAP,
 ): NodeRoomLayout {
   const w = Math.max(0, containerWidth);
   const h = Math.max(0, containerHeight);
@@ -502,7 +434,7 @@ export function computeNodeLayout(
 
   const parent = paperMap.get(nodeId);
   if (!parent) {
-    return { contentRect: zeroContent, childRects: new Map(), closedChildIds: [], overflowChildCount: 0, singleAxis: false };
+    return { ...EMPTY_ROOM_LAYOUT, contentRect: zeroContent };
   }
 
   const openChildIds = getOpenChildIds(expansionMap, nodeId);
@@ -512,11 +444,9 @@ export function computeNodeLayout(
 
   if (w === 0 || h === 0 || openChildIds.length === 0) {
     return {
+      ...EMPTY_ROOM_LAYOUT,
       contentRect: nodePolicy.hasContent ? fullContent : zeroContent,
-      childRects: new Map(),
       closedChildIds,
-      overflowChildCount: 0,
-      singleAxis: false,
     };
   }
 
@@ -557,16 +487,9 @@ export function computeNodeLayout(
   });
   const autoOpenChildMinShare = getAutoOpenChildMinShare(openChildIds.length);
 
-  const manualContentShare = manualContentSizeMap.get(nodeId);
-  // Set by buildRects; a single-axis room is one the user is managing, so the
-  // automatic space machinery below stands down for it.
-  let singleAxis = false;
-
-  function buildRects() {
-    const shareItems: ShareInput[] = [
-      ...(contentDemand > 0
-        ? [{ id: CONTENT_ID, demand: Math.max(0, contentDemand), minShare: 0, fixedShare: manualContentShare }]
-        : []),
+  function buildShareItems(): ShareInput[] {
+    return [
+      ...(contentDemand > 0 ? [{ id: CONTENT_ID, demand: Math.max(0, contentDemand), minShare: 0 }] : []),
       ...openChildIds.map((id) => {
         const child = paperMap.get(id);
         const isIndexedLeafChild = indexedLeafChildIds.has(id);
@@ -579,65 +502,66 @@ export function computeNodeLayout(
                 autoOpenChildMinShare,
                 Math.max(0, child?.pinnedLayout?.minShare ?? 0),
               ),
-          // An indexed leaf reserves no room at all, so a stale manual size
-          // must not resurrect it as a zero-content slice.
-          fixedShare: isIndexedLeafChild ? undefined : manualSizeMap.get(id),
         };
-      }).filter((item) => item.demand > 0 || item.minShare > 0 || item.fixedShare !== undefined),
+      }).filter((item) => item.demand > 0 || item.minShare > 0),
     ];
-    const shares = resolveShares(shareItems);
-    // Once anything in this room is hand-sized the whole room switches to a
-    // single-axis split, and stays there for as long as any manual share
-    // survives. Switching back would re-pack the hand-sized rect into a
-    // different shape — the packer decides shape from row breaks — so a room
-    // that gained a fifth child would silently resize what the user had set.
-    // Holding the split keeps a hand-set size fixed until it is reset.
-    singleAxis = shareItems.some((item) => item.fixedShare !== undefined);
-    return computeRoomLayout(
-      shareItems.map((item) => ({
-        id: item.id,
-        weight: Math.max(shares.get(item.id) ?? 0, 0),
-      })),
+  }
+
+  function packSplit(): RoomSplit | null {
+    const shareItems = buildShareItems();
+    const shares = normalizeShares(shareItems);
+    return packRoomSplit(
+      shareItems.map((item) => ({ id: item.id, weight: Math.max(shares.get(item.id) ?? 0, 0) })),
       w,
       h,
-      minAR,
-      maxAR,
-      singleAxis,
-    ).rects;
+    );
   }
 
-  let rects = buildRects();
-  let pass = 0;
+  // A room the user has arranged by hand lays out from its stored split, lined
+  // up with whatever it holds right now. Everything else is packed, and the
+  // packer's proposal is carried out on the layout so a grip can freeze it.
+  const storedSplit = roomSplitMap.get(nodeId);
+  const manualSplit = storedSplit
+    ? reconcileRoomSplit(storedSplit, buildShareItems().map((item) => item.id))
+    : null;
 
-  // The shrink fallback narrows a column further, which can never repair a
-  // single-axis room's aspect ratio — it would only churn.
-  while (!singleAxis && roomNeedsShrink(rects, minAR, maxAR) && pass < MAX_SHRINK_PASSES) {
-    const targetChildId = roomPriority.find((childId) => {
-      const childPolicy = getPolicy(childId);
-      const child = paperMap.get(childId);
-      const current = childDemands.get(childId) ?? ROOM_MIN_WEIGHT;
-      return (
-        childPolicy.reservesRoom &&
-        child?.pinnedLayout?.minShare === undefined &&
-        // A manually sized child holds a fixed share; shrinking its demand
-        // would do nothing anyway, and the user asked for that size.
-        manualSizeMap.get(childId) === undefined &&
-        current > ROOM_MIN_WEIGHT
-      );
-    });
-    if (!targetChildId) break;
-    const current = childDemands.get(targetChildId) ?? ROOM_MIN_WEIGHT;
-    const next = Math.max(ROOM_MIN_WEIGHT, current * SHRINK_STEP);
-    if (next >= current) break;
-    childDemands.set(targetChildId, next);
-    rects = buildRects();
-    pass += 1;
+  let split: RoomSplit | null;
+  let rects: LayoutRect[];
+  let dividers: RoomDividerMap;
+
+  if (manualSplit) {
+    split = manualSplit;
+    ({ rects, dividers } = placeRoomSplit(manualSplit, w, h));
+  } else {
+    split = packSplit();
+    ({ rects, dividers } = split ? placeRoomSplit(split, w, h) : { rects: [], dividers: new Map() });
+
+    let pass = 0;
+    while (roomNeedsShrink(rects, minAR, maxAR) && pass < MAX_SHRINK_PASSES) {
+      const targetChildId = roomPriority.find((childId) => {
+        const childPolicy = getPolicy(childId);
+        const child = paperMap.get(childId);
+        const current = childDemands.get(childId) ?? ROOM_MIN_WEIGHT;
+        return (
+          childPolicy.reservesRoom &&
+          child?.pinnedLayout?.minShare === undefined &&
+          current > ROOM_MIN_WEIGHT
+        );
+      });
+      if (!targetChildId) break;
+      const current = childDemands.get(targetChildId) ?? ROOM_MIN_WEIGHT;
+      const next = Math.max(ROOM_MIN_WEIGHT, current * SHRINK_STEP);
+      if (next >= current) break;
+      childDemands.set(targetChildId, next);
+      split = packSplit();
+      ({ rects, dividers } = split ? placeRoomSplit(split, w, h) : { rects: [], dividers: new Map() });
+      pass += 1;
+    }
   }
 
-  // Narrow columns in a hand-sized room are what the user asked for, so they
-  // do not count as overflow — otherwise the space manager would index the
-  // siblings away right after a resize.
-  const overflowChildCount = !singleAxis && roomNeedsShrink(rects, minAR, maxAR) ? 1 : 0;
+  // A hand-arranged room is the user's to manage: narrow panes there are what
+  // they dragged, not pressure to index the siblings away.
+  const overflowChildCount = !manualSplit && roomNeedsShrink(rects, minAR, maxAR) ? 1 : 0;
   const contentRect = rects.find((r) => r.id === CONTENT_ID) ?? zeroContent;
   const childRects = new Map<PaperId, LayoutRect>(
     rects.filter((r) => r.id !== CONTENT_ID).map((r) => [r.id, r]),
@@ -648,5 +572,13 @@ export function computeNodeLayout(
     }
   }
 
-  return { contentRect, childRects, closedChildIds, overflowChildCount, singleAxis };
+  return {
+    contentRect,
+    childRects,
+    closedChildIds,
+    overflowChildCount,
+    split,
+    isManualSplit: manualSplit !== null,
+    dividers,
+  };
 }

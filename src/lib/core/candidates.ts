@@ -9,6 +9,10 @@ export function selectLowImportanceCandidates(
   nowMs: number,
   config: PaperCanvasConfig,
 ): PaperId[] {
+  // A room the user arranged by hand is theirs to manage: its panes are the
+  // sizes they dragged, so none of them is an index/close candidate.
+  if (state.roomSplitMap.has(parentId)) return [];
+
   const openChildIds = getOpenChildIds(state.expansionMap, parentId);
   if (openChildIds.length === 0) return [];
 
@@ -22,16 +26,7 @@ export function selectLowImportanceCandidates(
       // producing visible jitter as the same node toggles between
       // indexed and closed.
       const isIndexed = state.indexedContentIds.has(id);
-      // A manually resized node holds a share the user chose explicitly.
-      // Direct user action outranks automatic space management, so it is
-      // never picked as an index/close candidate.
-      const isManuallySized = state.manualSizeMap.get(id) !== undefined;
-      return (
-        !isIndexed &&
-        !isManuallySized &&
-        protectedUntil < nowMs &&
-        paper?.pinnedLayout?.minShare === undefined
-      );
+      return !isIndexed && protectedUntil < nowMs && paper?.pinnedLayout?.minShare === undefined;
     })
     .sort((a, b) => {
       const ia = getEffectiveAttention(state, a, config, nowMs);

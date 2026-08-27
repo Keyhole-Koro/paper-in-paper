@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { RoomSplitMap } from './roomSplit';
 
 export type PaperId = string;
 
@@ -104,11 +105,7 @@ export type PlacementMap = Map<PaperId, ManualPlacement>;
 export type AccessMap = Map<PaperId, number>;
 export type ImportanceMap = Map<PaperId, number>;
 
-/**
- * ユーザーがリサイズハンドルで固定した share（0〜1）。
- * 面積比としてレイアウトへ渡され、attention 由来の demand より優先される。
- */
-export type ManualSizeMap = Map<PaperId, number>;
+export type { RoomSplit, RoomSplitMap } from './roomSplit';
 
 export interface PaperViewState {
   paperMap: PaperMap;
@@ -120,10 +117,11 @@ export interface PaperViewState {
   attentionMap: AttentionMap;
   attentionTimestampMap: AttentionTimestampMap;
   manualPlacementMap: PlacementMap;
-  /** 手動リサイズされたノードの、親 room に対する固定 share。 */
-  manualSizeMap: ManualSizeMap;
-  /** 手動リサイズされた content 領域の、そのノード自身の room に対する固定 share。 */
-  manualContentSizeMap: ManualSizeMap;
+  /**
+   * ユーザーが仕切りをドラッグして手で組んだ room の分割構造。
+   * ここに載っている room は packer ではなくこの split からレイアウトされる。
+   */
+  roomSplitMap: RoomSplitMap;
   contentHeightMap: Map<PaperId, number>;
   protectedUntilMap: Map<PaperId, number>;
 }

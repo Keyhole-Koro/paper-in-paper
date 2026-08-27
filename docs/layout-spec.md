@@ -80,76 +80,47 @@ When room space becomes constrained, as determined by the layout engine:
 
 ## Manual Resize
 
-A user can resize a paper directly by dragging the grip on one of its edges. Manual size is
-authoritative: it bypasses the attention -> demand -> share pipeline entirely.
+A room is laid out from a **split**: a stack of rows, each holding a run of panes. That is exactly
+the shape the squarified packer already produces, so every room has one — the packer proposes it
+while the room is automatic, and the user takes it over by dragging.
 
-- A resized node holds a fixed `share` of its parent room, stored in `manualSizeMap`
-- A node's content area can be sized the same way against its own children, stored in `manualContentSizeMap`
-- The remaining area is redistributed to the demand-driven items in that room
-- Manual shares are clamped to `[MIN_MANUAL_SHARE, MAX_MANUAL_SHARE]`, and their sum inside one
-  room is capped at `MAX_MANUAL_SHARE_TOTAL` so demand-driven siblings always keep a usable slice.
-  The cap is applied to the incoming resize as it is accepted, never by rescaling the shares
-  already set — see **A hand-set size holds until it is reset** below.
-- The shrink fallback never targets a manually sized node, and stands down entirely in a split room
-- A manually sized node is never selected as a Content Indexing / Auto Close candidate
-- Double-clicking the grip clears the manual size and returns the node to automatic sizing
-- The share is dropped when the node changes parents, since it described one specific room
+- Each pane edge that falls on a divider grows a grip; dragging it moves that divider
+- The first drag stores the room's split in `roomSplitMap` verbatim, so nothing moves except the
+  divider being dragged — the arrangement on screen is already the split being frozen
+- From then on that room lays out from its split rather than from attention-derived demand
+- A drag moves only the two panes the divider separates. A divider between rows moves whole rows;
+  a divider inside a row moves just those two panes
+- The two panes touching a divider both carry a grip for it, so it can be grabbed from either side
+- Double-clicking any grip clears the room's split and hands it back to the packer
 
-### A hand-sized room becomes a split
+### A hand-arranged room holds until it is reset
 
-The squarified packer decides positions from *area*, and its row breaks make a small share change
-flip a rect from a wide block into a narrow column. That is fine for automatic layout and useless
-for direct manipulation, so a room the user has sized by hand switches to a **single-axis split**:
-one item per row, laid out along the room's dominant axis — side by side in a wide room, stacked
-in a tall one. In that mode a dragged edge lands exactly under the pointer.
+Nothing in the automatic machinery may change a room the user has arranged. It survives attention
+decay, siblings being focused, opened, closed or auto-indexed, and other dividers being dragged.
+Only `RESET_ROOM_SPLIT` gives it back to the layout engine.
 
-A room is in split mode exactly while it holds a manual share, whatever it holds and however many
-items it holds. Nothing else feeds the decision, so the mode cannot change under the user's
-pointer — and a room that later gains a child stays split rather than re-packing the hand-sized
-rect into a different shape. The cost is that a room with many open children and a manual share
-becomes a narrow strip; double-clicking a grip hands it back to the packer.
+A split room is treated as user-managed: the shrink fallback and the overflow signal stand down for
+it, and none of its children is an auto-index or auto-close candidate — narrow panes there are what
+the user dragged, not pressure to collapse something.
 
-Entering split mode does move things once: a rect that was a wide block becomes a column of the
-same area. That snap happens on pointer-down, before the pointer moves, so the drag itself still
-tracks the pointer exactly.
+### Reconciling with a changing tree
 
-A room in split mode is treated as user-managed: the shrink fallback and the overflow signal both
-stand down for it, so narrow columns the user asked for are not treated as pressure to index the
-siblings away.
+The stored split is lined up with the room's current items on every layout pass:
 
-### A hand-set size holds until it is reset
+- Items that went away — a child closed, indexed to a label, moved to another paper, or deleted —
+  are dropped, and their space goes to the rest of their row in proportion
+- Items that appeared are appended as a new row sized like an equal share of the room, which leaves
+  the panes the user already arranged recognisable
+- A split with nothing left in it is dropped, and the room goes back to the packer
 
-Once a rect has a manual share, nothing in the automatic machinery may change its size. Concretely
-it survives attention decay, a sibling being focused, opened, closed or auto-indexed, a sibling
-being resized by hand, and the room gaining or losing children. Only `RESET_NODE_SIZE` /
-`RESET_CONTENT_SIZE` — the grip's double-click — give it back to the layout engine.
+### Panes never collapse
 
-Two mechanisms uphold this:
-
-- A resize takes its space from the demand-driven pool, and when that runs out the *incoming*
-  resize is capped (`getAvailableManualShare`). Manual shares already set are never rescaled to
-  make room for a new one.
-- Split mode is held for as long as any manual share survives, so the rect is never re-packed into
-  a new shape.
-
-The one case that still moves a hand-set size is a room whose items are *all* manual and do not
-add up to the whole room: the room has to be tiled completely, so the leftover is spread across
-them in proportion. Reaching it takes manually sizing every open child of a room whose own content
-is manual or indexed.
-
-While a grip is being dragged, iframes across the page stop taking pointer events. A paper's
-content can be an iframe, and an iframe hit-test swallows the pointer: without this the drag dies
-silently the moment it crosses one — pointer capture on the grip does not help, because the capture
-lives in the outer document and the hit-test never reaches it.
-
-A divider is shared by the two rects it separates, so it carries a grip on each side; each grip
-resizes the rect it belongs to. Grips otherwise only appear on edges that face a sibling — an edge
-flush against the room boundary has nothing to trade area with. The exception is a manually sized
-rect: it keeps a grip even when it is flush all round, because sizing it up far enough can push
-its siblings into Content Indexing and leave it with no edge to drag back.
+A drag is clamped so both panes keep at least `MIN_PANE_RATIO` of the pair, which keeps every
+divider grabbable and every pane recoverable without a reset.
 
 ## User Action Priority
 
 - If the user manually opens a node, exclude it from automatic collapse for a fixed period
 - If the user manually places a node, automatic layout must not overwrite that position
-- If the user manually resizes a node, automatic space management must not resize or collapse it
+- If the user arranges a room by hand, automatic space management must not resize or collapse
+  anything in it

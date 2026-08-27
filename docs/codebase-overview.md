@@ -14,7 +14,7 @@ src/lib/
     expansionRules.ts        高レベル展開ルール（collapse/break chain）
     commands.ts              Command 型 + reduce + createInitialState
     nodeLayoutPolicy.ts      indexed / branch / leaf の表示ポリシー導出
-    manualSize.ts            手動リサイズ share のクランプ / 更新ヘルパー
+    roomSplit.ts             room の分割構造（行 × ペイン）と仕切り操作
     layout.ts                demand snapshot + roomLayout アルゴリズム
     autoClose.ts             auto-close 候補選出
   react/
@@ -48,7 +48,7 @@ src/lib/
       PaperContentNodes      ContentNode[] 専用レンダラー
       PaperCanvasDebugPanel  debug overlay
       FloatingLayer          ドラッグゴースト
-      RoomResizeHandles      room 内 rect の辺に出るリサイズグリップ
+      RoomResizeHandles      ペインの辺に出る仕切りグリップ
 ```
 
 ---
@@ -70,8 +70,7 @@ src/lib/
 | `contentHeightMap` | `Map<PaperId, number>` | コンテンツ高さ（iframe resize 追跡用）|
 | `unplacedNodeIds` | `PaperId[]` | 未配置ノードのリスト |
 | `manualPlacementMap` | `Map<PaperId, ManualPlacement>` | 手動配置情報 |
-| `manualSizeMap` | `Map<PaperId, number>` | 手動リサイズされたノードの、親 room に対する固定 share |
-| `manualContentSizeMap` | `Map<PaperId, number>` | 手動リサイズされた content の、自身の room に対する固定 share |
+| `roomSplitMap` | `Map<PaperId, RoomSplit>` | ユーザーが手で組んだ room の分割構造 |
 
 ### attention の動き
 
@@ -134,33 +133,25 @@ roomDemand(node) = contentDemand(node) + Σ roomDemand(open children)
 1.  **INDEX_CONTENT**: 重要度の低いノードの本文を畳み、スペースを空ける。
 2.  **AUTO_CLOSE_NODE**: 本文を畳んでもなお不足する場合、ノードを完全に閉じ（通常のカード化）、親の展開リストから外す。
 
-### 手動リサイズ（`manualSize.ts` / `RoomResizeHandles`）
+### 手動リサイズ（`roomSplit.ts` / `RoomResizeHandles`）
 
-room 内の rect の辺をドラッグすると、その rect の面積比が `manualSizeMap` /
-`manualContentSizeMap` に固定 share として記録される。固定 share は demand より優先され、
-残りの面積が demand 駆動のアイテムへ再配分される。
+room は必ず **split**（行の並び × 各行のペイン）からレイアウトされる。これは squarified packer が
+そもそも出力している形なので、packer の提案をそのまま凍結でき、手動化の瞬間に何も動かない。
 
-- クランプ: 単体 `0.05〜0.9`、1つの room 内の合計 `0.92`（競合相手がいなければ 1.0）
-- shrink フォールバックと auto-index / auto-close の対象から外れる
-- グリップのダブルクリックで解除し、自動サイズへ戻る
-- 親が変わると破棄される（share は特定の room に対する値のため）
+- 仕切りに接するペインの辺にグリップが出る。ドラッグするとその仕切りが動く
+- 最初のドラッグで packer の split がそのまま `roomSplitMap` に保存され、以後その room は
+  demand ではなく split からレイアウトされる
+- 動くのは仕切りが隔てる2ペインだけ。行の仕切りなら行ごと、行内の仕切りならその2つだけ
+- 1本の仕切りは両側のペインからグリップが出るので、どちら側からでも掴める
+- どれかのグリップをダブルクリックすると split が消え、packer に戻る
 
-squarified packer は行の折り返しで rect の形を大きく組み替えるため、手動 share を持つ room は
-**single-axis split**（1アイテム1行 = 長辺方向に並べる）へ切り替わる。この状態ではドラッグした辺が
-ポインタの位置にそのまま来る。
+**手で組んだ配置はリセットまで動かない。** attention 減衰・兄弟のフォーカス/開閉/auto-index・
+他の仕切りのドラッグ、いずれでも変わらない。split 中の room は「ユーザー管理下」とみなし、
+shrink フォールバックと overflow 判定を止め、子を auto-index / auto-close の候補から外す。
 
-- 切り替え条件は「その room に手動 share があるか」だけ。手動 share が1つでも残っている限り split を維持する
-  （packer に戻すと手動サイズの rect の形が変わってしまうため）
-- 最初に split へ入る瞬間だけ、同じ面積のまま形が変わる（pointerdown 時点で発生するので
-  ドラッグ自体はズレない）
-- split 中の room は「ユーザー管理下」とみなし、shrink フォールバックと overflow 判定を止める
-
-**手動サイズはリセットまで動かない。** attention 減衰・兄弟のフォーカス/開閉/auto-index・兄弟の手動リサイズ・
-子の増減、いずれでも変わらない。解除は `RESET_NODE_SIZE` / `RESET_CONTENT_SIZE`（グリップのダブルクリック）だけ。
-新しいリサイズは demand 側の取り分から取り、足りなくなったら**新しい方**が
-`getAvailableManualShare` で頭打ちになる（既存の手動 share は再スケールしない）。
-唯一の例外は room のアイテムが全部手動で合計が1に満たない場合で、room は隙間なく敷き詰める必要があるため
-比率を保ったまま拡大される。
+**再照合**: 保存された split は毎回その room の現在のアイテムと突き合わせられる。消えたアイテムは
+取り除いて余りを同じ行の残りへ比例配分し、増えたアイテムは新しい行として末尾に追加する
+（既に組んだペインの見た目を保つため）。空になった split は捨てて packer に戻る。
 
 ### shrink フォールバック（`layout.ts`）
 

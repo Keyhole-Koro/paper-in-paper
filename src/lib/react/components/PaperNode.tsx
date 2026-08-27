@@ -19,7 +19,6 @@ function shallowEqualNodeSelection(
     parentVisibility: NodeVisibilityState | null;
     isFocused: boolean;
     effectiveAttention: number;
-    manualShare: number | undefined;
   },
   b: {
     config: any;
@@ -28,7 +27,6 @@ function shallowEqualNodeSelection(
     parentVisibility: NodeVisibilityState | null;
     isFocused: boolean;
     effectiveAttention: number;
-    manualShare: number | undefined;
   },
 ) {
   return (
@@ -37,8 +35,7 @@ function shallowEqualNodeSelection(
     a.nodeVisibility === b.nodeVisibility &&
     a.parentVisibility === b.parentVisibility &&
     a.isFocused === b.isFocused &&
-    a.effectiveAttention === b.effectiveAttention &&
-    a.manualShare === b.manualShare
+    a.effectiveAttention === b.effectiveAttention
   );
 }
 
@@ -56,7 +53,7 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
 
   const entry = useLayoutEntry(nodeId);
   const parentEntry = useLayoutEntry(parentId);
-  const { config, paper, nodeVisibility, parentVisibility, isFocused, effectiveAttention, manualShare } = usePaperStoreSelector(
+  const { config, paper, nodeVisibility, parentVisibility, isFocused, effectiveAttention } = usePaperStoreSelector(
     ({ state, config }) => {
       const paper = state.paperMap.get(nodeId);
       const isFocused = state.focusedNodeId === nodeId;
@@ -70,7 +67,6 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
         parentVisibility,
         isFocused,
         effectiveAttention,
-        manualShare: state.manualSizeMap.get(nodeId),
       };
     },
     shallowEqualNodeSelection,
@@ -97,7 +93,6 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
     nodeVisibility,
     parentVisibility,
     effectiveAttention,
-    manualShare,
     debug,
   });
 
@@ -114,8 +109,6 @@ export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss
       isFocused={renderModel.isFocusedView}
       isDragTarget={renderModel.isDragTargetView}
       layoutPolicy={renderModel.view.layoutPolicy}
-      roomWidth={renderModel.view.roomWidth}
-      roomHeight={renderModel.view.roomHeight}
       debugBadge={renderModel.debugBadge}
       roomRef={roomRef}
       insertBeforeRect={renderModel.insertBeforeRect}

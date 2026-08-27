@@ -192,42 +192,31 @@ dispatch({
 });
 ```
 
-### `RESIZE_NODE`
+### `RESIZE_SPLIT`
 
-ノードが親 room の中で占める share（面積比 0〜1）を手動で固定します。リサイズハンドルのドラッグから内部で呼ばれます。
+room の仕切りを1本動かします。リサイズグリップのドラッグから内部で呼ばれます。
 
 ```ts
-dispatch({ type: 'RESIZE_NODE', nodeId: 'abc', share: 0.4 });
+dispatch({
+  type: 'RESIZE_SPLIT',
+  roomId: 'root',
+  split,                              // レイアウトが今使っている split
+  target: { kind: 'item', row: 0, index: 0 },
+  ratio: 0.6,                         // 仕切り手前のペインが持つ割合
+});
 ```
 
-- share は `MIN_MANUAL_SHARE`(0.05) 〜 `MAX_MANUAL_SHARE`(0.9) にクランプされる
-- attention 由来の demand より優先される
-- ルートは兄弟を持たないため無視される
-- 対象ノードは `protectDurationMs` の間 auto-index / auto-close から保護される
-- 親が変わる（`MOVE_NODE` / `ATTACH_UNPLACED_NODE`）と破棄される
+- `split` はドラッグ開始時にレイアウトから読んだもの。packer 由来ならこの1回で room が手動化する
+- 動くのは仕切りが隔てる2ペインだけ。それ以外のペインの重みは変わらない
+- `ratio` は `MIN_PANE_RATIO` 〜 `1 - MIN_PANE_RATIO` にクランプされる
+- この room は以後「ユーザー管理下」となり、shrink / overflow / auto-index の対象から外れる
 
-### `RESET_NODE_SIZE`
+### `RESET_ROOM_SPLIT`
 
-`RESIZE_NODE` で固定した share を解除し、attention 由来の自動サイズへ戻します。
-
-```ts
-dispatch({ type: 'RESET_NODE_SIZE', nodeId: 'abc' });
-```
-
-### `RESIZE_CONTENT`
-
-そのノードの content 領域が、自身の room の中で占める share を手動で固定します。子ノードとの取り分を直接調整したいときに使います。
+room の分割構造を捨て、自動レイアウト（packer）に戻します。グリップのダブルクリックで呼ばれます。
 
 ```ts
-dispatch({ type: 'RESIZE_CONTENT', nodeId: 'abc', share: 0.6 });
-```
-
-### `RESET_CONTENT_SIZE`
-
-`RESIZE_CONTENT` で固定した share を解除します。
-
-```ts
-dispatch({ type: 'RESET_CONTENT_SIZE', nodeId: 'abc' });
+dispatch({ type: 'RESET_ROOM_SPLIT', roomId: 'root' });
 ```
 
 ### `REPORT_CONTENT_HEIGHT`
