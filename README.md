@@ -163,6 +163,8 @@ drive it via the ref or compose your own store.
 | `MOVE_NODE { nodeId, targetParentId, insertBeforeId }`   | reparent / reorder across parents             |
 | `INDEX_CONTENT` / `UNINDEX_CONTENT { nodeId }`           | collapse a node's body into a side label      |
 | `PIN_NODE` / `UNPIN_NODE { nodeId, minShare? }`          | guarantee a node a minimum layout share       |
+| `RESIZE_SPLIT { roomId, split, target, ratio }`          | move one divider in a room                    |
+| `RESET_ROOM_SPLIT { roomId }`                            | hand a room back to the automatic layout      |
 
 See [`docs/commands.md`](./docs/commands.md) for the complete list and semantics.
 
@@ -223,6 +225,21 @@ open children, proportional to layout *demand* (intrinsic content height ×
 attention multiplier). Children recurse the same way. Custom `layout` functions,
 `childMinShares`, and pinning override the defaults.
 
+### Resizing by hand
+
+Every room is laid out from a **split** — a stack of rows, each holding a run of
+panes — which is exactly the shape the packer already produces. Pane edges that
+fall on a divider grow a grip; dragging one moves that divider, and the first
+drag takes the room over from the packer with nothing moving but the divider
+itself. A divider between rows moves whole rows, one inside a row moves just
+those two panes, and either of the two panes it separates can be used to grab
+it. Double-clicking any grip hands the room back to the automatic layout.
+
+An arrangement you set by hand holds until you reset it. It does not drift as
+attention decays, as siblings are focused, opened, closed or auto-indexed, or as
+you go on adjusting other dividers — and while a room is hand-arranged, the
+space manager leaves everything in it alone.
+
 For the full layout algorithm, demand model, and indexed-node rules, see
 [`docs/layout-spec.md`](./docs/layout-spec.md).
 
@@ -254,6 +271,10 @@ PaperLayoutFn, PaperLayoutContext, PaperLayoutResult
 
 // Store
 createInitialState, reduce, Command, DefaultOpenState
+
+// Room splits (hand-arranged layouts)
+RoomSplit, RoomSplitRow, RoomSplitItem, RoomSplitMap, RoomDivider, DividerTarget, SplitAxis
+MIN_PANE_RATIO, reconcileRoomSplit, setDividerRatio
 
 // Hooks
 usePaperDispatch, usePaperStoreSelector

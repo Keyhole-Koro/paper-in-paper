@@ -24,6 +24,16 @@ export { PaperMapBuilder } from './core/paperMapBuilder';
 export type { PaperUpsertInput } from './core/paperMapBuilder';
 export type { RemoveMode } from './core/tree';
 export { createInitialState, reduce } from './core/commands';
+export type {
+  DividerTarget,
+  RoomDivider,
+  RoomSplit,
+  RoomSplitItem,
+  RoomSplitMap,
+  RoomSplitRow,
+  SplitAxis,
+} from './core/roomSplit';
+export { MIN_PANE_RATIO, reconcileRoomSplit, setDividerRatio } from './core/roomSplit';
 export type { Command, DefaultOpenState } from './core/commands';
 export { usePaperDispatch, usePaperStoreSelector } from './react/context/PaperStoreContext';
 export { useSiblingShare } from './react/hooks/useSiblingShare';

@@ -9,6 +9,10 @@ export function selectLowImportanceCandidates(
   nowMs: number,
   config: PaperCanvasConfig,
 ): PaperId[] {
+  // A room the user arranged by hand is theirs to manage: its panes are the
+  // sizes they dragged, so none of them is an index/close candidate.
+  if (state.roomSplitMap.has(parentId)) return [];
+
   const openChildIds = getOpenChildIds(state.expansionMap, parentId);
   if (openChildIds.length === 0) return [];
 

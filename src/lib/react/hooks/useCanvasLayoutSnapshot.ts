@@ -40,6 +40,7 @@ function computeRecursiveLayout(
     undefined,
     nowMs,
     demandSnapshot,
+    state.roomSplitMap,
   );
 
   const result = new Map<PaperId, NodeLayoutEntry>();
@@ -85,6 +86,10 @@ function childRectsEqual(a: Map<PaperId, LayoutRect>, b: Map<PaperId, LayoutRect
 function entryEqual(a: NodeLayoutEntry, b: NodeLayoutEntry): boolean {
   if (!rectEqual(a.allocatedRect, b.allocatedRect)) return false;
   if (a.roomLayout.overflowChildCount !== b.roomLayout.overflowChildCount) return false;
+  // The split and its dividers are what the grips read; reusing an entry whose
+  // rects match but whose split changed would leave stale grips behind.
+  if (a.roomLayout.split !== b.roomLayout.split) return false;
+  if (a.roomLayout.isManualSplit !== b.roomLayout.isManualSplit) return false;
   if (!rectEqual(a.roomLayout.contentRect, b.roomLayout.contentRect)) return false;
   if (a.roomLayout.closedChildIds.length !== b.roomLayout.closedChildIds.length) return false;
   if (!childRectsEqual(a.roomLayout.childRects, b.roomLayout.childRects)) return false;
@@ -165,6 +170,7 @@ export function useCanvasLayoutSnapshot(
     state.accessMap,
     state.contentHeightMap,
     state.indexedContentIds,
+    state.roomSplitMap,
     config,
   ]);
 }

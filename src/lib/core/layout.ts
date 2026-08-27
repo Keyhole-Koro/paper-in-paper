@@ -2,6 +2,15 @@ import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import { getAttentionMultiplier, getEffectiveAttention } from './attention';
 import { getOpenChildIds, getOpenChildSet } from './expansion';
 import { deriveNodeLayoutPolicy, type NodeLayoutPolicy } from './nodeLayoutPolicy';
+import {
+  CONTENT_ITEM_ID,
+  buildRoomSplit,
+  placeRoomSplit,
+  reconcileRoomSplit,
+  type RoomDividerMap,
+  type RoomSplit,
+  type RoomSplitMap,
+} from './roomSplit';
 import type {
   AccessMap,
   AttentionMap,
@@ -34,6 +43,17 @@ export interface NodeRoomLayout {
   childRects: Map<PaperId, LayoutRect>;
   closedChildIds: PaperId[];
   overflowChildCount: number;
+  /**
+   * The split this room was laid out from. When the room has no stored split
+   * this is the one the packer just produced — freezing it reproduces the
+   * current arrangement exactly, which is how a grip turns an automatic room
+   * into a hand-arranged one without anything moving.
+   */
+  split: RoomSplit | null;
+  /** True when `split` came from the store rather than from the packer. */
+  isManualSplit: boolean;
+  /** Per item, the divider each of its edges maps to. */
+  dividers: RoomDividerMap;
 }
 
 interface RoomDemandContext {
@@ -234,26 +254,12 @@ function worstAspectRatio(
   return worst;
 }
 
-export function computeRoomLayout(
+function packRows(
   items: LayoutItem[],
-  containerWidth: number,
-  containerHeight: number,
-  _minAR: number,
-  _maxAR: number,
-): RoomLayoutResult {
-  if (items.length === 0 || containerWidth <= 0 || containerHeight <= 0) {
-    return { rects: [] };
-  }
-
-  const useColumns = containerWidth > containerHeight;
-  const w = useColumns ? containerHeight : containerWidth;
-  const h = useColumns ? containerWidth : containerHeight;
-
-  const totalWeight = items.reduce((s, i) => s + i.weight, 0);
-  if (totalWeight <= 0) {
-    return { rects: [] };
-  }
-
+  totalWeight: number,
+  w: number,
+  h: number,
+): LayoutItem[][] {
   const rows: LayoutItem[][] = [];
   let currentRow: LayoutItem[] = [];
   let currentRowWeight = 0;
@@ -280,35 +286,57 @@ export function computeRoomLayout(
     }
   }
   if (currentRow.length > 0) rows.push(currentRow);
-
-  const rects: LayoutRect[] = [];
-  let y = 0;
-
-  for (const row of rows) {
-    const rowWeight = row.reduce((s, i) => s + i.weight, 0);
-    const rowHeight = (rowWeight / totalWeight) * h;
-
-    let x = 0;
-    for (const item of row) {
-      const width = (item.weight / rowWeight) * w;
-      const height = rowHeight;
-      rects.push({ id: item.id, x, y, width, height });
-      x += width;
-    }
-    y += rowHeight;
-  }
-
-  if (useColumns) {
-    return {
-      rects: rects.map((r) => ({ id: r.id, x: r.y, y: r.x, width: r.height, height: r.width })),
-    };
-  }
-  return { rects };
+  return rows;
 }
+
+/**
+ * Pack `items` and return the arrangement as a split. Every room is laid out
+ * from a split — the packer's job is now to propose one — so freezing a room
+ * for hand-editing reproduces exactly what was already on screen.
+ */
+export function packRoomSplit(
+  items: LayoutItem[],
+  containerWidth: number,
+  containerHeight: number,
+): RoomSplit | null {
+  if (items.length === 0 || containerWidth <= 0 || containerHeight <= 0) return null;
+
+  const useColumns = containerWidth > containerHeight;
+  const w = useColumns ? containerHeight : containerWidth;
+  const h = useColumns ? containerWidth : containerHeight;
+
+  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+  if (totalWeight <= 0) return null;
+
+  return buildRoomSplit(packRows(items, totalWeight, w, h), useColumns);
+}
+
+export function computeRoomLayout(
+  items: LayoutItem[],
+  containerWidth: number,
+  containerHeight: number,
+  _minAR: number,
+  _maxAR: number,
+): RoomLayoutResult {
+  const split = packRoomSplit(items, containerWidth, containerHeight);
+  if (!split) return { rects: [] };
+  return { rects: placeRoomSplit(split, containerWidth, containerHeight).rects };
+}
+
+const EMPTY_ROOM_SPLIT_MAP: RoomSplitMap = new Map();
+const EMPTY_ROOM_LAYOUT: NodeRoomLayout = {
+  contentRect: { id: CONTENT_ITEM_ID, x: 0, y: 0, width: 0, height: 0 },
+  childRects: new Map(),
+  closedChildIds: [],
+  overflowChildCount: 0,
+  split: null,
+  isManualSplit: false,
+  dividers: new Map(),
+};
 
 const DEFAULT_MIN_AR = 0.25;
 const DEFAULT_MAX_AR = 2.0;
-const CONTENT_ID = '__content__';
+const CONTENT_ID = CONTENT_ITEM_ID;
 const SHRINK_STEP = 0.84;
 const MAX_SHRINK_PASSES = 6;
 const ROOM_MIN_WEIGHT = 1;
@@ -397,6 +425,7 @@ export function computeNodeLayout(
   maxAR = DEFAULT_MAX_AR,
   nowMs: number,
   demandSnapshot?: DemandSnapshot,
+  roomSplitMap: RoomSplitMap = EMPTY_ROOM_SPLIT_MAP,
 ): NodeRoomLayout {
   const w = Math.max(0, containerWidth);
   const h = Math.max(0, containerHeight);
@@ -405,7 +434,7 @@ export function computeNodeLayout(
 
   const parent = paperMap.get(nodeId);
   if (!parent) {
-    return { contentRect: zeroContent, childRects: new Map(), closedChildIds: [], overflowChildCount: 0 };
+    return { ...EMPTY_ROOM_LAYOUT, contentRect: zeroContent };
   }
 
   const openChildIds = getOpenChildIds(expansionMap, nodeId);
@@ -415,10 +444,9 @@ export function computeNodeLayout(
 
   if (w === 0 || h === 0 || openChildIds.length === 0) {
     return {
+      ...EMPTY_ROOM_LAYOUT,
       contentRect: nodePolicy.hasContent ? fullContent : zeroContent,
-      childRects: new Map(),
       closedChildIds,
-      overflowChildCount: 0,
     };
   }
 
@@ -459,8 +487,8 @@ export function computeNodeLayout(
   });
   const autoOpenChildMinShare = getAutoOpenChildMinShare(openChildIds.length);
 
-  function buildRects() {
-    const shareItems: ShareInput[] = [
+  function buildShareItems(): ShareInput[] {
+    return [
       ...(contentDemand > 0 ? [{ id: CONTENT_ID, demand: Math.max(0, contentDemand), minShare: 0 }] : []),
       ...openChildIds.map((id) => {
         const child = paperMap.get(id);
@@ -477,39 +505,63 @@ export function computeNodeLayout(
         };
       }).filter((item) => item.demand > 0 || item.minShare > 0),
     ];
+  }
+
+  function packSplit(): RoomSplit | null {
+    const shareItems = buildShareItems();
     const shares = normalizeShares(shareItems);
-    return computeRoomLayout(
-      shareItems.map((item) => ({
-        id: item.id,
-        weight: Math.max(shares.get(item.id) ?? 0, 0),
-      })),
+    return packRoomSplit(
+      shareItems.map((item) => ({ id: item.id, weight: Math.max(shares.get(item.id) ?? 0, 0) })),
       w,
       h,
-      minAR,
-      maxAR,
-    ).rects;
+    );
   }
 
-  let rects = buildRects();
-  let pass = 0;
+  // A room the user has arranged by hand lays out from its stored split, lined
+  // up with whatever it holds right now. Everything else is packed, and the
+  // packer's proposal is carried out on the layout so a grip can freeze it.
+  const storedSplit = roomSplitMap.get(nodeId);
+  const manualSplit = storedSplit
+    ? reconcileRoomSplit(storedSplit, buildShareItems().map((item) => item.id))
+    : null;
 
-  while (roomNeedsShrink(rects, minAR, maxAR) && pass < MAX_SHRINK_PASSES) {
-    const targetChildId = roomPriority.find((childId) => {
-      const childPolicy = getPolicy(childId);
-      const child = paperMap.get(childId);
-      const current = childDemands.get(childId) ?? ROOM_MIN_WEIGHT;
-      return childPolicy.reservesRoom && child?.pinnedLayout?.minShare === undefined && current > ROOM_MIN_WEIGHT;
-    });
-    if (!targetChildId) break;
-    const current = childDemands.get(targetChildId) ?? ROOM_MIN_WEIGHT;
-    const next = Math.max(ROOM_MIN_WEIGHT, current * SHRINK_STEP);
-    if (next >= current) break;
-    childDemands.set(targetChildId, next);
-    rects = buildRects();
-    pass += 1;
+  let split: RoomSplit | null;
+  let rects: LayoutRect[];
+  let dividers: RoomDividerMap;
+
+  if (manualSplit) {
+    split = manualSplit;
+    ({ rects, dividers } = placeRoomSplit(manualSplit, w, h));
+  } else {
+    split = packSplit();
+    ({ rects, dividers } = split ? placeRoomSplit(split, w, h) : { rects: [], dividers: new Map() });
+
+    let pass = 0;
+    while (roomNeedsShrink(rects, minAR, maxAR) && pass < MAX_SHRINK_PASSES) {
+      const targetChildId = roomPriority.find((childId) => {
+        const childPolicy = getPolicy(childId);
+        const child = paperMap.get(childId);
+        const current = childDemands.get(childId) ?? ROOM_MIN_WEIGHT;
+        return (
+          childPolicy.reservesRoom &&
+          child?.pinnedLayout?.minShare === undefined &&
+          current > ROOM_MIN_WEIGHT
+        );
+      });
+      if (!targetChildId) break;
+      const current = childDemands.get(targetChildId) ?? ROOM_MIN_WEIGHT;
+      const next = Math.max(ROOM_MIN_WEIGHT, current * SHRINK_STEP);
+      if (next >= current) break;
+      childDemands.set(targetChildId, next);
+      split = packSplit();
+      ({ rects, dividers } = split ? placeRoomSplit(split, w, h) : { rects: [], dividers: new Map() });
+      pass += 1;
+    }
   }
 
-  const overflowChildCount = roomNeedsShrink(rects, minAR, maxAR) ? 1 : 0;
+  // A hand-arranged room is the user's to manage: narrow panes there are what
+  // they dragged, not pressure to index the siblings away.
+  const overflowChildCount = !manualSplit && roomNeedsShrink(rects, minAR, maxAR) ? 1 : 0;
   const contentRect = rects.find((r) => r.id === CONTENT_ID) ?? zeroContent;
   const childRects = new Map<PaperId, LayoutRect>(
     rects.filter((r) => r.id !== CONTENT_ID).map((r) => [r.id, r]),
@@ -520,5 +572,13 @@ export function computeNodeLayout(
     }
   }
 
-  return { contentRect, childRects, closedChildIds, overflowChildCount };
+  return {
+    contentRect,
+    childRects,
+    closedChildIds,
+    overflowChildCount,
+    split,
+    isManualSplit: manualSplit !== null,
+    dividers,
+  };
 }

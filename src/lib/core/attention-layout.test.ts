@@ -68,11 +68,16 @@ describe('attention and layout', () => {
     expect(indexedLeaf.childRoomEnabled).toBe(false);
   });
 
-  it('uses content height to increase content demand', () => {
+  // Demand deliberately ignores the measured contentHeightMap: tying it to
+  // scrollHeight created a ResizeObserver ↔ layout feedback loop (a tighter
+  // room made content taller, which raised demand, which widened the room...).
+  // See the comment on getIntrinsicContentDemand.
+  it('derives content demand from attention, not from measured content height', () => {
     const state = buildState([
-      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a', 'b'] },
+      { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a', 'b', 'c'] },
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 100 },
       { id: 'b', title: 'b', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 100 },
+      { id: 'c', title: 'c', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 300 },
     ]);
     state.contentHeightMap.set('a', 400);
     state.contentHeightMap.set('b', 120);
@@ -89,7 +94,10 @@ describe('attention and layout', () => {
       nowMs: 1_000,
     };
 
-    expect(getContentDemand('a', context)).toBeGreaterThan(getContentDemand('b', context));
+    // Same attention, wildly different measured heights — same demand.
+    expect(getContentDemand('a', context)).toBe(getContentDemand('b', context));
+    // Attention is what moves it.
+    expect(getContentDemand('c', context)).toBeGreaterThan(getContentDemand('a', context));
   });
 
   it('caps attention multiplier at configured max', () => {

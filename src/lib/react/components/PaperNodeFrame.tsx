@@ -7,6 +7,8 @@ import type { PaperTone, PaperColorContext } from '../internal/paperColors';
 import { PaperContentFrame } from './PaperContentFrame';
 import { PaperHeader } from './PaperHeader';
 import { PaperNode } from './PaperNode';
+import { RoomResizeHandles } from './RoomResizeHandles';
+import { CONTENT_ITEM_ID } from '../../core/roomSplit';
 
 interface PaperNodeFrameProps {
   nodeId: PaperId;
@@ -135,33 +137,53 @@ export function PaperNodeFrame({
             top: 0,
             width: layout.contentRect.width,
             height: layout.contentRect.height,
-            overflow: 'auto',
+            overflow: 'hidden',
             borderRight: layout.childRects.size > 0 && layoutPolicy.hasContent ? `1px solid ${tone.divider}` : 'none',
             boxSizing: 'border-box',
-            padding: layoutPolicy.hasContent ? 10 : 0,
-            color: tone.text,
-            scrollbarWidth: 'thin',
-            scrollbarColor: `${tone.divider} transparent`,
             pointerEvents: layoutPolicy.hasContent ? 'auto' : 'none',
           }}
         >
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              overflow: 'auto',
+              boxSizing: 'border-box',
+              padding: layoutPolicy.hasContent ? 10 : 0,
+              color: tone.text,
+              scrollbarWidth: 'thin',
+              scrollbarColor: `${tone.divider} transparent`,
+            }}
+          >
+            {layoutPolicy.hasContent && (
+              <PaperContentFrame
+                nodeId={nodeId}
+                content={paper.content}
+                overrideCss={paper.overrideCss ?? overrideCss}
+                theme={{
+                  surface: tone.background,
+                  surfaceAlt: tone.backgroundHover,
+                  surfaceRaised: tone.headerBackground,
+                  text: tone.text,
+                  mutedText: tone.mutedText,
+                  divider: tone.divider,
+                  linkBackground: tone.headerBackground,
+                  linkBackgroundHover: tone.backgroundHover,
+                  linkBorder: tone.border,
+                  linkText: tone.title,
+                }}
+              />
+            )}
+          </div>
           {layoutPolicy.hasContent && (
-            <PaperContentFrame
-              nodeId={nodeId}
-              content={paper.content}
-              overrideCss={paper.overrideCss ?? overrideCss}
-              theme={{
-                surface: tone.background,
-                surfaceAlt: tone.backgroundHover,
-                surfaceRaised: tone.headerBackground,
-                text: tone.text,
-                mutedText: tone.mutedText,
-                divider: tone.divider,
-                linkBackground: tone.headerBackground,
-                linkBackgroundHover: tone.backgroundHover,
-                linkBorder: tone.border,
-                linkText: tone.title,
-              }}
+            <RoomResizeHandles
+              roomId={nodeId}
+              itemId={CONTENT_ITEM_ID}
+              rect={layout.contentRect}
+              split={layout.split}
+              dividers={layout.dividers.get(CONTENT_ITEM_ID)}
+              isManual={layout.isManualSplit}
+              tone={tone}
             />
           )}
         </AnimatedRect>
@@ -188,6 +210,15 @@ export function PaperNodeFrame({
               }}
             >
               <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={inheritedColor} overrideCss={overrideCss} />
+              <RoomResizeHandles
+                roomId={nodeId}
+                itemId={childId}
+                rect={rect}
+                split={layout.split}
+                dividers={layout.dividers.get(childId)}
+                isManual={layout.isManualSplit}
+                tone={tone}
+              />
             </AnimatedRect>
           ))}
         </AnimatePresence>

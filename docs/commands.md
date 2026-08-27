@@ -192,6 +192,33 @@ dispatch({
 });
 ```
 
+### `RESIZE_SPLIT`
+
+room の仕切りを1本動かします。リサイズグリップのドラッグから内部で呼ばれます。
+
+```ts
+dispatch({
+  type: 'RESIZE_SPLIT',
+  roomId: 'root',
+  split,                              // レイアウトが今使っている split
+  target: { kind: 'item', row: 0, index: 0 },
+  ratio: 0.6,                         // 仕切り手前のペインが持つ割合
+});
+```
+
+- `split` はドラッグ開始時にレイアウトから読んだもの。packer 由来ならこの1回で room が手動化する
+- 動くのは仕切りが隔てる2ペインだけ。それ以外のペインの重みは変わらない
+- `ratio` は `MIN_PANE_RATIO` 〜 `1 - MIN_PANE_RATIO` にクランプされる
+- この room は以後「ユーザー管理下」となり、shrink / overflow / auto-index の対象から外れる
+
+### `RESET_ROOM_SPLIT`
+
+room の分割構造を捨て、自動レイアウト（packer）に戻します。グリップのダブルクリックで呼ばれます。
+
+```ts
+dispatch({ type: 'RESET_ROOM_SPLIT', roomId: 'root' });
+```
+
 ### `REPORT_CONTENT_HEIGHT`
 
 ノードのコンテンツ領域の高さをレイアウトエンジンに伝えます。ライブラリ内部から呼ばれます。

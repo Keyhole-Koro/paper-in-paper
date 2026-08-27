@@ -50,6 +50,7 @@ export interface UnregisteredViewState {
   attentionTimestampMap: PaperViewState['attentionTimestampMap'];
   accessMap: PaperViewState['accessMap'];
   indexedContentIds: PaperViewState['indexedContentIds'];
+  roomSplitMap: PaperViewState['roomSplitMap'];
 }
 
 export interface TouchNodeOptions {
@@ -102,13 +103,23 @@ export function unregisterNodes(
   const attentionTimestampMap = new Map(state.attentionTimestampMap);
   const accessMap = new Map(state.accessMap);
   const indexedContentIds = new Set(state.indexedContentIds);
+  // A removed node also stops being a room. Its id may still appear as an item
+  // inside an ancestor's split; reconcileRoomSplit drops it at layout time.
+  const roomSplitMap = new Map(state.roomSplitMap);
   for (const id of removedIds) {
     attentionMap.delete(id);
     attentionTimestampMap.delete(id);
     accessMap.delete(id);
     indexedContentIds.delete(id);
+    roomSplitMap.delete(id);
   }
-  return { attentionMap, attentionTimestampMap, accessMap, indexedContentIds };
+  return {
+    attentionMap,
+    attentionTimestampMap,
+    accessMap,
+    indexedContentIds,
+    roomSplitMap,
+  };
 }
 
 /**

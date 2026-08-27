@@ -19,6 +19,9 @@ const FALLBACK_LAYOUT: NodeRoomLayout = {
   childRects: new Map(),
   closedChildIds: [],
   overflowChildCount: 0,
+  split: null,
+  isManualSplit: false,
+  dividers: new Map(),
 };
 
 export interface PaperNodeRenderModel {
@@ -100,7 +103,7 @@ export function derivePaperNodeRenderModel({
       })()
     : null;
   const debugBadge = debug
-    ? `${nodeId} • att ${Math.round(effectiveAttention)} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} • ${view.interactionMode} • ${nodeVisibility}/${layoutPolicy.mode}${paper.pinnedLayout?.minShare !== undefined ? ' • pinned' : ''}`
+    ? `${nodeId} • att ${Math.round(effectiveAttention)} • ${entry?.allocatedRect.width ?? 0}×${entry?.allocatedRect.height ?? 0} • ${view.interactionMode} • ${nodeVisibility}/${layoutPolicy.mode}${paper.pinnedLayout?.minShare !== undefined ? ' • pinned' : ''}${entry?.roomLayout.isManualSplit ? ' • split' : ''}`
     : null;
 
   return {

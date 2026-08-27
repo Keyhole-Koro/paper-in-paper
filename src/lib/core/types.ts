@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { RoomSplitMap } from './roomSplit';
 
 export type PaperId = string;
 
@@ -104,6 +105,8 @@ export type PlacementMap = Map<PaperId, ManualPlacement>;
 export type AccessMap = Map<PaperId, number>;
 export type ImportanceMap = Map<PaperId, number>;
 
+export type { RoomSplit, RoomSplitMap } from './roomSplit';
+
 export interface PaperViewState {
   paperMap: PaperMap;
   expansionMap: ExpansionMap;
@@ -114,6 +117,11 @@ export interface PaperViewState {
   attentionMap: AttentionMap;
   attentionTimestampMap: AttentionTimestampMap;
   manualPlacementMap: PlacementMap;
+  /**
+   * ユーザーが仕切りをドラッグして手で組んだ room の分割構造。
+   * ここに載っている room は packer ではなくこの split からレイアウトされる。
+   */
+  roomSplitMap: RoomSplitMap;
   contentHeightMap: Map<PaperId, number>;
   protectedUntilMap: Map<PaperId, number>;
 }
