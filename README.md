@@ -238,9 +238,14 @@ auto-indexing or auto-close.
 Rooms are normally packed as a treemap, which is good at filling space and bad at
 being dragged — its row breaks re-flow a rectangle's shape as soon as its share
 moves. So a room you have sized by hand switches to a single-axis split, laid out
-along the room's long side, where a dragged edge lands under the pointer. Rooms
-holding more than four items stay on the packer, since a split there is just a
-strip of slivers.
+along the room's long side, where a dragged edge lands under the pointer, and it
+stays that way for as long as any hand-set size in it survives.
+
+A size you set by hand holds until you reset it. It does not drift as attention
+decays, as siblings are focused, opened, closed or auto-indexed, as a sibling is
+resized, or as the room gains children — a new resize takes its space from the
+automatically sized papers, and is itself capped when that runs out rather than
+shrinking what you already set.
 
 For the full layout algorithm, demand model, and indexed-node rules, see
 [`docs/layout-spec.md`](./docs/layout-spec.md).

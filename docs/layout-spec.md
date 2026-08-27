@@ -88,7 +88,8 @@ authoritative: it bypasses the attention -> demand -> share pipeline entirely.
 - The remaining area is redistributed to the demand-driven items in that room
 - Manual shares are clamped to `[MIN_MANUAL_SHARE, MAX_MANUAL_SHARE]`, and their sum inside one
   room is capped at `MAX_MANUAL_SHARE_TOTAL` so demand-driven siblings always keep a usable slice.
-  A room where nothing else competes lifts the cap to the whole room.
+  The cap is applied to the incoming resize as it is accepted, never by rescaling the shares
+  already set — see **A hand-set size holds until it is reset** below.
 - The shrink fallback never targets a manually sized node, and stands down entirely in a split room
 - A manually sized node is never selected as a Content Indexing / Auto Close candidate
 - Double-clicking the grip clears the manual size and returns the node to automatic sizing
@@ -102,14 +103,11 @@ for direct manipulation, so a room the user has sized by hand switches to a **si
 one item per row, laid out along the room's dominant axis — side by side in a wide room, stacked
 in a tall one. In that mode a dragged edge lands exactly under the pointer.
 
-The mode is decided per room and only from things that cannot change mid-drag:
-
-- the room holds a manual share, **and**
-- it holds at most `SINGLE_AXIS_MAX_ITEMS` (4) items — beyond that a split is a strip of slivers,
-  so a bigger room keeps the packer
-
-Because the item count only changes when a child opens or closes, a room never switches modes
-under the user's pointer.
+A room is in split mode exactly while it holds a manual share, whatever it holds and however many
+items it holds. Nothing else feeds the decision, so the mode cannot change under the user's
+pointer — and a room that later gains a child stays split rather than re-packing the hand-sized
+rect into a different shape. The cost is that a room with many open children and a manual share
+becomes a narrow strip; double-clicking a grip hands it back to the packer.
 
 Entering split mode does move things once: a rect that was a wide block becomes a column of the
 same area. That snap happens on pointer-down, before the pointer moves, so the drag itself still
@@ -118,6 +116,26 @@ tracks the pointer exactly.
 A room in split mode is treated as user-managed: the shrink fallback and the overflow signal both
 stand down for it, so narrow columns the user asked for are not treated as pressure to index the
 siblings away.
+
+### A hand-set size holds until it is reset
+
+Once a rect has a manual share, nothing in the automatic machinery may change its size. Concretely
+it survives attention decay, a sibling being focused, opened, closed or auto-indexed, a sibling
+being resized by hand, and the room gaining or losing children. Only `RESET_NODE_SIZE` /
+`RESET_CONTENT_SIZE` — the grip's double-click — give it back to the layout engine.
+
+Two mechanisms uphold this:
+
+- A resize takes its space from the demand-driven pool, and when that runs out the *incoming*
+  resize is capped (`getAvailableManualShare`). Manual shares already set are never rescaled to
+  make room for a new one.
+- Split mode is held for as long as any manual share survives, so the rect is never re-packed into
+  a new shape.
+
+The one case that still moves a hand-set size is a room whose items are *all* manual and do not
+add up to the whole room: the room has to be tiled completely, so the leftover is spread across
+them in proportion. Reaching it takes manually sizing every open child of a room whose own content
+is manual or indexed.
 
 While a grip is being dragged, iframes across the page stop taking pointer events. A paper's
 content can be an iframe, and an iframe hit-test swallows the pointer: without this the drag dies

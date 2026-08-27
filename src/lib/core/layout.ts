@@ -346,13 +346,6 @@ const CONTENT_ID = '__content__';
 const SHRINK_STEP = 0.84;
 const MAX_SHRINK_PASSES = 6;
 const ROOM_MIN_WEIGHT = 1;
-/**
- * Above this many items a single-axis room is a strip of slivers, so a
- * hand-sized room that big keeps the packer. The count only changes when a
- * child opens or closes — never mid-drag — so the room cannot switch layout
- * modes under the user's pointer.
- */
-const SINGLE_AXIS_MAX_ITEMS = 4;
 const AUTO_OPEN_CHILD_MIN_SHARE = 0.18;
 const AUTO_OPEN_CHILD_MIN_SHARE_BUDGET = 0.72;
 
@@ -415,6 +408,12 @@ function resolveShares(items: ShareInput[]): Map<string, number> {
     id: item.id,
     share: Math.min(1, Math.max(0, item.fixedShare ?? 0)),
   }));
+  // Resizes are capped as they are accepted (getAvailableManualShare), so the
+  // fixed shares normally fit as-is and pass through untouched — that is what
+  // keeps a hand-set size from drifting when a sibling is resized. This only
+  // bites when a room has nothing but manual shares and they do not fill it,
+  // or when several siblings sit at the per-item floor: the room has to be
+  // tiled completely, so there is no choice but to scale.
   const fixedTotal = clampedFixed.reduce((sum, item) => sum + item.share, 0);
   const budget = flexItems.length === 0 ? 1 : MAX_MANUAL_SHARE_TOTAL;
   const scale = fixedTotal > budget && fixedTotal > 0 ? budget / fixedTotal : 1;
@@ -587,12 +586,13 @@ export function computeNodeLayout(
       }).filter((item) => item.demand > 0 || item.minShare > 0 || item.fixedShare !== undefined),
     ];
     const shares = resolveShares(shareItems);
-    // Once anything in a small enough room is hand-sized, the whole room
-    // switches to a single-axis split so a dragged edge follows the pointer
-    // instead of being re-packed.
-    singleAxis =
-      shareItems.length <= SINGLE_AXIS_MAX_ITEMS &&
-      shareItems.some((item) => item.fixedShare !== undefined);
+    // Once anything in this room is hand-sized the whole room switches to a
+    // single-axis split, and stays there for as long as any manual share
+    // survives. Switching back would re-pack the hand-sized rect into a
+    // different shape — the packer decides shape from row breaks — so a room
+    // that gained a fifth child would silently resize what the user had set.
+    // Holding the split keeps a hand-set size fixed until it is reset.
+    singleAxis = shareItems.some((item) => item.fixedShare !== undefined);
     return computeRoomLayout(
       shareItems.map((item) => ({
         id: item.id,

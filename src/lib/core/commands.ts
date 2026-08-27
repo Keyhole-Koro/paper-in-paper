@@ -3,7 +3,7 @@ import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import { resolveInitialAttention } from './attention';
 import { openChild, closeChild, removeNodeFromExpansion } from './expansion';
 import { deriveNodeVisibilityState, getNextNodeVisibilityState } from './nodeVisibility';
-import { clearManualShare, setManualShare } from './manualSize';
+import { clearManualShare, getAvailableManualShare, setManualShare } from './manualSize';
 import { registerNode, syncAttentionForPaperMap, touchNode, unregisterNodes } from './nodeRegistry';
 import {
   pruneExpansionMap,
@@ -372,7 +372,14 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
       const node = state.paperMap.get(command.nodeId);
       // The root fills the canvas; there is no sibling to take share from.
       if (!node || node.parentId === null) return state;
-      const manualSizeMap = setManualShare(state.manualSizeMap, command.nodeId, command.share);
+      // Cap against the room's other manual shares rather than rescaling them
+      // later: a size the user set must not move because a sibling was resized.
+      const available = getAvailableManualShare(state, node.parentId, command.nodeId);
+      const manualSizeMap = setManualShare(
+        state.manualSizeMap,
+        command.nodeId,
+        Math.min(command.share, available),
+      );
       if (manualSizeMap === state.manualSizeMap) return state;
       return { ...state, manualSizeMap, protectedUntilMap: protectNode(state, command.nodeId, config) };
     }
@@ -385,10 +392,11 @@ function reduceCore(state: PaperViewState, command: Command, config: PaperCanvas
 
     case 'RESIZE_CONTENT': {
       if (!state.paperMap.has(command.nodeId)) return state;
+      const available = getAvailableManualShare(state, command.nodeId, null);
       const manualContentSizeMap = setManualShare(
         state.manualContentSizeMap,
         command.nodeId,
-        command.share,
+        Math.min(command.share, available),
       );
       if (manualContentSizeMap === state.manualContentSizeMap) return state;
       return {

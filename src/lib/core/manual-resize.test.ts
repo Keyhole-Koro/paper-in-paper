@@ -119,20 +119,43 @@ describe('manual resize', () => {
     expect(huge.manualSizeMap.get('a')).toBe(MAX_MANUAL_SHARE);
   });
 
-  it('scales manual shares down proportionally so demand-driven siblings keep room', () => {
+  it('caps a new resize instead of shrinking the sizes already set', () => {
     let state = threeChildren();
     state = reduce(state, { type: 'RESIZE_NODE', nodeId: 'a', share: 0.6 }, config);
-    state = reduce(state, { type: 'RESIZE_NODE', nodeId: 'b', share: 0.6 }, config);
-    const layout = layoutRoom(state);
+    const aAfterFirst = areaShare(layoutRoom(state).childRects.get('a'));
 
-    const a = areaShare(layout.childRects.get('a'));
-    const b = areaShare(layout.childRects.get('b'));
-    expect(a + b).toBeCloseTo(MAX_MANUAL_SHARE_TOTAL, 3);
-    expect(a).toBeCloseTo(b, 4);
+    // 'b' asks for 0.6 too, but only MAX_MANUAL_SHARE_TOTAL - 0.6 is left.
+    state = reduce(state, { type: 'RESIZE_NODE', nodeId: 'b', share: 0.6 }, config);
+    expect(state.manualSizeMap.get('a')).toBeCloseTo(0.6, 6);
+    expect(state.manualSizeMap.get('b')).toBeCloseTo(MAX_MANUAL_SHARE_TOTAL - 0.6, 6);
+
+    const layout = layoutRoom(state);
+    // The size the user already set is untouched by the second resize.
+    expect(areaShare(layout.childRects.get('a'))).toBeCloseTo(aAfterFirst, 4);
+    expect(areaShare(layout.childRects.get('a'))).toBeCloseTo(0.6, 4);
     expect(areaShare(layout.childRects.get('c'))).toBeGreaterThan(0);
   });
 
-  it('lets manual shares fill the whole room when nothing else competes', () => {
+  it('holds a hand-set size while siblings open, close and lose attention', () => {
+    let state = reduce(threeChildren(), { type: 'RESIZE_NODE', nodeId: 'a', share: 0.35 }, config);
+    const before = areaShare(layoutRoom(state).childRects.get('a'));
+
+    state = reduce(state, { type: 'CLOSE_NODE', parentId: 'root', childId: 'c' }, config);
+    expect(areaShare(layoutRoom(state).childRects.get('a'))).toBeCloseTo(before, 4);
+
+    state = reduce(state, { type: 'OPEN_NODE', parentId: 'root', childId: 'c' }, config);
+    expect(areaShare(layoutRoom(state).childRects.get('a'))).toBeCloseTo(before, 4);
+
+    state = reduce(state, { type: 'FOCUS_NODE', nodeId: 'b' }, config);
+    state = reduce(state, { type: 'FOCUS_NODE', nodeId: 'b' }, config);
+    expect(areaShare(layoutRoom(state).childRects.get('a'))).toBeCloseTo(before, 4);
+
+    // ...and only a reset gives it back to the layout engine.
+    state = reduce(state, { type: 'RESET_NODE_SIZE', nodeId: 'a' }, config);
+    expect(areaShare(layoutRoom(state).childRects.get('a'))).not.toBeCloseTo(before, 4);
+  });
+
+  it('keeps manual shares in proportion when they are the only items left', () => {
     let state = buildState(
       [
         { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a', 'b'] },
@@ -141,16 +164,20 @@ describe('manual resize', () => {
       ],
       { root: ['a', 'b'] },
     );
-    // Indexing the room's own content leaves the two manually sized children
-    // as the only items, so the ceiling on manual shares lifts to the room.
+    // With the room's own content indexed away, the two children are the only
+    // items. They are capped to MAX_MANUAL_SHARE_TOTAL between them, but the
+    // room still has to be tiled completely — so the leftover is spread over
+    // them in proportion. This is the one path that moves a hand-set size.
     state.indexedContentIds.add('root');
     state = reduce(state, { type: 'RESIZE_NODE', nodeId: 'a', share: 0.75 }, config);
     state = reduce(state, { type: 'RESIZE_NODE', nodeId: 'b', share: 0.25 }, config);
     const layout = layoutRoom(state);
 
+    const a = areaShare(layout.childRects.get('a'));
+    const b = areaShare(layout.childRects.get('b'));
     expect(areaShare(layout.contentRect)).toBe(0);
-    expect(areaShare(layout.childRects.get('a'))).toBeCloseTo(0.75, 4);
-    expect(areaShare(layout.childRects.get('b'))).toBeCloseTo(0.25, 4);
+    expect(a + b).toBeCloseTo(1, 4);
+    expect(a / b).toBeCloseTo(0.75 / (MAX_MANUAL_SHARE_TOTAL - 0.75), 3);
   });
 
   it('restores demand-driven sizing on reset', () => {
@@ -228,7 +255,10 @@ describe('manual resize', () => {
     expect(after.height).toBeCloseTo(before.height, 3);
   });
 
-  it('keeps the packer for a hand-sized room with too many items to strip', () => {
+  it('stays split however many items the room holds', () => {
+    // Re-packing would give the hand-sized rect a different shape, so a room
+    // holds its split for as long as any manual share survives — even when a
+    // child opens later and the split gets narrow.
     const ids = ['a', 'b', 'c', 'd', 'e', 'f'];
     let state = buildState(
       [
@@ -239,9 +269,14 @@ describe('manual resize', () => {
     );
     state = reduce(state, { type: 'RESIZE_NODE', nodeId: 'a', share: 0.2 }, config);
 
-    // A single-axis room puts every rect at y = 0; a packed one does not.
-    const rects = [...layoutRoom(state).childRects.values()];
-    expect(rects.some((rect) => rect.y > 0.5)).toBe(true);
+    const layout = layoutRoom(state);
+    expect(layout.singleAxis).toBe(true);
+    // A single-axis wide room puts every rect at y = 0, full height.
+    for (const rect of layout.childRects.values()) {
+      expect(rect.y).toBeCloseTo(0, 4);
+      expect(rect.height).toBeCloseTo(ROOM_H, 4);
+    }
+    expect(areaShare(layout.childRects.get('a'))).toBeCloseTo(0.2, 4);
   });
 
   it('does not report overflow for the narrow columns the user asked for', () => {
