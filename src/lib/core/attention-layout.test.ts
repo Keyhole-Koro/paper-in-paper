@@ -68,7 +68,9 @@ describe('attention and layout', () => {
     expect(indexedLeaf.childRoomEnabled).toBe(false);
   });
 
-  it('uses content height to increase content demand', () => {
+  // Since 29cf442, demand deliberately ignores the measured content height: height depended on
+  // width, width on demand, and demand on height, so layouts jittered near flexbox cusps.
+  it('does not let measured content height change content demand', () => {
     const state = buildState([
       { id: 'root', title: 'root', description: '', content: '', parentId: null, childIds: ['a', 'b'] },
       { id: 'a', title: 'a', description: '', content: '', parentId: 'root', childIds: [], attentionScore: 100 },
@@ -89,7 +91,7 @@ describe('attention and layout', () => {
       nowMs: 1_000,
     };
 
-    expect(getContentDemand('a', context)).toBeGreaterThan(getContentDemand('b', context));
+    expect(getContentDemand('a', context)).toBe(getContentDemand('b', context));
   });
 
   it('caps attention multiplier at configured max', () => {
