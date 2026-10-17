@@ -1,5 +1,4 @@
-import { AnimatePresence, motion, type TargetAndTransition } from 'framer-motion';
-import { useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { useLayoutEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import type { NodeRoomLayout } from '../../core/layout';
 import type { Paper, PaperId } from '../../core/types';
 import type { NodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
@@ -25,48 +24,61 @@ interface PaperNodeFrameProps {
   insertBeforeRect?: { x: number; y: number; height: number } | null;
 }
 
-const POSITION_TRANSITION = { type: 'spring' as const, stiffness: 260, damping: 32, mass: 0.7 };
-const LARGE_MOVE_TRANSITION = { type: 'tween' as const, duration: 0.28, ease: [0.22, 1, 0.36, 1] as const };
-const LARGE_MOVE_THRESHOLD = 240;
+const POSITION_TRANSITION = 'transform 0.28s cubic-bezier(0.22, 1, 0.36, 1)';
+const ENTER_KEYFRAMES: Keyframe[] = [
+  { opacity: 0, scale: '0.985' },
+  { opacity: 1, scale: '1' },
+];
+const ENTER_TIMING: KeyframeAnimationOptions = { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' };
 
-function pickTransition(prev: { x: number; y: number } | null, next: { x: number; y: number }) {
-  if (!prev) return POSITION_TRANSITION;
-  const dx = next.x - prev.x;
-  const dy = next.y - prev.y;
-  return Math.hypot(dx, dy) > LARGE_MOVE_THRESHOLD ? LARGE_MOVE_TRANSITION : POSITION_TRANSITION;
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 }
 
+/**
+ * A box placed at (x, y). Moves glide with a CSS transition; with `enter`, the box fades and
+ * scales in when it mounts (Web Animations API, so no animation library is needed). Both are
+ * skipped when the user prefers reduced motion. Removed boxes disappear at once: animating an
+ * exit would mean keeping unmounted children around, which is what framer-motion did for us.
+ */
 function AnimatedRect({
   x,
   y,
-  initial,
-  exit,
+  enter = false,
   style,
   children,
   dataAttrs,
 }: {
   x: number;
   y: number;
-  initial?: TargetAndTransition;
-  exit?: TargetAndTransition;
+  enter?: boolean;
   style: CSSProperties;
   children: ReactNode;
   dataAttrs?: Record<string, string | undefined>;
 }) {
-  const prev = useRef<{ x: number; y: number } | null>(null);
-  const transition = pickTransition(prev.current, { x, y });
-  prev.current = { x, y };
+  const ref = useRef<HTMLDivElement>(null);
+  const reducedMotion = prefersReducedMotion();
+
+  useLayoutEffect(() => {
+    if (!enter || reducedMotion) return;
+    // `scale` is its own property, so it does not fight the translate in `transform`.
+    ref.current?.animate?.(ENTER_KEYFRAMES, ENTER_TIMING);
+    // Only on mount: later renders are moves, not entrances.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <motion.div
-      initial={initial}
-      animate={{ x, y, opacity: 1, scale: 1 }}
-      exit={exit}
-      transition={transition}
-      style={style}
+    <div
+      ref={ref}
+      style={{
+        ...style,
+        transform: `translate(${x}px, ${y}px)`,
+        transition: reducedMotion ? undefined : POSITION_TRANSITION,
+      }}
       {...dataAttrs}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
 
@@ -166,31 +178,28 @@ export function PaperNodeFrame({
           )}
         </AnimatedRect>
 
-        <AnimatePresence>
-          {Array.from(layout.childRects.entries()).map(([childId, rect]) => (
-            <AnimatedRect
-              key={childId}
-              x={rect.x}
-              y={rect.y}
-              initial={{ opacity: 0, scale: 0.985 }}
-              exit={{ opacity: 0, scale: 0.985 }}
-              dataAttrs={{ 'data-child-id': childId }}
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                width: rect.width,
-                height: rect.height,
-                overflow: 'hidden',
-                borderLeft: `1px solid ${tone.divider}`,
-                borderTop: rect.y > 0 ? `1px solid ${tone.divider}` : 'none',
-                boxSizing: 'border-box',
-              }}
-            >
-              <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={inheritedColor} overrideCss={overrideCss} />
-            </AnimatedRect>
-          ))}
-        </AnimatePresence>
+        {Array.from(layout.childRects.entries()).map(([childId, rect]) => (
+          <AnimatedRect
+            key={childId}
+            x={rect.x}
+            y={rect.y}
+            enter
+            dataAttrs={{ 'data-child-id': childId }}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: rect.width,
+              height: rect.height,
+              overflow: 'hidden',
+              borderLeft: `1px solid ${tone.divider}`,
+              borderTop: rect.y > 0 ? `1px solid ${tone.divider}` : 'none',
+              boxSizing: 'border-box',
+            }}
+          >
+            <PaperNode nodeId={childId} parentId={nodeId} inheritedColor={inheritedColor} overrideCss={overrideCss} />
+          </AnimatedRect>
+        ))}
 
         {insertBeforeRect && (
           <div
