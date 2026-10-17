@@ -29,7 +29,9 @@ npm install @keyhole-koro/paper-in-paper
 | Package         | Version  |
 | --------------- | -------- |
 | `react`         | `>= 18`  |
-| `framer-motion` | `>= 11`  |
+
+No animation library is needed: papers glide to new positions with CSS transitions and fade in
+with the Web Animations API. Both are turned off when the user prefers reduced motion.
 
 ## Quick start
 

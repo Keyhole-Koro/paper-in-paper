@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { useLayoutEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import type { NodeRoomLayout } from '../../core/layout';
 import type { Paper, PaperId } from '../../core/types';
 import type { NodeLayoutPolicy } from '../../core/nodeLayoutPolicy';
@@ -24,29 +24,56 @@ interface PaperNodeFrameProps {
   insertBeforeRect?: { x: number; y: number; height: number } | null;
 }
 
+const POSITION_TRANSITION = 'transform 0.28s cubic-bezier(0.22, 1, 0.36, 1)';
+const ENTER_KEYFRAMES: Keyframe[] = [
+  { opacity: 0, scale: '0.985' },
+  { opacity: 1, scale: '1' },
+];
+const ENTER_TIMING: KeyframeAnimationOptions = { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' };
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+}
+
+/**
+ * A box placed at (x, y). Moves glide with a CSS transition; with `enter`, the box fades and
+ * scales in when it mounts (Web Animations API, so no animation library is needed). Both are
+ * skipped when the user prefers reduced motion. Removed boxes disappear at once: animating an
+ * exit would mean keeping unmounted children around, which is what framer-motion did for us.
+ */
 function AnimatedRect({
   x,
   y,
-  initial,
-  exit,
+  enter = false,
   style,
   children,
   dataAttrs,
 }: {
   x: number;
   y: number;
-  initial?: any;
-  exit?: any;
+  enter?: boolean;
   style: CSSProperties;
   children: ReactNode;
   dataAttrs?: Record<string, string | undefined>;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const reducedMotion = prefersReducedMotion();
+
+  useLayoutEffect(() => {
+    if (!enter || reducedMotion) return;
+    // `scale` is its own property, so it does not fight the translate in `transform`.
+    ref.current?.animate?.(ENTER_KEYFRAMES, ENTER_TIMING);
+    // Only on mount: later renders are moves, not entrances.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div
+      ref={ref}
       style={{
         ...style,
         transform: `translate(${x}px, ${y}px)`,
-        transition: 'transform 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+        transition: reducedMotion ? undefined : POSITION_TRANSITION,
       }}
       {...dataAttrs}
     >
@@ -156,8 +183,7 @@ export function PaperNodeFrame({
             key={childId}
             x={rect.x}
             y={rect.y}
-            initial={{ opacity: 0, scale: 0.985 }}
-            exit={{ opacity: 0, scale: 0.985 }}
+            enter
             dataAttrs={{ 'data-child-id': childId }}
             style={{
               position: 'absolute',
