@@ -1,32 +1,67 @@
+# Publishes @keyhole-koro/paper-in-paper to npm when the publish branch is pushed and
+# package.json has a version that is not on npm yet. Otherwise it does nothing.
+#
+# Uses npm trusted publishing (OIDC): no npm token is stored, and the package gets a
+# provenance attestation. Set up once with:
+#   npx npm@11 trust github @keyhole-koro/paper-in-paper --file publish.yml \
+#     --repo Keyhole-Koro/paper-in-paper --allow-publish
+#
+# To release: bump "version" in package.json on main, then `git push origin main:publish`.
+# The workflow tags the release as v<version>.
 name: Publish to npm
 
 on:
   push:
-    branches:
-      - publish
+    branches: [publish]
+
+permissions:
+  contents: read
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      new: ${{ steps.version.outputs.new }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: version
+        name: Is this version on npm yet?
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if npm view "@keyhole-koro/paper-in-paper@${version}" version >/dev/null 2>&1; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "${version} is already on npm; nothing to publish."
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    needs: check
+    if: needs.check.outputs.new == 'true'
+    uses: ./.github/workflows/ci.yml
+
   publish:
-    if: github.ref == 'refs/heads/publish'
+    needs: [check, test]
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-
+      contents: write # to push the v<version> tag
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Publish
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          node-version: 24
+          cache: npm
+          # No registry-url: it writes an .npmrc with _authToken=${NODE_AUTH_TOKEN}, and npm then
+          # sends that (empty) token instead of using trusted publishing.
+      - name: Use npm 11 (trusted publishing needs 11.5.1 or later)
+        run: npm install -g npm@11 && npm --version
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish --access public
+      - name: Tag the release
+        run: |
+          git tag "v${{ needs.check.outputs.version }}"
+          git push origin "v${{ needs.check.outputs.version }}"

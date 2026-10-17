@@ -9,6 +9,15 @@ render `<PaperCanvas>`, and mutate state by dispatching `Command`s (imperatively
 through a ref, or by letting the canvas drive itself through built-in
 interactions).
 
+![Papers opened inside one another: a root paper, a child, and a grandchild opened inside the child](docs/images/nested.png)
+
+| Start from one paper | Open topics side by side |
+|---|---|
+| ![The demo's root paper with links to child topics](docs/images/overview.png) | ![Two child papers opened next to the root, each in its own colour](docs/images/siblings.png) |
+
+The screenshots come from the demo in `src/demo` (`npm run dev`). Retake them after UI changes
+with `npm run screenshots` (once: `npx playwright install chromium`).
+
 ## Install
 
 ```bash
