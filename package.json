@@ -1,9 +1,11 @@
 {
   "name": "@keyhole-koro/paper-in-paper",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": false,
   "type": "module",
   "description": "React library for hierarchical paper tree visualization with drag-and-drop",
+  "license": "MIT",
+  "author": "Keyhole-Koro",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Keyhole-Koro/paper-in-paper.git"

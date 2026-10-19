@@ -280,3 +280,7 @@ npm run build    # build the library (dist/)
 npm run test     # vitest
 npm run lint     # eslint
 ```
+
+## License
+
+MIT
