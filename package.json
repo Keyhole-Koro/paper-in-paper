@@ -4,6 +4,14 @@
   "private": false,
   "type": "module",
   "description": "React library for hierarchical paper tree visualization with drag-and-drop",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Keyhole-Koro/paper-in-paper.git"
+  },
+  "homepage": "https://github.com/Keyhole-Koro/paper-in-paper#readme",
+  "bugs": {
+    "url": "https://github.com/Keyhole-Koro/paper-in-paper/issues"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.mjs",
