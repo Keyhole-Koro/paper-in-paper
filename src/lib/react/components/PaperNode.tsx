@@ -1,117 +1,49 @@
-import { useEffect, useRef } from 'react';
+import { memo, useMemo } from 'react';
 import type { PaperId } from '../../core/types';
-import { usePaperStoreSelector } from '../context/PaperStoreContext';
-import { useDrag } from '../context/DragContext';
-import { useDebug } from '../context/DebugContext';
-import { useLayoutEntry } from '../context/LayoutContext';
-import type { PaperColorContext } from '../internal/paperColors';
-import { derivePaperNodeRenderModel } from '../internal/paperNodeRenderModel';
+import { useCanvasOptions } from '../context/CanvasOptionsContext';
+import { getPaperTone, resolvePaperColorContext, type PaperColorContext } from '../internal/paperColors';
+import { useLayoutEntry, useStoreValue } from '../store/storeContext';
 import { PaperNodeFrame } from './PaperNodeFrame';
-import { getEffectiveAttention } from '../../core/attention';
-import type { NodeVisibilityState } from '../../core/nodeVisibility';
-import { deriveNodeVisibilityState } from '../../core/nodeVisibility';
-
-function shallowEqualNodeSelection(
-  a: {
-    config: any;
-    paper: any;
-    nodeVisibility: NodeVisibilityState;
-    parentVisibility: NodeVisibilityState | null;
-    isFocused: boolean;
-    effectiveAttention: number;
-  },
-  b: {
-    config: any;
-    paper: any;
-    nodeVisibility: NodeVisibilityState;
-    parentVisibility: NodeVisibilityState | null;
-    isFocused: boolean;
-    effectiveAttention: number;
-  },
-) {
-  return (
-    a.config === b.config &&
-    a.paper === b.paper &&
-    a.nodeVisibility === b.nodeVisibility &&
-    a.parentVisibility === b.parentVisibility &&
-    a.isFocused === b.isFocused &&
-    a.effectiveAttention === b.effectiveAttention
-  );
-}
 
 interface PaperNodeProps {
   nodeId: PaperId;
   parentId: PaperId | null;
-  inheritedColor?: PaperColorContext | null;
-  overrideCss?: string;
+  inheritedColor: PaperColorContext | null;
 }
 
-export function PaperNode({ nodeId, parentId, inheritedColor = null, overrideCss }: PaperNodeProps) {
-  const { session, insertTarget, registerRoom } = useDrag();
-  const roomRef = useRef<HTMLDivElement>(null);
-  const debug = useDebug();
-
+/**
+ * One paper. Subscribes to its own layout entry, its paper record and whether it is focused —
+ * nothing else — so a change elsewhere in the tree does not re-render it.
+ */
+export const PaperNode = memo(function PaperNode({ nodeId, parentId, inheritedColor }: PaperNodeProps) {
   const entry = useLayoutEntry(nodeId);
-  const parentEntry = useLayoutEntry(parentId);
-  const { config, paper, nodeVisibility, parentVisibility, isFocused, effectiveAttention } = usePaperStoreSelector(
-    ({ state, config }) => {
-      const paper = state.paperMap.get(nodeId);
-      const isFocused = state.focusedNodeId === nodeId;
-      const nodeVisibility = deriveNodeVisibilityState(nodeId, state);
-      const parentVisibility = parentId ? deriveNodeVisibilityState(parentId, state) : null;
-      const effectiveAttention = getEffectiveAttention(state, nodeId, config, Date.now());
-      return {
-        config,
-        paper,
-        nodeVisibility,
-        parentVisibility,
-        isFocused,
-        effectiveAttention,
-      };
-    },
-    shallowEqualNodeSelection,
+  const paper = useStoreValue((snapshot) => snapshot.state.paperMap.get(nodeId));
+  const isFocused = useStoreValue((snapshot) => snapshot.state.focusedNodeId === nodeId);
+  const headerHeight = useStoreValue((snapshot) => snapshot.config.paperNode.headerHeight);
+  const { colorScheme } = useCanvasOptions();
+
+  const hue = paper?.hue;
+  const saturationScale = paper?.saturationScale;
+  const color = useMemo(
+    () => resolvePaperColorContext(hue, inheritedColor, saturationScale),
+    [hue, saturationScale, inheritedColor],
+  );
+  const tone = useMemo(
+    () => getPaperTone(color, { isRoot: parentId === null, isFocused, scheme: colorScheme }),
+    [color, parentId, isFocused, colorScheme],
   );
 
-  useEffect(() => {
-    registerRoom(nodeId, roomRef.current);
-    return () => registerRoom(nodeId, null);
-  }, [nodeId, registerRoom]);
-
-  if (!paper) return null;
-
-  const renderModel = derivePaperNodeRenderModel({
-    nodeId,
-    parentId,
-    config,
-    paper,
-    entry,
-    parentEntry,
-    session,
-    insertTarget,
-    inheritedColor,
-    isFocused,
-    nodeVisibility,
-    parentVisibility,
-    effectiveAttention,
-    debug,
-  });
-
+  if (!paper || !entry) return null;
   return (
     <PaperNodeFrame
       nodeId={nodeId}
       parentId={parentId}
-      paper={renderModel.paper}
-      layout={renderModel.layout}
-      tone={renderModel.tone}
-      inheritedColor={renderModel.inheritedColor}
-      overrideCss={overrideCss}
-      currentShare={renderModel.currentShare}
-      isFocused={renderModel.isFocusedView}
-      isDragTarget={renderModel.isDragTargetView}
-      layoutPolicy={renderModel.view.layoutPolicy}
-      debugBadge={renderModel.debugBadge}
-      roomRef={roomRef}
-      insertBeforeRect={renderModel.insertBeforeRect}
+      paper={paper}
+      entry={entry}
+      tone={tone}
+      color={color}
+      isFocused={isFocused}
+      headerHeight={headerHeight}
     />
   );
-}
+});

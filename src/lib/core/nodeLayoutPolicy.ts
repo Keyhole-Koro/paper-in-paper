@@ -1,6 +1,6 @@
 import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
 import type { PaperId, PaperMap } from './types';
-import { getOpenChildIds } from './expansion';
+import { getVisibleChildIds } from './expansion';
 import {
   deriveNodeVisibilityState,
   type NodeVisibilityContext,
@@ -36,48 +36,54 @@ export function deriveNodeDisplayMode(
   return hasOpenChildren ? 'indexed-branch' : 'indexed-leaf';
 }
 
+const EXPANDED = (headerHeight: number): NodeLayoutPolicy => ({
+  mode: 'expanded',
+  hasHeader: true,
+  hasContent: true,
+  showsIndexLabel: false,
+  reservesRoom: true,
+  headerHeight,
+  contentDemandEnabled: true,
+  childRoomEnabled: true,
+});
+
+const INDEXED_BRANCH: NodeLayoutPolicy = {
+  mode: 'indexed-branch',
+  hasHeader: false,
+  hasContent: false,
+  showsIndexLabel: true,
+  reservesRoom: true,
+  headerHeight: 0,
+  contentDemandEnabled: false,
+  childRoomEnabled: true,
+};
+
+const INDEXED_LEAF: NodeLayoutPolicy = {
+  mode: 'indexed-leaf',
+  hasHeader: false,
+  hasContent: false,
+  showsIndexLabel: true,
+  reservesRoom: false,
+  headerHeight: 0,
+  contentDemandEnabled: false,
+  childRoomEnabled: false,
+};
+
+let expandedCache: { headerHeight: number; policy: NodeLayoutPolicy } | null = null;
+
 export function deriveNodeLayoutPolicyFromVisibility(
   hasOpenChildren: boolean,
   visibility: NodeVisibilityState,
   config: PaperCanvasConfig,
 ): NodeLayoutPolicy {
   const mode = deriveNodeDisplayMode(hasOpenChildren, visibility);
-  if (mode === 'expanded') {
-    return {
-      mode,
-      hasHeader: true,
-      hasContent: true,
-      showsIndexLabel: false,
-      reservesRoom: true,
-      headerHeight: config.paperNode.headerHeight,
-      contentDemandEnabled: true,
-      childRoomEnabled: true,
-    };
+  if (mode === 'indexed-branch') return INDEXED_BRANCH;
+  if (mode === 'indexed-leaf') return INDEXED_LEAF;
+  const headerHeight = config.paperNode.headerHeight;
+  if (expandedCache?.headerHeight !== headerHeight) {
+    expandedCache = { headerHeight, policy: EXPANDED(headerHeight) };
   }
-
-  if (mode === 'indexed-branch') {
-    return {
-      mode,
-      hasHeader: false,
-      hasContent: false,
-      showsIndexLabel: true,
-      reservesRoom: true,
-      headerHeight: 0,
-      contentDemandEnabled: false,
-      childRoomEnabled: true,
-    };
-  }
-
-  return {
-    mode,
-    hasHeader: false,
-    hasContent: false,
-    showsIndexLabel: true,
-    reservesRoom: false,
-    headerHeight: 0,
-    contentDemandEnabled: false,
-    childRoomEnabled: false,
-  };
+  return expandedCache.policy;
 }
 
 export function deriveNodeLayoutPolicy(
@@ -85,7 +91,7 @@ export function deriveNodeLayoutPolicy(
   context: NodeLayoutPolicyContext,
   config: PaperCanvasConfig,
 ): NodeLayoutPolicy {
-  const hasOpenChildren = getOpenChildIds(context.expansionMap, nodeId).length > 0;
+  const hasOpenChildren = getVisibleChildIds(context.paperMap, context.expansionMap, nodeId).length > 0;
   const visibility = deriveNodeVisibilityState(nodeId, context);
   return deriveNodeLayoutPolicyFromVisibility(hasOpenChildren, visibility, config);
 }

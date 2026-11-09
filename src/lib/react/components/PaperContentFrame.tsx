@@ -1,225 +1,85 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import type { ContentNode, PaperContent, PaperId } from '../../core/types';
-import type { PaperContentEvent } from '../internal/iframeBridge';
-import { useIframeBridge } from '../hooks/useIframeBridge';
-import { usePaperDispatch, usePaperStoreSelector } from '../context/PaperStoreContext';
-import { useDrag } from '../context/DragContext';
-import { useLoadImageUrl } from '../context/LoadImageUrlContext';
-import { handleLoadImage } from '../internal/loadImage';
-import type { PaperContentHtmlMapEntry } from '../internal/paperContentHtml';
-import { calcContentFontSize, deriveHtmlPresentation } from '../internal/paperContentHtml';
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import { isContentNode } from '../../core/contentMass';
+import type { ContentNode, Paper, PaperId } from '../../core/types';
+import { useCanvasOptions } from '../context/CanvasOptionsContext';
+import { openPaperLink } from '../internal/openPaperLink';
+import type { PaperTone } from '../internal/paperColors';
+import { usePaperStoreApi } from '../store/storeContext';
 import { PaperContentNodes } from './PaperContentNodes';
+import { PaperHtmlContent } from './PaperHtmlContent';
+import { themeFromTone, type PaperContentTheme } from '../internal/contentTheme';
 
-export interface PaperContentTheme {
-  surface: string;
-  surfaceAlt: string;
-  surfaceRaised: string;
-  text: string;
-  mutedText: string;
-  divider: string;
-  linkBackground: string;
-  linkBackgroundHover: string;
-  linkBorder: string;
-  linkText: string;
-}
+export type { PaperContentTheme };
 
 interface PaperContentFrameProps {
   nodeId: PaperId;
-  content: PaperContent;
-  theme: PaperContentTheme;
-  overrideCss?: string;
+  paper: Paper;
+  tone: PaperTone;
 }
 
-const EMPTY_OPEN_IDS: PaperId[] = [];
-const EMPTY_CHILD_TITLES = new Map<PaperId, string>();
-
-function shallowEqualContentSelection(
-  a: {
-    nodeTitle: string;
-    childTitles: Map<PaperId, string>;
-    openIds: PaperId[];
-  },
-  b: {
-    nodeTitle: string;
-    childTitles: Map<PaperId, string>;
-    openIds: PaperId[];
-  },
-) {
-  if (a.nodeTitle !== b.nodeTitle) return false;
-  if (a.openIds !== b.openIds) return false;
-  if (a.childTitles.size !== b.childTitles.size) return false;
-  for (const [id, title] of a.childTitles) {
-    if (b.childTitles.get(id) !== title) return false;
-  }
-  return true;
+function isContentNodeList(content: unknown): content is ContentNode[] {
+  return Array.isArray(content) && content.every(isContentNode);
 }
 
-export function PaperContentFrame({ nodeId, content, theme, overrideCss }: PaperContentFrameProps) {
-  const dispatch = usePaperDispatch();
-  const { startDrag, isDragging } = useDrag();
-  const loadImageUrl = useLoadImageUrl();
-  const [height, setHeight] = useState(60);
-  const lastHeightRef = useRef(60);
-  // Tracks the live iframe element so loadImage replies can be posted back into
-  // it. Kept in sync by composing with the bridge's ref callback below.
-  const frameElRef = useRef<HTMLIFrameElement | null>(null);
-  const isStructured = Array.isArray(content);
-  const isHtmlString = typeof content === 'string';
-  const { nodeTitle, childTitles, openIds } = usePaperStoreSelector(({ state }) => {
-    const paper = state.paperMap.get(nodeId);
-    if (!paper) {
-      return { nodeTitle: nodeId, childTitles: EMPTY_CHILD_TITLES, openIds: EMPTY_OPEN_IDS };
-    }
-    const childTitles = new Map<PaperId, string>();
-    for (const childId of paper.childIds) {
-      childTitles.set(childId, state.paperMap.get(childId)?.title ?? childId);
-    }
-    return {
-      nodeTitle: paper.title,
-      childTitles,
-      openIds: state.expansionMap.get(nodeId)?.openChildIds ?? EMPTY_OPEN_IDS,
-    };
-  }, shallowEqualContentSelection);
+/** Renders a paper's content in the form it comes in: HTML string, ContentNode[] or React. */
+export function PaperContentFrame({ nodeId, paper, tone }: PaperContentFrameProps) {
+  const store = usePaperStoreApi();
+  const { overrideCss } = useCanvasOptions();
+  const content = paper.content;
+  const theme = themeFromTone(tone);
 
-  const htmlPresentation = useMemo(() => {
-    if (!isHtmlString) {
-      return { finalContent: '', fontSize: calcContentFontSize(0) };
-    }
-    const paperMap = new Map<PaperId, PaperContentHtmlMapEntry>();
-    paperMap.set(nodeId, {
-      title: nodeTitle,
-      childIds: Array.from(childTitles.keys()),
-    });
-    for (const [childId, childTitle] of childTitles) {
-      paperMap.set(childId, { title: childTitle, childIds: [] });
-    }
-    return deriveHtmlPresentation(content, nodeId, paperMap);
-  }, [content, isHtmlString, nodeId, nodeTitle, childTitles]);
-
-  const handleEvent = useCallback(
-    (event: PaperContentEvent) => {
-      if (event.type === 'open') {
-        dispatch({ type: 'OPEN_NODE', parentId: nodeId, childId: event.paperId });
-      } else if (event.type === 'resize') {
-        if (Math.abs(lastHeightRef.current - event.height) < 8) return;
-        lastHeightRef.current = event.height;
-        setHeight(event.height);
-        dispatch({ type: 'REPORT_CONTENT_HEIGHT', nodeId, height: event.height });
-      } else if (event.type === 'dragstart') {
-        const title = childTitles.get(event.paperId);
-        if (!title) return;
-        startDrag(
-          { draggedPaperId: event.paperId, sourceParentId: nodeId, mode: 'content-link', draggedTitle: title },
-          { x: event.clientX, y: event.clientY },
-        );
-      } else if (event.type === 'loadImage') {
-        handleLoadImage(loadImageUrl, event.fileId, (message) => {
-          frameElRef.current?.contentWindow?.postMessage(message, '*');
-        });
-      }
-    },
-    [nodeId, dispatch, startDrag, childTitles, loadImageUrl],
-  );
-
-  const { iframeRef, srcDoc } = useIframeBridge({
-    content: htmlPresentation.finalContent,
-    theme,
-    fontSize: htmlPresentation.fontSize,
-    overrideCss,
-    openIds,
-    onEvent: handleEvent,
-  });
-
-  // Compose the bridge's ref callback with our element tracker so we can post
-  // setImageUrl replies back into this specific iframe.
-  const setFrameRef = useCallback(
-    (el: HTMLIFrameElement | null) => {
-      frameElRef.current = el;
-      iframeRef(el);
-    },
-    [iframeRef],
-  );
-
-  // ContentNode[] path
-  if (isStructured) {
+  if (typeof content === 'string') {
     return (
-      <PaperContentStructured
+      <PaperHtmlContent
         nodeId={nodeId}
-        nodes={content as ContentNode[]}
-        theme={theme}
-        onOpen={(paperId) => {
-          dispatch({ type: 'OPEN_NODE', parentId: nodeId, childId: paperId });
-        }}
+        html={content}
+        overrideCss={paper.overrideCss ?? overrideCss}
       />
     );
   }
 
-  // ReactNode path
-  if (!isHtmlString) {
-    return <PaperContentReact nodeId={nodeId} content={content} theme={theme} />;
+  if (isContentNodeList(content)) {
+    return (
+      <PaperContentNodes
+        nodes={content}
+        theme={theme}
+        onOpen={(paperId) => openPaperLink(store, nodeId, paperId)}
+      />
+    );
   }
 
-  return (
-    <iframe
-      ref={setFrameRef}
-      srcDoc={srcDoc}
-      style={{
-        width: '100%',
-        height,
-        border: 'none',
-        display: 'block',
-        pointerEvents: isDragging ? 'none' : 'auto',
-      }}
-      sandbox="allow-scripts"
-      title={`paper-content-${nodeId}`}
-    />
-  );
+  return <PaperContentReact nodeId={nodeId} content={content} theme={theme} />;
 }
-
-// --- ContentNode[] renderer ---
-
-interface PaperContentStructuredProps {
-  nodeId: PaperId;
-  nodes: ContentNode[];
-  theme: PaperContentTheme;
-  onOpen: (paperId: PaperId) => void;
-}
-
-function PaperContentStructured({ nodes, theme, onOpen }: PaperContentStructuredProps) {
-  return (
-    <div>
-      <PaperContentNodes nodes={nodes} theme={theme} onOpen={onOpen} />
-    </div>
-  );
-}
-
-// --- ReactNode renderer ---
 
 interface PaperContentReactProps {
   nodeId: PaperId;
-  content: Exclude<PaperContent, string | ContentNode[]>;
+  content: ReactNode;
   theme: PaperContentTheme;
 }
 
+/**
+ * React content. Elements with `data-paper-id` open (or reveal) that paper on click, Enter or
+ * Space; the CSS variables match the ones HTML content gets.
+ */
 function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
-  const dispatch = usePaperDispatch();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const store = usePaperStoreApi();
+  const { colorScheme } = useCanvasOptions();
+  const mix = colorScheme === 'dark' ? 'black' : 'white';
 
-  const handlePaperOpen = useCallback((e: React.MouseEvent | React.KeyboardEvent) => {
-    if (e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') return;
-    const target = (e.target as Element).closest('[data-paper-id]');
-    if (!target) return;
-    const paperId = target.getAttribute('data-paper-id');
+  const follow = (event: MouseEvent | KeyboardEvent) => {
+    const target = (event.target as Element | null)?.closest?.('[data-paper-id]');
+    const paperId = target?.getAttribute('data-paper-id');
     if (!paperId) return;
-    e.preventDefault();
-    dispatch({ type: 'OPEN_NODE', parentId: nodeId, childId: paperId });
-  }, [dispatch, nodeId]);
+    event.preventDefault();
+    openPaperLink(store, nodeId, paperId);
+  };
 
   return (
     <div
-      ref={containerRef}
-      onClick={handlePaperOpen}
-      onKeyDown={handlePaperOpen}
+      onClick={follow}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') follow(event);
+      }}
       style={{
         ['--surface' as string]: theme.surface,
         ['--surface-alt' as string]: theme.surfaceAlt,
@@ -229,9 +89,9 @@ function PaperContentReact({ nodeId, content, theme }: PaperContentReactProps) {
         ['--line' as string]: theme.divider,
         ['--link-bg' as string]: theme.linkBackground,
         ['--link-border' as string]: theme.linkBorder,
-        ['--soft-line' as string]: `color-mix(in srgb, ${theme.divider} 55%, white)`,
-        ['--panel' as string]: `color-mix(in srgb, ${theme.surfaceRaised} 88%, white)`,
-        ['--quote' as string]: `color-mix(in srgb, ${theme.linkBackground} 45%, white)`,
+        ['--soft-line' as string]: `color-mix(in srgb, ${theme.divider} 55%, ${mix})`,
+        ['--panel' as string]: `color-mix(in srgb, ${theme.surfaceRaised} 88%, ${mix})`,
+        ['--quote' as string]: `color-mix(in srgb, ${theme.linkBackground} 45%, ${mix})`,
         ['--accent' as string]: theme.linkText,
         color: theme.text,
         display: 'grid',

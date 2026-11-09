@@ -13,6 +13,8 @@ export default defineConfig({
     // Polyfills jsdom-missing observer APIs (ResizeObserver, etc.) the canvas
     // components reference on mount.
     setupFiles: ['./vitest.setup.ts'],
+    include: ['test/**/*.test.{ts,tsx}'],
+    restoreMocks: true,
   },
   build: {
     lib: {

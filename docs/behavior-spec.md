@@ -1,246 +1,166 @@
 # Paper in Paper Behavior Specification
 
-This document fixes the reference interaction behavior for Paper in Paper.
-Future design or implementation changes are expected to preserve the behaviors defined here unless this document is explicitly updated.
-
-## Initial State
-
-At startup, the application uses mock data as the initial state.
+This document fixes the reference interaction behavior for Paper in Paper. Changes to the
+design or implementation are expected to preserve it unless this document is updated.
 
 ## Core Concept
 
-Instead of showing a long document all at once, the system presents a recursive structure in which concepts inside the text can be expanded by clicking them.
-The goal is to let readers actively widen or narrow their reading scope as needed.
+Instead of showing a long document all at once, the canvas presents a recursive structure
+in which concepts inside the text can be expanded by clicking them, so readers widen or
+narrow their reading scope as they need.
 
-Example: `The C language uses pointers.` Clicking `pointers` expands that concept.
-
-## Scope
-
-This specification defines:
-
-- Tree structure and its invariants
-- Expand and collapse behavior
-- Size propagation behavior
-- Space management through automatic collapsing
-- Breadcrumb-based navigation
-- Reordering via drag and drop
-
-This specification does not fix:
-
-- Detailed animation timing
-- Visual styling such as colors, shadows, and spacing
-- The exact number of grid divisions
-- Internal component structure
+Example: `The C language uses pointers.` Clicking `pointers` opens that concept inside the
+current paper, next to the text that mentioned it.
 
 ## Tree Model
 
-Data is treated as a normalized graph of paper nodes.
+Data is a normalized map of papers. Each paper has `id`, `title`, `description`, `content`,
+`parentId` and `childIds`.
 
-Paper nodes are classified into two categories:
+Invariants (checked by `checkTreeInvariants`):
 
-- **Placed nodes**: nodes that appear in some parent's `childIds`
-- **Unplaced nodes**: nodes that belong to no parent and are shown in the sidebar
+- `id` is an opaque identifier; titles may repeat.
+- Exactly one placed paper has `parentId === null`: the root. Unplaced papers (in
+  `unplacedNodeIds`) are parentless too but are not part of the tree.
+- Every other paper appears in exactly one parent's `childIds`, and its `parentId` names
+  that parent.
+- The parent chain never loops.
+- The order of `childIds` is meaningful and preserved.
 
-Each paper contains:
-
-- `id`
-- `title`
-- `description`
-- `content`
-- `parentId`
-- `childIds`
-
-Global state:
-
-- `unplacedNodes`: an array of unplaced nodes displayed in the sidebar
-
-Invariants:
-
-- `id` is a random identifier and has no semantic meaning. Multiple nodes may share the same `title`
-- Exactly one node has `parentId === null`, and that node is the root
-- Every non-root node must belong to exactly one parent's `childIds` or to `unplacedNodes`
-- The order of `childIds` is meaningful and must be preserved
+No command can break these invariants: commands that would (moving a paper into its own
+subtree, attaching a placed paper, opening a non-child) are ignored.
 
 ## Content Model
 
-Each paper's `content` may contain arbitrary HTML and CSS.
+`content` is an HTML string, a React node, or structured `ContentNode[]`.
 
-Content is rendered inside an iframe.
+- HTML renders in a sandboxed iframe whose content security policy only allows the canvas's
+  bootstrap script (by nonce); scripts and inline handlers in the content do not run, nothing
+  in the frame can make network requests from script, and CSS cannot load remote stylesheets
+  or fonts. `http-equiv` pragmas are removed from the content.
+- A frame that shows anything but its own document (it navigated) or keeps reloading is
+  replaced by `labels.contentBlocked` until the content changes.
+- An element with `data-paper-id="<id>"` links to a paper. A link to a **child** opens it
+  inside the paper. A link to any **other known paper** (an ancestor, a sibling, a paper in
+  another branch) reveals that paper where it lives in the tree and focuses it. Unknown ids
+  are ignored.
+- Children the HTML does not link to are appended as links under a "Related" heading, so every
+  child stays reachable.
+- `childIds` is the source of truth; links are references.
 
-- The iframe fully isolates the paper's styles and JavaScript
-- Links to child papers inside the content are expressed with the `data-paper-id` attribute
+### Iframe ⇄ canvas messages
 
-```html
-<p>The C language uses <a data-paper-id="xxxx">pointers</a>.</p>
-```
+The bootstrap runs in `<head>`, before the content. It opens a `MessageChannel` and posts
+`{ type: 'pip:hello', secret }` with one port to the parent window; every other message
+travels over that port. The canvas adopts a port only from a hello whose source is the frame's
+current window and whose secret is the one built into the frame's current document (each
+document gets a new secret and CSP nonce).
 
-### Communication Between the Iframe and Its Parent
-
-Events inside the iframe are sent to the parent via `postMessage`.
-
-| Event | Sender | Payload |
+| Event | Direction | Payload |
 | --- | --- | --- |
-| Link click | iframe -> parent | `{ type: "open", paperId: "xxxx" }` |
-| Link drag start | iframe -> parent | `{ type: "dragstart", paperId: "xxxx" }` |
-| Content height change | iframe -> parent | `{ type: "resize", height: number }` |
+| Link click / Enter | frame → canvas | `{ type: 'open', paperId }` |
+| Link dragged past 5px | frame → canvas | `{ type: 'dragstart', paperId, clientX, clientY }` (frame coordinates) |
+| Pointer moved during that drag | frame → canvas | `{ type: 'dragmove', clientX, clientY }` |
+| Pointer released | frame → canvas | `{ type: 'dragend', clientX, clientY }` |
+| Escape / pointer cancel | frame → canvas | `{ type: 'dragcancel' }` |
+| Content height changed | frame → canvas | `{ type: 'resize', height }` |
+| Image marker found | frame → canvas | `{ type: 'loadImage', fileId }` |
+| Regular link clicked | frame → canvas | `{ type: 'openExternal', href }` |
+| Answer to a ping | frame → canvas | `{ type: 'pong', seq }` |
+| Document going (`pagehide`) | frame → canvas | `{ type: 'leaving' }` |
+| Open children changed | canvas → frame | `{ type: 'setOpenIds', openIds }` |
+| Image URL ready | canvas → frame | `{ type: 'setImageUrl', fileId, url }` |
+| Liveness check | canvas → frame | `{ type: 'ping', seq }` |
 
-- `childIds` is the source of truth, and `data-paper-id` entries in the content are only references to it
-- A node may appear in `childIds` even if the content does not include a link to it
+A gesture that starts in a frame stays in that frame, so the frame forwards it; the canvas
+converts frame coordinates to the page and only lets the frame that started a drag move, drop
+or cancel it.
 
-## Sidebar
-
-The sidebar displays the list of unplaced nodes.
-
-Behavior:
-
-- Clicking the `+` button creates a new unplaced node and appends it to `unplacedNodes`
-- Dragging a sidebar node into a room appends that node to the target parent's `childIds` and removes it from `unplacedNodes`
-- Nodes cannot be dragged back from a room into the sidebar; changing parents is done by dragging between rooms
-
-## Node Deletion
-
-- Deleting a node recursively deletes its entire subtree
-- Deleted nodes are removed from both `childIds` and `unplacedNodes`
-- The root node cannot be deleted
+After every hello, every load of the frame and every `leaving`, the canvas pings the current
+port. Unless a document of the canvas's own answers within 1.5 s, the frame shows something
+else (it navigated) and is replaced by `labels.contentBlocked`. `leaving` matters for pages
+that never finish loading: they never fire `load`. So is a document that loads more than six times in ten
+seconds (a refresh loop). Message shapes are validated; image loads are honoured only for
+`data-file-id` markers present in that paper's content; external links are handed to the host
+(`http(s)` and `mailto` only).
 
 ## Room Model
 
-Each paper node owns a "room" in which child papers are laid out spatially.
+Each paper owns a room below its title bar. The paper's own content and its open children
+share the room (see the layout spec); the content stays visible next to opened children.
+Closed children are not drawn; they are reached through links in the content.
 
-- The room is divided into a grid
-- Child papers are placed on that grid
-- Users can reposition children by dragging them
+## Expansion
 
-The paper node's content and its expanded child papers are displayed at the same time.
+Each parent keeps the ordered list of its open children (`openChildIds`); that order is the
+layout order. The children's elements keep the paper's `childIds` order in the DOM whatever
+the layout order (moving an element would reload the frames inside it); `data-child-index`
+gives each child's place in the layout, and keyboard focus follows the DOM order.
 
-- The content text remains visible at all times
-- When a child expands, it appears alongside the content
-- Readers can inspect child content without losing the current context
+- Opening a child appends it to the list, focuses it, and shields it from space management for
+  a few interactions.
+- Closing a child removes it and forgets everything that was open below it.
+- If the focused paper was inside what got closed, focus moves to the closing parent.
+- Open state may name papers that have not loaded yet (a restored view); it takes effect when
+  they arrive, and they are shielded like newly opened papers.
 
-Collapsed child nodes are shown inside the room as compact cards that display only the title.
+## Focus
 
-- Clicking a card expands that node
-- Hovering over a card shows its description in a popup
-- Cards can be dragged to change their position within the room
+`focusedNodeId` is the paper the reader is working with. Pressing a paper's title bar
+focuses it; so does opening, revealing, moving or reordering it. Keyboard: paper titles are
+buttons, Enter focuses.
 
-## Expansion State Model
+## Headers and Breadcrumbs
 
-Expansion state is managed per parent.
+A paper's title bar shows its parent's title, a separator, and its own title.
 
-Each parent may hold:
+- Clicking the parent's title closes everything open in the parent and focuses the parent.
+- Pin keeps the paper at least at its current share of the room; ✕ closes it and focuses
+  the parent; + (when the host supports it) creates a child.
 
-- `openChildIds`: the set of currently expanded child nodes
+## Space Management
 
-Global state:
+When a room gets cramped, papers give way in two stages: first the least important paper's
+content folds into an index label (its open children stay); if that is not enough, an
+indexed paper that still takes room is closed. Recently touched, pinned and focused papers
+are left alone, and a room's last paper is never taken away. Indexed papers that have been
+ignored for long (attention at or below `autoCloseThreshold`) are closed to keep the index
+short. Clicking an index label brings its paper back. Details in the layout spec.
 
-- `focusedNodeId`: the id of the most recently operated node
+## Drag and Drop
 
-Behavior:
+Papers are dragged by their title bar (not when `draggable` is false).
 
-- Expanding a child adds it to `openChildIds`
-- Expanding a child updates `focusedNodeId` to that child
-- Collapsing a child removes it from `openChildIds`
-- Collapsing a child clears the expansion state of its entire subtree
-- When a drag operation completes, `focusedNodeId` is updated to the moved node
+- Dropped on another paper's **body**, the paper moves inside that paper (a tree change,
+  reported through `onPaperMapChange`).
+- Dropped on a paper's **title bar**, or on free space in a room, it is placed next to that
+  paper in that room: before it from the leading half, after it from the trailing half.
+- Within the same room this is a reorder of the open papers only (view state); the tree does
+  not change.
+- A paper can never be dropped into itself or its own subtree; those rooms are not targets.
+- A host can veto any target with `canDrop`.
+- The target room is outlined and a line shows the insert position. Escape, a cancelled
+  pointer or the window losing focus end the drag without dropping.
+- A child link dragged out of the content works the same way; dropped in its own parent's
+  room it opens there.
+- Moving a paper keeps everything that was open inside it; changing parent clears its pin.
+- Keyboard alternative: Alt + arrow keys on a paper's title move it among its open siblings.
 
-## Size Propagation Model
+## Deletion
 
-The size of each paper node is a derived value, not authoritative state.
-
-- A leaf node's size is determined by the amount of content it contains
-- A parent node's size is determined by the layout result of its children inside the room
-
-Propagation behavior:
-
-- Expanding a child node increases its size
-- That size increase propagates upward as a space requirement for the parent's room
-- The requirement then continues upward through the ancestor chain toward the root
-
-## Access Timestamps
-
-Access timestamps are managed separately from expansion state.
-
-Behavior:
-
-- Expanding a node updates that node's access timestamp
-
-## Space Management (Automatic Collapse)
-
-The layout engine decides when a room is under pressure.
-
-When space becomes constrained inside a room:
-- Child nodes are adjusted in ascending order of recency, starting from the least recently accessed
-- Space is recovered in two stages:
-    1. **Content Indexing**: The paper's body content is hidden while keeping its room and children visible. This provides a stable way to gain space without moving other nodes.
-    2. **Auto Close**: The node is fully closed (clearing its expansion state) if hiding the content was not enough to resolve the space pressure.
-
-
-## Breadcrumb Behavior
-
-Breadcrumbs display the ancestor chain from `focusedNodeId` to the root in the format `root / A / A1`.
-
-- Even when multiple branches are expanded, only the currently focused branch is shown
-- The display does not change based on whether sibling nodes are expanded
-
-Behavior:
-
-- Clicking the breadcrumb at index `i` closes the branch below that breadcrumb
-- Clicking a breadcrumb sets `focusedNodeId` to the clicked node
-
-Example:
-
-- If `focusedNodeId` is `A1`, the breadcrumbs display `root / A / A1`
-- Clicking `A` closes `A1` and updates `focusedNodeId` to `A`
-- Clicking `root` closes `A` and updates `focusedNodeId` to `root`
-
-## Drag: Repositioning Within a Room
-
-Child nodes with the same parent can be freely rearranged inside that room. Both open and closed child nodes are draggable.
-
-- The tree structure does not change
-- Only the position within the grid changes
-
-Indicators:
-
-- Highlight the target grid position
-- Show a line indicating the insertion position
-
-### Dragging From a Content Link
-
-A `data-paper-id` link inside the content can be dragged and dropped onto a room's grid.
-
-- The iframe notifies the parent of a `dragstart` event via `postMessage`
-- The parent shows the drop target on the room grid
-- After drop, the target node is placed at the specified position and expanded by adding it to `openChildIds`
-
-## Drag: Changing Parent
-
-A node may be moved into another parent's room. This is a tree-structure change.
-
-- Only non-root nodes may be moved
-- The moved node's `parentId` is updated to the new parent
-- The node is removed from the source parent's `childIds`
-- The node is appended to the target parent's `childIds`
-- Multiple nodes may still share the same title because identity is based on `id`
-
-Indicators:
-
-- Highlight the destination room while dragging
-
-Expansion behavior during a move:
-
-- If the moved node was expanded under the source parent, it is removed from the source parent's `openChildIds`
-- The expansion state of the moved node's subtree is preserved
+- `cascade` removes the paper and everything below it; `lift` removes only the paper and
+  moves its children up into its place (open children stay open).
+- The root cannot be deleted. Focus moves off deleted papers.
 
 ## Reconstruction Guidelines
 
-- Tree state should be controllable from outside the component
-- Expansion state should also be externally controllable
-- Size should remain a derived value and must not become authoritative state
-- Drag hit testing should not own tree state
-- Each node should own its own space-propagation logic independently
+- Tree, open state and focus can be controlled from outside.
+- Sizes are derived, never stored.
+- Drag hit testing never owns tree state.
+- Invalid input degrades to "nothing happens", never to a broken tree or a crash.
 
 Related documents:
 
-- [React Architecture Considerations](./react-architecture-considerations.md)
 - [Layout Specification](./layout-spec.md)
+- [Commands](./commands.md)
+- [React Architecture](./react-architecture-considerations.md)

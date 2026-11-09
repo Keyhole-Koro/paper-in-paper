@@ -1,159 +1,134 @@
 import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
-import { getAttentionSnapshot, resolveInitialAttention } from './attention';
-import type { PaperId, PaperViewState } from './types';
+import { getEffectiveAttention, resolveInitialAttention } from './attention';
+import type { Paper, PaperId, PaperMap, PaperViewState } from './types';
 
 /**
- * Each new paper id needs entries in several id-keyed view-state collections
- * (attention, access, optionally protected). The reverse — DELETE_NODE — needs
- * to drop the same id from all of them. These helpers keep the lifecycle in
- * one place so that adding a new id-keyed collection only requires editing
- * here, not every command that creates or deletes nodes.
+ * Each paper id has entries in several id-keyed view-state collections (attention, access,
+ * protection, indexing). These helpers keep that lifecycle in one place, so adding a collection
+ * only means editing here, not every command that creates or removes papers.
  */
 
+type AttentionSlices = Pick<
+  PaperViewState,
+  'clock' | 'attentionMap' | 'attentionTimestampMap' | 'accessMap' | 'protectedUntilMap'
+>;
+
 export interface RegisterNodeOptions {
-  /**
-   * If true, also write `protectedUntilMap[id] = now + protectDurationMs`.
-   * Used when the user actively places a node (CREATE_CHILD, ATTACH) and we
-   * want to shield it from the auto-close heuristic for a moment.
-   */
+  /** Shield the paper from space management for `protectInteractions` ticks. */
   protect?: boolean;
 }
 
-export interface RegisteredViewState {
-  attentionMap: PaperViewState['attentionMap'];
-  attentionTimestampMap: PaperViewState['attentionTimestampMap'];
-  accessMap: PaperViewState['accessMap'];
-  protectedUntilMap: PaperViewState['protectedUntilMap'];
-}
-
+/** Gives a new paper its initial attention at the state's clock. */
 export function registerNode(
   state: PaperViewState,
-  id: PaperId,
+  paper: Paper,
   config: PaperCanvasConfig,
-  now: number,
   options: RegisterNodeOptions = {},
-): RegisteredViewState {
-  const attentionMap = new Map(state.attentionMap);
-  attentionMap.set(id, config.attention.initial);
-  const attentionTimestampMap = new Map(state.attentionTimestampMap);
-  attentionTimestampMap.set(id, now);
-  const accessMap = new Map(state.accessMap);
-  accessMap.set(id, now);
+): AttentionSlices {
+  const attentionMap = new Map(state.attentionMap).set(paper.id, resolveInitialAttention(paper, config));
+  const attentionTimestampMap = new Map(state.attentionTimestampMap).set(paper.id, state.clock);
+  const accessMap = new Map(state.accessMap).set(paper.id, state.clock);
   const protectedUntilMap = options.protect
-    ? new Map(state.protectedUntilMap).set(id, now + config.attention.protectDurationMs)
+    ? new Map(state.protectedUntilMap).set(paper.id, state.clock + config.attention.protectInteractions)
     : state.protectedUntilMap;
-  return { attentionMap, attentionTimestampMap, accessMap, protectedUntilMap };
-}
-
-export interface UnregisteredViewState {
-  attentionMap: PaperViewState['attentionMap'];
-  attentionTimestampMap: PaperViewState['attentionTimestampMap'];
-  accessMap: PaperViewState['accessMap'];
-  indexedContentIds: PaperViewState['indexedContentIds'];
+  return { clock: state.clock, attentionMap, attentionTimestampMap, accessMap, protectedUntilMap };
 }
 
 export interface TouchNodeOptions {
-  /**
-   * If true, also extend `protectedUntilMap[id]` so the node is shielded from
-   * the auto-close heuristic for `protectDurationMs`. Set this for "the user
-   * just opened/created this" interactions.
-   */
+  /** Also shield the paper from space management for `protectInteractions` ticks. */
   protect?: boolean;
 }
 
-export interface TouchedViewState {
-  attentionMap: PaperViewState['attentionMap'];
-  attentionTimestampMap: PaperViewState['attentionTimestampMap'];
-  accessMap: PaperViewState['accessMap'];
-  protectedUntilMap: PaperViewState['protectedUntilMap'];
-}
-
 /**
- * Record that the user interacted with an existing node: bump its attention
- * by `bonus`, refresh its timestamps, and optionally extend its protection
- * window. Used by OPEN_NODE / FOCUS_NODE / LABEL_CLICK_BOOST.
+ * Records one user interaction with an existing paper: the clock advances by one (so every other
+ * paper decays a step), then the paper gets `bonus` on top of its decayed attention.
  */
 export function touchNode(
   state: PaperViewState,
   id: PaperId,
   bonus: number,
   config: PaperCanvasConfig,
-  now: number,
   options: TouchNodeOptions = {},
-): TouchedViewState {
-  const attentionMap = new Map(state.attentionMap);
-  const attentionTimestampMap = new Map(state.attentionTimestampMap);
-  const current = getAttentionSnapshot(state, id, config, now).value;
-  attentionMap.set(id, Math.max(0, current + bonus));
-  attentionTimestampMap.set(id, now);
-  const accessMap = new Map(state.accessMap);
-  accessMap.set(id, now);
+): AttentionSlices {
+  const clock = state.clock + 1;
+  const current = getEffectiveAttention({ ...state, clock }, id, config);
+  const attentionMap = new Map(state.attentionMap).set(id, Math.max(0, current + bonus));
+  const attentionTimestampMap = new Map(state.attentionTimestampMap).set(id, clock);
+  const accessMap = new Map(state.accessMap).set(id, clock);
   const protectedUntilMap = options.protect
-    ? new Map(state.protectedUntilMap).set(id, now + config.attention.protectDurationMs)
+    ? new Map(state.protectedUntilMap).set(id, clock + config.attention.protectInteractions)
     : state.protectedUntilMap;
-  return { attentionMap, attentionTimestampMap, accessMap, protectedUntilMap };
+  return { clock, attentionMap, attentionTimestampMap, accessMap, protectedUntilMap };
 }
 
+/** Drops removed ids from every id-keyed collection. */
 export function unregisterNodes(
   state: PaperViewState,
-  removedIds: Iterable<PaperId>,
-): UnregisteredViewState {
-  const attentionMap = new Map(state.attentionMap);
-  const attentionTimestampMap = new Map(state.attentionTimestampMap);
-  const accessMap = new Map(state.accessMap);
-  const indexedContentIds = new Set(state.indexedContentIds);
+  removedIds: ReadonlySet<PaperId>,
+): Pick<PaperViewState, 'attentionMap' | 'attentionTimestampMap' | 'accessMap' | 'protectedUntilMap' | 'indexedContentIds'> {
+  return {
+    attentionMap: withoutIds(state.attentionMap, removedIds),
+    attentionTimestampMap: withoutIds(state.attentionTimestampMap, removedIds),
+    accessMap: withoutIds(state.accessMap, removedIds),
+    protectedUntilMap: withoutIds(state.protectedUntilMap, removedIds),
+    indexedContentIds: withoutIdsInSet(state.indexedContentIds, removedIds),
+  };
+}
+
+export function withoutIds<V>(map: Map<PaperId, V>, removedIds: ReadonlySet<PaperId>): Map<PaperId, V> {
+  let next: Map<PaperId, V> | null = null;
   for (const id of removedIds) {
-    attentionMap.delete(id);
-    attentionTimestampMap.delete(id);
-    accessMap.delete(id);
-    indexedContentIds.delete(id);
+    if (!map.has(id)) continue;
+    next ??= new Map(map);
+    next.delete(id);
   }
-  return { attentionMap, attentionTimestampMap, accessMap, indexedContentIds };
+  return next ?? map;
+}
+
+export function withoutIdsInSet(set: Set<PaperId>, removedIds: ReadonlySet<PaperId>): Set<PaperId> {
+  let next: Set<PaperId> | null = null;
+  for (const id of removedIds) {
+    if (!set.has(id)) continue;
+    next ??= new Set(set);
+    next.delete(id);
+  }
+  return next ?? set;
 }
 
 /**
- * Rebuild attentionMap/attentionTimestampMap to match a wholesale paperMap
- * replacement (UPSERT_PAPERS / MERGE_PAPERS / __SYNC_PAPER_MAP). Papers with
- * an explicit `attentionScore` get reset; others keep their existing values
- * and fall back to the config initial only when missing.
+ * Attention for a replaced paper map: new papers start at their initial attention, papers whose
+ * `attentionScore` changed are reset to it, and everything else keeps its earned attention.
+ * Unchanged maps keep their identity.
  */
 export function syncAttentionForPaperMap(
   state: PaperViewState,
-  nextPaperMap: PaperViewState['paperMap'],
+  nextPaperMap: PaperMap,
   config: PaperCanvasConfig,
-  now: number,
-): { attentionMap: PaperViewState['attentionMap']; attentionTimestampMap: PaperViewState['attentionTimestampMap'] } {
-  const attentionMap = new Map<PaperId, number>();
-  const attentionTimestampMap = new Map<PaperId, number>();
-  let attentionMutated = false;
-  let timestampMutated = false;
+): Pick<PaperViewState, 'attentionMap' | 'attentionTimestampMap' | 'accessMap'> {
+  let attentionMap: Map<PaperId, number> | null = null;
+  let attentionTimestampMap: Map<PaperId, number> | null = null;
+  let accessMap: Map<PaperId, number> | null = null;
 
   for (const [id, paper] of nextPaperMap) {
-    if (paper.attentionScore !== undefined) {
-      const nextValue = resolveInitialAttention(paper, config);
-      attentionMap.set(id, nextValue);
-      attentionTimestampMap.set(id, now);
-      if (state.attentionMap.get(id) !== nextValue) attentionMutated = true;
-      if (state.attentionTimestampMap.get(id) !== now) timestampMutated = true;
-      continue;
+    const previous = state.paperMap.get(id);
+    const isNew = !state.attentionMap.has(id);
+    const scoreChanged = previous !== undefined
+      && paper.attentionScore !== undefined
+      && paper.attentionScore !== previous.attentionScore;
+    if (!isNew && !scoreChanged) continue;
+    attentionMap ??= new Map(state.attentionMap);
+    attentionTimestampMap ??= new Map(state.attentionTimestampMap);
+    attentionMap.set(id, resolveInitialAttention(paper, config));
+    attentionTimestampMap.set(id, state.clock);
+    if (!state.accessMap.has(id)) {
+      accessMap ??= new Map(state.accessMap);
+      accessMap.set(id, state.clock);
     }
-    const prevValue = state.attentionMap.get(id);
-    const nextValue = prevValue ?? resolveInitialAttention(paper, config);
-    attentionMap.set(id, nextValue);
-    if (prevValue === undefined) attentionMutated = true;
-
-    const prevTs = state.attentionTimestampMap.get(id);
-    const nextTs = prevTs ?? now;
-    attentionTimestampMap.set(id, nextTs);
-    if (prevTs === undefined) timestampMutated = true;
   }
 
-  // If size also matches and nothing was added/changed, keep prior references.
-  const attentionSizeChanged = attentionMap.size !== state.attentionMap.size;
-  const timestampSizeChanged = attentionTimestampMap.size !== state.attentionTimestampMap.size;
-
   return {
-    attentionMap: attentionMutated || attentionSizeChanged ? attentionMap : state.attentionMap,
-    attentionTimestampMap: timestampMutated || timestampSizeChanged ? attentionTimestampMap : state.attentionTimestampMap,
+    attentionMap: attentionMap ?? state.attentionMap,
+    attentionTimestampMap: attentionTimestampMap ?? state.attentionTimestampMap,
+    accessMap: accessMap ?? state.accessMap,
   };
 }
