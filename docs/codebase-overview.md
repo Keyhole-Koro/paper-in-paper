@@ -5,349 +5,124 @@
 ```
 src/lib/
   config/
-    paperCanvasConfig.ts     設定型 + デフォルト値
+    paperCanvasConfig.ts     設定型 + デフォルト値 + 値ベースのキー
   core/                      純粋 TS ロジック（React 依存なし）
-    types.ts                 全データ型定義
-    nanoid.ts                ID 生成
-    tree.ts                  ツリー操作（add/move/remove/descendants）
-    expansion.ts             展開状態操作（open/close/walk）
-    expansionRules.ts        高レベル展開ルール（collapse/break chain）
+    types.ts                 データ型定義
+    tree.ts                  ツリー操作（循環安全な子孫/祖先探索、move/remove/add、checkTreeInvariants）
+    expansion.ts             展開状態操作（open/detach/close/prune、木と整合する子だけを返す getVisibleChildIds）
+    attention.ts             操作クロックによる注意度の減衰、倍率、保護判定
+    nodeRegistry.ts          id ごとの状態（注意度・アクセス・保護・インデックス）のライフサイクル
+    nodeVisibility.ts        expanded / indexed / closed の導出
+    nodeLayoutPolicy.ts      expanded / indexed-branch / indexed-leaf の表示ポリシー
+    contentMass.ts           本文量の推定（レイアウトの需要に使う）
+    layout.ts                需要スナップショット、部屋の分割、キャンバス全体のレイアウト
+    spaceManagement.ts       窮屈な部屋の解消（インデックス化 → 自動クローズ）を収束まで適用
     commands.ts              Command 型 + reduce + createInitialState
-    nodeLayoutPolicy.ts      indexed / branch / leaf の表示ポリシー導出
-    layout.ts                demand snapshot + roomLayout アルゴリズム
-    autoClose.ts             auto-close 候補選出
+    paperMapBuilder.ts       静的ツリー用ビルダー
+    nanoid.ts                id 生成（非セキュアコンテキスト向けフォールバック付き）
   react/
-    PaperCanvas.tsx          ルートコンポーネント・hook orchestration
+    PaperCanvas.tsx          公開コンポーネント。ストア生成、プロップ同期、コールバック、ハンドル
+    store/
+      createPaperStore.ts    外部ストア（state + 派生レイアウト + インデックスラベル）
+      storeContext.ts        useStoreValue / useLayoutEntry / usePaperStoreSelector / usePaperDispatch
+    drag/
+      dragStore.ts           ドラッグセッション・当たり判定・window リスナーを持つ外部ストア
+      dragContext.ts         useDragStore / useDragValue
     context/
-      PaperStoreContext      状態ストア・dispatch・controlled/uncontrolled 同期
-      LayoutContext          layoutMap + node 単位購読
-      DragContext            ドラッグセッション・ルーム登録・hit test
-      CreateChildContext     子ノード作成コールバック
-      DebugContext           デバッグ表示フラグ
-    hooks/
-      useRoomSize            ResizeObserver でコンテナサイズ追跡
-      useCanvasLayoutSnapshot canvas 全体の layout / demand snapshot 構築
-      useOverflowAutoClose   overflow 監視と INDEX_CONTENT / AUTO_CLOSE_NODE dispatch
-      useIndexLabels         左側 index label の packed layout
-      useIframeBridge        HTML コンテンツ用 iframe 管理
-    internal/
-      paperNodeView.ts       interaction / room size ViewModel 導出
-      paperNodeRenderModel.ts PaperNode 描画用 selector
-      paperContentHtml.ts    HTML content 表示用 helper
-      canvasDebug.ts         debug 文字列生成
-      paperColors.ts         HSL カラーテーマ
-      hitTest.ts             DOM ベースのドロップ先検出
-      iframeBridge.ts        srcDoc ビルダー + メッセージプロトコル
+      CanvasOptionsContext   表示オプション（debug, draggable, colorScheme, labels...）と最新コールバック
     components/
-      PaperNode              node 単位 selector を使う orchestration component
-      PaperNodeFrame         ダムレンダラー（header + room + 子 + アニメーション）
-      PaperHeader            ヘッダー（ドラッグ・フォーカス・close・add-child）
-      PaperBreadcrumbs       パンくずリスト
-      PaperContentFrame      コンテンツレンダラー（HTML/ReactNode/ContentNode[] の3形式）
-      PaperContentNodes      ContentNode[] 専用レンダラー
-      PaperCanvasDebugPanel  debug overlay
-      FloatingLayer          ドラッグゴースト
+      PaperNode              1 ペーパー。自分のレイアウト・データ・フォーカスだけを購読（memo）
+      PaperNodeFrame         枠・部屋・子・ドロップ表示
+      PaperHeader            タイトルバー（親のパンくず、フォーカス、ドラッグ、ピン、閉じる、追加）
+      PaperContentFrame      本文の 3 形式の振り分け
+      PaperHtmlContent       サンドボックス iframe（公開コンポーネント）
+      PaperContentNodes      ContentNode[] レンダラー
+      IndexLabel             左端のインデックスラベル
+      FloatingLayer          ドラッグのゴースト
+      PaperCanvasDebugPanel  デバッグ表示
+    hooks/
+      useIframeBridge        iframe との接続（ハンドシェイク、専用ポート、生存確認）
+      useMediaQuery          prefers-reduced-motion / prefers-color-scheme
+      useSiblingShare        兄弟間シェアのプレビュー（公開）
+      useCanvasSelector      キャンバス外からの購読（公開）
+    internal/
+      iframeBridge.ts        srcDoc（nonce の CSP 付き）、bootstrap スクリプト、イベント検証、リンク抽出
+      frameRegistry.ts       pip:hello を受け、送信元が現在の contentWindow のフレームへ渡す
+      childOrder.ts          子の DOM 順（childIds 順で固定）とレイアウト順
+      openPaperLink.ts       data-paper-id リンクの解決（子は OPEN、それ以外は REVEAL）
+      hitTest.ts             ドロップ先の判定
+      indexLabels.ts         ラベルの配置
+      paperColors.ts         HSL のトーン（ライト / ダーク）
+      contentTheme.ts        トーン → 本文の配色
+      loadImage.ts           画像マーカーの読み込み
+      canvasDebug.ts         デバッグ文字列
+test/                        vitest（core / react / helpers）
+e2e/                         Playwright（デモと harness.html に対するブラウザテスト）
 ```
 
 ---
 
 ## 状態モデル
 
-### PaperViewState（コアステート）
+### PaperViewState
 
-| フィールド | 型 | 説明 |
-|---|---|---|
-| `paperMap` | `Map<PaperId, Paper>` | 全ノードのデータ |
-| `expansionMap` | `Map<PaperId, { openChildIds }>`| 開いている子の一覧 |
-| `indexedContentIds`| `Set<PaperId>` | 本文が左ラベルへ退避しているノードの ID |
-| `attentionMap` | `Map<PaperId, number>` | ノードごとの attention 値 |
-| `attentionTimestampMap` | `Map<PaperId, number>` | lazy decay 用の最終更新時刻 |
-| `accessMap` | `Map<PaperId, number>` | 最終アクセス timestamp |
-| `protectedUntilMap` | `Map<PaperId, number>` | auto-close 保護期限 |
-| `focusedNodeId` | `PaperId \| null` | フォーカス中ノード |
-| `contentHeightMap` | `Map<PaperId, number>` | コンテンツ高さ（iframe resize 追跡用）|
-| `unplacedNodeIds` | `PaperId[]` | 未配置ノードのリスト |
-| `manualPlacementMap` | `Map<PaperId, ManualPlacement>` | 手動配置情報 |
+| フィールド | 説明 |
+|---|---|
+| `paperMap` | 全ノード |
+| `expansionMap` | 親ごとの開いている子（順序 = レイアウト順）。未読み込みの id を含んでよい |
+| `indexedContentIds` | 本文がインデックスラベルに退避しているノード |
+| `unplacedNodeIds` | 木に属していないノード |
+| `focusedNodeId` | フォーカス中のノード |
+| `clock` | 操作のクロック。開く・フォーカス・表示・移動・並べ替え・ラベル・作成で +1 |
+| `attentionMap` / `attentionTimestampMap` | 注意度の基準値と、それを設定したクロック値 |
+| `accessMap` | 最後に触れたクロック値（同点時の優先度） |
+| `protectedUntilMap` | このクロック値まで空間管理の対象外 |
 
-### attention の動き
+注意度は時刻ではなく操作のクロックで減衰するので、`state` だけからレイアウトが決まります（`Date.now()` を使わない）。
 
-- 初期値: `config.attention.initial`
-- 増加: `OPEN_NODE` / `FOCUS_NODE` / `LABEL_CLICK_BOOST`
-- 減衰: `attentionTimestampMap` を使った lazy decay
-- レイアウトには attention を直接使わず、`contentDemand` / `roomDemand` に変換して使う
+### 不変条件
 
-### ViewModel（PaperNode 内で導出）
+- ツリーの不変条件（`checkTreeInvariants`）はどのコマンド列でも崩れない
+- id ごとの状態は、存在するノードについてのみ持つ
+- レイアウトと描画は、木と整合する展開エントリだけをたどり、各ノードを一度しか訪れない
 
-| フィールド | 型 | 値 |
-|---|---|---|
-| `interactionMode` | `'idle' \| 'focused' \| 'drag-target'` | フォーカス・ドラッグ状態 |
-| `roomWidth` | `number` | allocatedRect.width - borderWidth |
-| `roomHeight` | `number` | allocatedRect.height - headerHeight - borderWidth |
-| `layoutPolicy`| `NodeLayoutPolicy` | `expanded / indexed-branch / indexed-leaf` の表示ルール |
+これらはランダムなコマンド列を流し込むテスト（`test/core/invariants.test.ts`）で検証しています。
 
 ---
 
-## レイアウトモデル
+## 更新の流れ
 
 ```
-allocatedRect      親が割り当てた矩形
-  └── room         allocatedRect から header + border を除いた領域
-        ├── contentRect   本文が占める部分（isContentIndexed なら面積 0）
-        └── childRects    open な各子ノードが占める部分
+ユーザー操作 / ホストのプロップ
+  → store.dispatch(command)
+  → reduce（純粋）
+  → settleSpace: レイアウト → 窮屈なら INDEX/AUTO_CLOSE を 1 つ適用 → … を収束まで
+  → スナップショット（state, config, rootId, layout, indexLabels）を差し替え
+  → 購読者へ同期的に通知（React は useSyncExternalStore で読む）
 ```
 
-### demand snapshot の計算（`layout.ts`）
-
-```
-contentDemand(node) = intrinsicContentHeight(node) * attentionMultiplier(node)
-roomDemand(node) = contentDemand(node) + Σ roomDemand(open children)
-```
-
-`DemandSnapshot` には次の派生値が入る。
-
-- `policyMap`
-- `contentDemandMap`
-- `roomDemandMap`
-- `effectiveAttentionMap`
-
-### indexed node の扱い
-
-- `indexed-branch`
-  - header なし
-  - contentRect は 0
-  - child room は残す
-  - 左側 `IndexLabel` を表示する
-- `indexed-leaf`
-  - header なし
-  - contentRect は 0
-  - parent layout 上の room も 0
-  - 左側 `IndexLabel` だけ残す
-
-### 自動スペース管理（`useOverflowAutoClose.ts`）
-
-面積が逼迫し `overflowChildCount > 0` となった場合、以下の2段階で自動調整が行われる。
-
-1.  **INDEX_CONTENT**: 重要度の低いノードの本文を畳み、スペースを空ける。
-2.  **AUTO_CLOSE_NODE**: 本文を畳んでもなお不足する場合、ノードを完全に閉じ（通常のカード化）、親の展開リストから外す。
-
-### shrink フォールバック（`layout.ts`）
-
-アスペクト比が minAR〜maxAR を外れた場合、roomDemand の低いノードから `SHRINK_STEP(0.84)` ずつ縮小。
-最大 `MAX_SHRINK_PASSES(6)` 回繰り返す。
+- レイアウトの各エントリは、前回と値が同じなら同じオブジェクトを使い回します。`PaperNode` は自分のエントリ・自分の `Paper`・自分がフォーカスされているか、だけを購読しているので、関係ない変更では再レンダリングされません。
+- ドラッグ状態は別のストアです。ポインタ移動で再レンダリングされるのはゴーストだけ、ドロップ先が変わったときはその部屋だけです。
+- `paperMap` などのプロップは `useLayoutEffect` でストアに同期します（描画前に反映されるので古いフレームは見えません）。
 
 ---
 
-## 直近の最適化
-
-### 5. node 単位購読を導入
-
-この最適化の狙いは、「1 node の状態変化で tree 全体の `PaperNode` が巻き込まれて再 render される範囲を減らす」こと。
-
-以前の `PaperNode` は次の2つを直接読んでいた。
-
-- `PaperStoreContext` の `state` 全体
-- `LayoutContext` の `layoutMap` 全体
-
-この構造だと、たとえば次のような局所的な変更でも再 render の波及範囲が広くなりやすい。
-
-- 1つの node の `focusedNodeId` 変更
-- 1つの node の `indexedContentIds` 変更
-- 1つの node の layout entry 更新
-- drag target の更新
-
-#### 何を追加したか
-
-##### `PaperStoreContext` の selector 層
-
-- `PaperStoreSelectorContext`
-- `usePaperStoreSelector()`
-
-`PaperStoreProvider` は reducer state をそのまま React context に入れるだけでなく、内部に小さな subscription store を持つ。
-
-- `getSnapshot(): { state, config }`
-- `subscribe(listener)`
-
-`usePaperStoreSelector()` はこの subscription store にぶら下がり、呼び出し側が必要な slice だけ選ぶ。
-
-```ts
-usePaperStoreSelector(({ state, config }) => {
-  return {
-    paper: state.paperMap.get(nodeId),
-    isFocused: state.focusedNodeId === nodeId,
-    nodeIsIndexed: state.indexedContentIds.has(nodeId),
-    parentIsIndexed: parentId ? state.indexedContentIds.has(parentId) : false,
-    effectiveAttention: getEffectiveAttention(state, nodeId, config, Date.now()),
-  };
-}, isEqual)
-```
-
-重要なのは、`PaperNode` が `state` 全体を直接受け取らず、selector の返り値だけを state として持つこと。
-
-##### `LayoutContext` の selector 層
-
-- `LayoutSelectorContext`
-- `useLayoutEntry(nodeId)`
-
-`LayoutContextProvider` も同じく subscription store を持つ。
-
-- `getSnapshot(): Map<PaperId, NodeLayoutEntry>`
-- `subscribe(listener)`
-
-`useLayoutEntry(nodeId)` は `layoutMap.get(nodeId)` だけを購読する。
-
-これにより `PaperNode` は
-
-- 自分の `entry`
-- 親の `entry`
-
-だけを読む。
-
-#### `PaperNode` がどう変わったか
-
-以前:
-
-- store 全体を読む
-- layoutMap 全体を読む
-- その場で tone / share / policy / debug badge を組み立てる
-
-現在:
-
-- `usePaperStoreSelector()` で current node に必要な state slice を読む
-- `useLayoutEntry(nodeId)` と `useLayoutEntry(parentId)` だけを読む
-- `derivePaperNodeRenderModel()` に渡して描画 props を作る
-
-つまり `PaperNode` は「global map を全部覗く component」から、「node 単位の selector をつなぐ component」へ役割が変わった。
-
-#### なぜこれで速くなるのか
-
-React context は value が変わると、その context を読んでいる subtree が広く再評価されやすい。
-
-特に recursive tree UI では、
-
-- node 数が多い
-- `PaperNode` が深く再帰する
-- drag / focus / auto-index で更新頻度が高い
-
-ので、context 丸読みはコストが目立ちやすい。
-
-node 単位購読にすると、
-
-- `paperMap` のうち current node に関係ない部分の変化
-- `layoutMap` のうち current node / parent node に関係ない部分の変化
-
-では `PaperNode` の selector 結果が変わらないため、再 render を抑えやすい。
-
-#### どこまで最適化したか
-
-今回の最適化で改善したのは主に `PaperNode` の巻き込み範囲。
-
-具体的には次の計算が node 単位へ局所化された。
-
-- current node の `paper`
-- current node の `focused` 判定
-- current node / parent node の `indexed` 判定
-- current node の `layout entry`
-- parent node の `layout entry`
-
-一方で、まだ全体計算のまま残っているものもある。
-
-- `PaperCanvas` の `layoutSnapshot` 構築
-- overflow 判定と `INDEX_CONTENT` / `AUTO_CLOSE_NODE` dispatch
-- debug パネル全体
-
-なので、これは「すべての再計算を止めた」最適化ではなく、「recursive node rendering の再 render 範囲を狭めた」最適化である。
-
-#### 実装上の注意点
-
-この方式は便利だが、selector 実装を雑にすると逆に無限更新や余計な再 render を起こしやすい。
-
-今回気をつけている点:
-
-- selector の購読更新は `subscribe(listener)` 経由だけにする
-- render ごとに変わる selector 関数を `useEffect` の依存に入れて `setState` しない
-- `usePaperStoreSelector()` は `isEqual` で前回値と比較して不要な更新を落とす
-- `useLayoutEntry(nodeId)` も `prev === next` 比較で局所更新に寄せる
-
-実際、途中で selector 用の `useEffect` が毎 render `setState` を叩いて update depth exceeded を起こしたため、その effect は削除して subscription 駆動に戻している。
-
-#### 今後の余地
-
-この最適化は `PaperNode` には効いているが、まだ次の余地がある。
-
-- `PaperBreadcrumbs`
-- `PaperContentFrame`
-- `PaperHeader`
-
-など、他の store 直読 component も必要なら selector 化できる。
-
-ただしコスパが最も高いのは recursive node 本体なので、まず `PaperNode` を node 単位購読へ変えた。
-
----
-
-## コンテンツの3形式
+## 本文の 3 形式
 
 | 型 | レンダラー | 特徴 |
 |---|---|---|
-| `string` | `<iframe>` + srcDoc | HTML コンテンツ。sandbox 内で動作 |
-| `ReactNode` | インライン div | React コンポーネントをそのまま埋め込む |
-| `ContentNode[]` | `PaperContentNodes` | 構造化データ。JSON シリアライザブル |
+| `string` | `PaperHtmlContent`（iframe + srcDoc） | サンドボックス + nonce の CSP。秘密値付きの MessageChannel で通信し、別ページに遷移したら表示を止める。高さは本文に合わせる |
+| `ReactNode` | インライン div | `data-paper-id` のクリック / Enter / Space をリンクとして扱う |
+| `ContentNode[]` | `PaperContentNodes` | JSON シリアライズ可能 |
 
 ---
 
-## 改善点
+## テスト
 
-### [Bug] expansionRules.ts の ruleOpen が誤実装
+| 場所 | 内容 |
+|---|---|
+| `test/core` | 各コマンド、ツリー・展開操作、注意度、レイアウトの性質（敷き詰め・比率・最小シェア）、空間管理、本文量推定、ランダムなコマンド列での不変条件 |
+| `test/react` | ストア、キャンバスの操作、プロップ同期とコールバック、再レンダリング回数、ドラッグ、iframe のハンドシェイク・遷移検知・ドラッグ転送、bootstrap スクリプト（スクリプト有効の jsdom で実行）、当たり判定、ラベル、フック |
+| `e2e` | 実ブラウザでのリンク、祖先リンク、CSP、外部リンク、ドラッグ、キーボード、小さい画面。`harness.html` ではテストごとのペーパーで、DOM clobbering、遷移の遮断、フレーム内から始まるドラッグ、StrictMode なしでの並べ替え後のリンク |
 
-```ts
-export function ruleOpen(parentId: PaperId): ExpansionRule {
-  return (map) => openChild(map, parentId, parentId); // parentId を childId にも渡している
-}
-```
-
-本来 `openChild(map, parentId, nodeId)` のはず。ただし `ruleOpen` は現在どこからも呼ばれていないため表面上は無害。
-
----
-
-### [Bug] DragContext のイベントリスナーが重複登録される可能性
-
-`handlePointerMove` / `handlePointerUp` が `useCallback` の外で定義されている通常関数。
-`startDrag` の `useCallback` に閉じ込められているが、`startDrag` 自体は再生成されないため実害は出にくい。
-ただし `endDrag` で `window.removeEventListener` を呼んでいる時点では関数参照が変わっている恐れがあり、リスナーが残り続けるケースがありうる。
-
----
-
-### [Dead code] CollapsedPaperNode が未使用
-
-`CollapsedPaperNode` コンポーネントはどこからも import されていない。
-
----
-
-### [Smell] PaperNode が ViewModel をすぐブール分解して渡している
-
-```ts
-const view = derivePaperNodeViewModel(...);
-const isFocusedView = view.interactionMode === 'focused';   // 再分解
-const isDragTargetView = view.interactionMode === 'drag-target';
-```
-
-ViewModel を作るメリットが薄い。PaperNodeFrame に `interactionMode` を直接渡すか、ViewModel 自体を渡す形に統一すべき。
-
----
-
-### [Smell] useIframeBridge の cleanup が `(el as any).__cleanup` ハック
-
-ref callback でマウント時にイベントを登録しているが、クリーンアップを DOM プロパティに直接格納している。
-ref オブジェクト + useEffect でクリーンアップを管理する標準パターンに変更できる。
-
----
-
-### [Smell] PaperContentFrame の height が二重管理
-
-ローカル `useState(60)` でも管理しつつ、`REPORT_CONTENT_HEIGHT` でストアにも送信。
-現在は iframe 自体の表示高さと、layout engine が使う `contentHeightMap` が別用途のため共存している。片方に寄せるなら、iframe 高さを完全にストア駆動にするか、逆に layout 側の需要計算だけへ責務を限定する整理が必要。
-
----
-
-### [考慮] content 3形式の管理コスト
-
-`string`（iframe）・`ReactNode`・`ContentNode[]` の3形式は、追加機能（検索・シリアライズ等）を実装するたびに3つ全てに対応が必要になる。長期的には `ContentNode[]` に一本化する方向が保守しやすい。
+`PIP_FUZZ_SEEDS=300 npx vitest run test/core/invariants.test.ts` でランダムテストのシード数を増やせます。

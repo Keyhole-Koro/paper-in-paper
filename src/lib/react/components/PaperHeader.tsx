@@ -1,10 +1,10 @@
-import { useRef } from 'react';
+import { useRef, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
+import { getVisibleChildIds } from '../../core/expansion';
 import type { PaperId } from '../../core/types';
-import { usePaperDispatch, usePaperStoreSelector } from '../context/PaperStoreContext';
-import { useDrag } from '../context/DragContext';
-import { useCreateChild } from '../context/CreateChildContext';
+import { useCanvasOptions } from '../context/CanvasOptionsContext';
+import { useDragStore } from '../drag/dragContext';
 import type { PaperTone } from '../internal/paperColors';
-import { PaperBreadcrumbs } from './PaperBreadcrumbs';
+import { usePaperStoreApi, useStoreValue } from '../store/storeContext';
 
 const DRAG_THRESHOLD = 5;
 
@@ -39,75 +39,145 @@ interface PaperHeaderProps {
   tone: PaperTone;
   isFocused: boolean;
   isPinned: boolean;
-  currentShare?: number;
+  height: number;
 }
 
-export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned, currentShare }: PaperHeaderProps) {
-  const { config } = usePaperStoreSelector(({ config }) => ({ config }));
-  const dispatch = usePaperDispatch();
-  const { startDrag } = useDrag();
-  const onCreateChild = useCreateChild();
+const iconButton = (color: string): CSSProperties => ({
+  font: 'inherit',
+  fontSize: 14,
+  width: 28,
+  height: 28,
+  display: 'grid',
+  placeItems: 'center',
+  color,
+  cursor: 'pointer',
+  lineHeight: 1,
+  padding: 0,
+  borderRadius: 6,
+  border: 'none',
+  background: 'transparent',
+  flexShrink: 0,
+});
+
+function stopPointer(event: PointerEvent) {
+  event.stopPropagation();
+}
+
+/**
+ * A paper's title bar. Pressing it focuses the paper; dragging it moves the paper (when the
+ * canvas allows dragging). The title is a button too, so keyboard users can focus a paper and
+ * move it among its siblings with Alt + arrow keys.
+ */
+export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned, height }: PaperHeaderProps) {
+  const store = usePaperStoreApi();
+  const dragStore = useDragStore();
+  const { labels, draggable, hasCreateChild, getCallbacks } = useCanvasOptions();
+  const parentTitle = useStoreValue((snapshot) =>
+    parentId === null ? null : snapshot.state.paperMap.get(parentId)?.title ?? null);
+  const press = useRef<{ x: number; y: number; dragged: boolean } | null>(null);
 
   const isRoot = parentId === null;
-  const pointerDown = useRef<{ x: number; y: number } | null>(null);
-  const didDrag = useRef(false);
+  const canMove = draggable && !isRoot;
 
-  function handlePointerDown(e: React.PointerEvent) {
-    if (isRoot || e.button !== 0) return;
-    pointerDown.current = { x: e.clientX, y: e.clientY };
-    didDrag.current = false;
-    e.currentTarget.setPointerCapture(e.pointerId);
+  const allowsReorder = () => {
+    if (!canMove || parentId === null) return false;
+    const canDrop = getCallbacks().canDrop;
+    return !canDrop || canDrop({ nodeId, sourceParentId: parentId, targetParentId: parentId, insertBeforeId: null }) !== false;
+  };
+
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    press.current = { x: event.clientX, y: event.clientY, dragged: false };
+    if (canMove) event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
-  function handlePointerMove(e: React.PointerEvent) {
-    if (!pointerDown.current || didDrag.current) return;
-    const dx = e.clientX - pointerDown.current.x;
-    const dy = e.clientY - pointerDown.current.y;
-    if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
-      didDrag.current = true;
-      startDrag(
-        { draggedPaperId: nodeId, sourceParentId: parentId!, mode: 'move-parent', draggedTitle: title },
-        { x: e.clientX, y: e.clientY },
-      );
-    }
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    const current = press.current;
+    if (!current || current.dragged || !canMove) return;
+    if (Math.hypot(event.clientX - current.x, event.clientY - current.y) <= DRAG_THRESHOLD) return;
+    current.dragged = true;
+    dragStore.startDrag(
+      { draggedPaperId: nodeId, sourceParentId: parentId, mode: 'move', draggedTitle: title },
+      { x: event.clientX, y: event.clientY },
+    );
   }
 
   function handlePointerUp() {
-    if (!didDrag.current) {
-      dispatch({ type: 'FOCUS_NODE', nodeId });
+    const current = press.current;
+    press.current = null;
+    if (current && !current.dragged) store.dispatch({ type: 'FOCUS_NODE', nodeId });
+  }
+
+  function handleTitleClick(event: MouseEvent) {
+    // Pointer presses are handled by the bar itself; this is keyboard activation.
+    if (event.detail === 0) store.dispatch({ type: 'FOCUS_NODE', nodeId });
+  }
+
+  function handleTitleKeyDown(event: KeyboardEvent) {
+    if (!event.altKey || parentId === null) return;
+    const back = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
+    const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown';
+    if (!back && !forward) return;
+    event.preventDefault();
+    if (!allowsReorder()) return;
+    const state = store.getState();
+    const siblings = getVisibleChildIds(state.paperMap, state.expansionMap, parentId);
+    const index = siblings.indexOf(nodeId);
+    if (index === -1) return;
+    if (back && index > 0) {
+      store.dispatch({ type: 'REORDER_WITHIN_PARENT', parentId, paperId: nodeId, insertBeforeId: siblings[index - 1] });
+    } else if (forward && index < siblings.length - 1) {
+      store.dispatch({ type: 'REORDER_WITHIN_PARENT', parentId, paperId: nodeId, insertBeforeId: siblings[index + 2] ?? null });
     }
-    pointerDown.current = null;
-    didDrag.current = false;
   }
 
-  function handleClose(e: React.MouseEvent | React.PointerEvent) {
-    e.stopPropagation();
-    if (isRoot || !parentId) return;
-    dispatch({ type: 'FOCUS_NODE', nodeId: parentId });
-    dispatch({ type: 'CLOSE_NODE', parentId, childId: nodeId });
+  function handleCollapseToParent(event: MouseEvent) {
+    event.stopPropagation();
+    if (parentId === null) return;
+    store.dispatchAll([
+      { type: 'CLOSE_CHILDREN', nodeId: parentId },
+      { type: 'FOCUS_NODE', nodeId: parentId },
+    ]);
   }
 
-  function handleAddChild(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (!onCreateChild) return;
-    onCreateChild(nodeId, ({ title, content, description = '', hue }) => {
-      dispatch({ type: 'CREATE_CHILD_NODE', parentId: nodeId, title, content, description, hue });
+  function handleClose(event: MouseEvent) {
+    event.stopPropagation();
+    if (parentId === null) return;
+    store.dispatchAll([
+      { type: 'CLOSE_NODE', parentId, childId: nodeId },
+      { type: 'FOCUS_NODE', nodeId: parentId },
+    ]);
+  }
+
+  function handleAddChild(event: MouseEvent) {
+    event.stopPropagation();
+    getCallbacks().onCreateChild?.(nodeId, ({ title: childTitle, content, description = '', hue, id }) => {
+      store.dispatch({ type: 'CREATE_CHILD_NODE', id, parentId: nodeId, title: childTitle, content, description, hue });
     });
   }
 
-  function stopPointerEvent(e: React.PointerEvent) {
-    e.stopPropagation();
-  }
-
-  function handlePinToggle(e: React.MouseEvent) {
-    e.stopPropagation();
+  function handlePinToggle(event: MouseEvent) {
+    event.stopPropagation();
     if (isRoot) return;
     if (isPinned) {
-      dispatch({ type: 'UNPIN_NODE', nodeId });
+      store.dispatch({ type: 'UNPIN_NODE', nodeId });
       return;
     }
-    dispatch({ type: 'PIN_NODE', nodeId, minShare: currentShare });
+    store.dispatch({ type: 'PIN_NODE', nodeId, minShare: currentShare(store.getSnapshot().layout, nodeId, parentId) });
   }
+
+  const crumbStyle: CSSProperties = {
+    background: 'none',
+    border: 'none',
+    font: 'inherit',
+    fontSize: 13,
+    padding: '0 2px',
+    borderRadius: 3,
+    whiteSpace: 'nowrap',
+    color: tone.mutedText,
+    cursor: 'pointer',
+    flexShrink: 0,
+  };
 
   return (
     <div
@@ -115,61 +185,74 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '8px 14px',
-        height: config.paperNode.headerHeight,
+        gap: 6,
+        padding: '0 8px 0 12px',
+        height,
         background: isFocused ? tone.headerBackgroundFocused : tone.headerBackground,
         borderBottom: `1px solid ${tone.divider}`,
-        cursor: isRoot ? 'default' : 'grab',
+        cursor: canMove ? 'grab' : 'default',
         userSelect: 'none',
         flexShrink: 0,
         boxSizing: 'border-box',
-        touchAction: 'none',
+        touchAction: canMove ? 'none' : 'auto',
         minWidth: 0,
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={() => {
+        press.current = null;
+      }}
     >
-      {!isRoot && parentId ? (
-        <PaperBreadcrumbs nodeId={nodeId} parentId={parentId} title={title} tone={tone} />
-      ) : (
-        <span
+      <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        {parentTitle !== null && (
+          <>
+            <button
+              type="button"
+              title={labels.collapseTo(parentTitle)}
+              onPointerDown={stopPointer}
+              onPointerUp={stopPointer}
+              onClick={handleCollapseToParent}
+              style={{ ...crumbStyle, maxWidth: '40%', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+              {parentTitle}
+            </button>
+            <span aria-hidden="true" style={{ margin: '0 3px', color: tone.mutedText, fontSize: 11, flexShrink: 0 }}>/</span>
+          </>
+        )}
+        <button
+          type="button"
+          aria-current={isFocused ? 'true' : undefined}
+          // Host callbacks are not called during render; the key handler still asks canDrop.
+          aria-description={canMove ? labels.paperTitleHint : undefined}
+          onClick={handleTitleClick}
+          onKeyDown={handleTitleKeyDown}
           style={{
-            fontWeight: 600,
-            fontSize: 14,
+            ...crumbStyle,
+            cursor: 'inherit',
             color: tone.title,
-            whiteSpace: 'nowrap',
+            fontSize: isRoot ? 14 : 13,
+            fontWeight: 600,
+            flexShrink: 1,
+            minWidth: 0,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            display: 'block',
-            minWidth: 0,
-            flex: 1,
+            textAlign: 'left',
           }}
         >
           {title}
-        </span>
-      )}
+        </button>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        {onCreateChild && (
+        {hasCreateChild && (
           <button
             type="button"
-            onPointerDown={stopPointerEvent}
-            onPointerUp={stopPointerEvent}
+            aria-label={labels.addChild}
+            title={labels.addChild}
+            onPointerDown={stopPointer}
+            onPointerUp={stopPointer}
             onClick={handleAddChild}
-            style={{
-              fontSize: 14,
-              color: tone.mutedText,
-              cursor: 'pointer',
-              lineHeight: 1,
-              width: 28,
-              height: 28,
-              display: 'grid',
-              placeItems: 'center',
-              padding: 0,
-              borderRadius: 6,
-              border: 'none',
-              background: 'transparent',
-            }}
+            style={iconButton(tone.mutedText)}
           >
             +
           </button>
@@ -177,23 +260,13 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned
         {!isRoot && (
           <button
             type="button"
-            aria-label={isPinned ? 'Unpin node' : 'Pin node'}
-            onPointerDown={stopPointerEvent}
-            onPointerUp={stopPointerEvent}
+            aria-label={isPinned ? labels.unpinPaper : labels.pinPaper}
+            aria-pressed={isPinned}
+            title={isPinned ? labels.unpinPaper : labels.pinPaper}
+            onPointerDown={stopPointer}
+            onPointerUp={stopPointer}
             onClick={handlePinToggle}
-            style={{
-              width: 28,
-              height: 28,
-              display: 'grid',
-              placeItems: 'center',
-              color: isPinned ? tone.accent : tone.mutedText,
-              cursor: 'pointer',
-              lineHeight: 1,
-              padding: 0,
-              borderRadius: 6,
-              border: 'none',
-              background: 'transparent',
-            }}
+            style={iconButton(isPinned ? tone.accent : tone.mutedText)}
           >
             <PinSymbol isPinned={isPinned} />
           </button>
@@ -201,24 +274,12 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned
         {!isRoot && (
           <button
             type="button"
-            aria-label="Close node"
-            onPointerDown={stopPointerEvent}
-            onPointerUp={stopPointerEvent}
+            aria-label={labels.closePaper}
+            title={labels.closePaper}
+            onPointerDown={stopPointer}
+            onPointerUp={stopPointer}
             onClick={handleClose}
-            style={{
-              width: 28,
-              height: 28,
-              display: 'grid',
-              placeItems: 'center',
-              fontSize: 12,
-              color: tone.mutedText,
-              cursor: 'pointer',
-              lineHeight: 1,
-              padding: 0,
-              borderRadius: 6,
-              border: 'none',
-              background: 'transparent',
-            }}
+            style={{ ...iconButton(tone.mutedText), fontSize: 12 }}
           >
             ✕
           </button>
@@ -226,4 +287,19 @@ export function PaperHeader({ nodeId, parentId, title, tone, isFocused, isPinned
       </div>
     </div>
   );
+}
+
+/** The share of its parent's room a paper fills right now (what pinning keeps it at). */
+function currentShare(
+  layout: { entries: Map<PaperId, { roomLayout: { childRects: Map<PaperId, { width: number; height: number }>; contentRect: { width: number; height: number } } }> },
+  nodeId: PaperId,
+  parentId: PaperId | null,
+): number | undefined {
+  if (parentId === null) return undefined;
+  const parent = layout.entries.get(parentId);
+  const rect = parent?.roomLayout.childRects.get(nodeId);
+  if (!parent || !rect) return undefined;
+  let area = parent.roomLayout.contentRect.width * parent.roomLayout.contentRect.height;
+  for (const child of parent.roomLayout.childRects.values()) area += child.width * child.height;
+  return area > 0 ? (rect.width * rect.height) / area : undefined;
 }

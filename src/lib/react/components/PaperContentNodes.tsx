@@ -1,5 +1,5 @@
 import type { ContentNode, PaperId } from '../../core/types';
-import type { PaperContentTheme } from './PaperContentFrame';
+import type { PaperContentTheme } from '../internal/contentTheme';
 
 interface Props {
   nodes: ContentNode[];
@@ -52,7 +52,11 @@ function Node({ node, onOpen, theme }: NodeProps) {
           role="button"
           tabIndex={0}
           onClick={() => onOpen(node.paperId)}
-          onKeyDown={(e) => e.key === 'Enter' && onOpen(node.paperId)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            onOpen(node.paperId);
+          }}
           style={{
             color: theme.linkText,
             background: theme.linkBackground,
@@ -75,7 +79,11 @@ function Node({ node, onOpen, theme }: NodeProps) {
           role="button"
           tabIndex={0}
           onClick={() => onOpen(node.paperId)}
-          onKeyDown={(e) => e.key === 'Enter' && onOpen(node.paperId)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            onOpen(node.paperId);
+          }}
           style={{
             border: `1px solid ${theme.linkBorder}`,
             borderRadius: 8,

@@ -1,12 +1,13 @@
 import { createPortal } from 'react-dom';
+import { buildCanvasDebugText, buildFocusedDebugText } from '../internal/canvasDebug';
+import { usePaperStoreApi, useStoreValue } from '../store/storeContext';
 
-export function PaperCanvasDebugPanel({
-  debugText,
-  onCopy,
-}: {
-  debugText: string;
-  onCopy: () => void;
-}) {
+/** Overlay with the focused paper's layout numbers; only mounted when `debug` is on. */
+export function PaperCanvasDebugPanel() {
+  const store = usePaperStoreApi();
+  const snapshot = useStoreValue((s) => s);
+  const text = buildFocusedDebugText(snapshot);
+
   return createPortal(
     <div
       style={{
@@ -39,7 +40,10 @@ export function PaperCanvasDebugPanel({
       >
         <strong style={{ fontSize: 11 }}>debug</strong>
         <button
-          onClick={onCopy}
+          type="button"
+          onClick={() => {
+            void navigator.clipboard?.writeText(buildCanvasDebugText(store.getSnapshot()));
+          }}
           style={{
             padding: '3px 8px',
             background: 'transparent',
@@ -54,7 +58,7 @@ export function PaperCanvasDebugPanel({
           copy
         </button>
       </div>
-      <div style={{ padding: '10px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{debugText}</div>
+      <div style={{ padding: '10px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{text}</div>
     </div>,
     document.body,
   );

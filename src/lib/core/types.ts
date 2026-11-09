@@ -25,20 +25,21 @@ export interface MinSize {
 }
 
 export interface PaperLayoutContext {
+  /** The paper's open children, in layout order. */
   openChildIds: PaperId[];
   focusedNodeId: PaperId | null;
   containerWidth: number;
   containerHeight: number;
-  /** layout関数から祖先・子孫の関係を判定したい時用。 */
+  /** For layout functions that need to look at ancestors or descendants. */
   paperMap: PaperMap;
-  /** 各 open child が表示に必要とする最小サイズ。ボトムアップに集計される。 */
+  /** The smallest size each open child should get (its minWidth/minHeight or the config default). */
   childMinSizes: Map<PaperId, MinSize>;
 }
 
 export interface PaperLayoutResult {
-  /** content area の比率（0〜1）。content + 全子shareの合計は1になることを期待。 */
+  /** Share of the room for the paper's own content (0–1). */
   contentShare: number;
-  /** 子ごとのshare（0〜1）。指定されない子は残り share を均等分配。 */
+  /** Share per child (0–1). Children left out split what remains equally. */
   childShares: Record<PaperId, number>;
 }
 
@@ -46,6 +47,7 @@ export type PaperLayoutFn = (ctx: PaperLayoutContext) => PaperLayoutResult;
 
 export interface PinnedLayout {
   minShare?: number;
+  /** Logical clock value when the paper was pinned. */
   pinnedAt?: number;
 }
 
@@ -55,18 +57,19 @@ export interface Paper {
   description: string;
   content: PaperContent;
   hue?: number;
-  /** HSL彩度の倍率（デフォルト1）。0でhueに依らず無彩色（白〜グレー）になる。子は継承する。 */
+  /** HSL saturation factor (default 1). 0 renders the paper neutral (white–grey) whatever its hue. Children inherit it. */
   saturationScale?: number;
+  /** Weight of this paper among its open siblings (default 1). */
   importance?: number;
-  /** content area が children area に対して占めるweight。デフォルト100。 */
+  /** Weight of the paper's own content against its open children, in percent (default 100). */
   contentImportance?: number;
-  /** 子ノードごとの最小share（0〜1）。子同士の間で計算される。余りがあれば1まで拡張される。 */
+  /** Minimum share (0–1) per open child. */
   childMinShares?: Record<PaperId, number>;
-  /** カスタムレイアウト関数。指定された場合はchildMinShares/contentImportanceより優先される。 */
+  /** Custom split of this paper's room. Takes precedence over contentImportance and childMinShares. */
   layout?: PaperLayoutFn;
-  /** content を表示するのに最低必要な幅（px）。auto-collapse 判定に使われる。 */
+  /** Narrowest this paper should get while open, in px (defaults to config.layout.minPaperWidth). */
   minWidth?: number;
-  /** content を表示するのに最低必要な高さ（px）。auto-collapse 判定に使われる。 */
+  /** Shortest this paper should get while open, in px (defaults to config.layout.minPaperHeight). */
   minHeight?: number;
   attentionScore?: number;
   pinnedLayout?: PinnedLayout;
@@ -83,26 +86,20 @@ export interface NodeExpansion {
   openChildSet?: ReadonlySet<PaperId>;
 }
 
+/**
+ * Open children per parent. The order of `openChildIds` is the order the children are laid out
+ * in. Entries may name papers that are not in the paper map yet (restored state); they take
+ * effect when the papers arrive.
+ */
 export type ExpansionMap = Map<PaperId, NodeExpansion>;
 
 export type UnplacedNodeIds = PaperId[];
 
 export type AttentionMap = Map<PaperId, number>;
+/** Logical clock value at which each paper's attention was last set. */
 export type AttentionTimestampMap = Map<PaperId, number>;
-
-export interface GridPosition {
-  x: number;
-  y: number;
-}
-
-export interface ManualPlacement {
-  positions: Map<PaperId, GridPosition>;
-}
-
-export type PlacementMap = Map<PaperId, ManualPlacement>;
-
+/** Logical clock value of each paper's last interaction. */
 export type AccessMap = Map<PaperId, number>;
-export type ImportanceMap = Map<PaperId, number>;
 
 export interface PaperViewState {
   paperMap: PaperMap;
@@ -110,10 +107,11 @@ export interface PaperViewState {
   indexedContentIds: Set<PaperId>;
   unplacedNodeIds: PaperId[];
   focusedNodeId: PaperId | null;
-  accessMap: AccessMap;
+  /** Logical clock: advances by one on every interaction that touches a paper. */
+  clock: number;
   attentionMap: AttentionMap;
   attentionTimestampMap: AttentionTimestampMap;
-  manualPlacementMap: PlacementMap;
-  contentHeightMap: Map<PaperId, number>;
+  accessMap: AccessMap;
+  /** Clock value until which space management leaves a paper alone. */
   protectedUntilMap: Map<PaperId, number>;
 }

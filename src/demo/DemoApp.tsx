@@ -326,10 +326,17 @@ function EchoChat({ initialPrompt }: { initialPrompt: string }) {
   );
 }
 
+// Playground switches: ?scheme=dark|system, ?drag=0, ?debug=1
+const params = new URLSearchParams(window.location.search);
+const scheme = params.get('scheme');
+const colorScheme = scheme === 'dark' || scheme === 'system' ? scheme : 'light';
+
 export default function DemoApp() {
   return (
     <PaperCanvas
-      debug={false}
+      debug={params.get('debug') === '1'}
+      draggable={params.get('drag') !== '0'}
+      colorScheme={colorScheme}
       paperMap={demoPaperMap}
       onCreateChild={(parentId, create) => {
         const parent = demoPaperMap.get(parentId);
