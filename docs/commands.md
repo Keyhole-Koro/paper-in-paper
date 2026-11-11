@@ -157,4 +157,3 @@ dispatch({ type: 'PIN_NODE', nodeId: 'abc', minShare: 0.35 }); // 0.05〜0.9 に
 | `SET_OPEN_STATE { expansionMap?, focusedNodeId? }` | 展開状態・フォーカスを置き換え。フォーカスや注意度の加算は行わず、新たに開いたノードを保護する |
 | `SET_UNPLACED { unplacedNodeIds }` | 未配置リストの置き換え |
 
-`__SYNC_PAPER_MAP` / `__SYNC_OPEN_STATE` / `__SYNC_UNPLACED` は同じ処理の旧名（非推奨）です。

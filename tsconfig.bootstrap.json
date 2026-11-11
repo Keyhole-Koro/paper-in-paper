@@ -1,0 +1,19 @@
+{
+  // The frame bootstrap is plain JavaScript (it ships as text, see srcDoc.ts), type-checked
+  // through its JSDoc. It runs in the frame, so it gets the DOM and nothing else.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": []
+  },
+  "files": ["src/lib/react/internal/frame/bootstrap.js"]
+}

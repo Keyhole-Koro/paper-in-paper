@@ -37,7 +37,7 @@
     "build": "tsc -p tsconfig.lib.json && node scripts/fix-dts-extensions.mjs dist/types && vite build",
     "build:demo": "tsc -b && vite build",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.lib.json --noEmit && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "tsc -p tsconfig.lib.json --noEmit && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.bootstrap.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

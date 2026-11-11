@@ -322,7 +322,6 @@ describe('SET_PAPER_MAP', () => {
   it('keeps the state when the map has the same papers', () => {
     const state = stateOf(papers());
     expect(reduce(state, { type: 'SET_PAPER_MAP', paperMap: new Map(state.paperMap) }, config)).toBe(state);
-    expect(reduce(state, { type: '__SYNC_PAPER_MAP', paperMap: state.paperMap }, config)).toBe(state);
   });
 
   it('keeps open state for papers that have not arrived yet, so restored state comes alive later', () => {
@@ -373,7 +372,6 @@ describe('SET_OPEN_STATE / SET_UNPLACED', () => {
   it('keeps the state when nothing changes', () => {
     const state = run(stateOf(papers()), [open('root', 'a')]);
     expect(reduce(state, { type: 'SET_OPEN_STATE', expansionMap: expansion({ root: ['a'] }) }, config)).toBe(state);
-    expect(reduce(state, { type: '__SYNC_OPEN_STATE', focusedNodeId: 'a' }, config)).toBe(state);
   });
 
   it('sets focus alone, and sets the unplaced list', () => {

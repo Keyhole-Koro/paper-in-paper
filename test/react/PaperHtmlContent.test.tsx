@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Paper } from '../../src/lib/core/types';
 import { buildPaperMap } from '../../src/lib/core/tree';
 import { PaperHtmlContent } from '../../src/lib/react/components/PaperHtmlContent';
-import { FRAME_CHECK_MS } from '../../src/lib/react/hooks/useIframeBridge';
+import { FRAME_CHECK_MS } from '../../src/lib/react/internal/frame/connection';
 import { connectFrame, fakeChannel, loadFrame, nonceOf, sayHello, secretOf } from '../helpers/frames';
 import { expansion } from '../helpers/papers';
 import { installRafQueue, renderCanvas, roomBox } from '../helpers/render';
@@ -57,7 +57,7 @@ describe('HTML content documents', () => {
     const body = doc.slice(doc.indexOf('<body>'));
     expect(head).toContain(`script-src 'nonce-${nonceOf(frame)}'`);
     expect(head).toContain(`<script nonce="${nonceOf(frame)}">`);
-    expect(head).toContain(`var SECRET = '${secretOf(frame)}'`);
+    expect(head).toContain(`const SECRET = '${secretOf(frame)}'`);
     expect(body).toContain('<h1>Report</h1>');
     expect(body).not.toContain('<script nonce');
     // "quiet" is not linked from the content, so it is appended, with its title escaped.

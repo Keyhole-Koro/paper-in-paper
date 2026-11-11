@@ -3,17 +3,12 @@ import type { PaperId } from '../../core/types';
 import { useCanvasOptions } from '../context/CanvasOptionsContext';
 import { useDragStore, useDragValue } from '../drag/dragContext';
 import { useIframeBridge, type FrameContext } from '../hooks/useIframeBridge';
-import {
-  appendRelatedLinks,
-  buildSrcDoc,
-  createFrameToken,
-  findImageMarkerIds,
-  safeExternalHref,
-  type PaperContentEvent,
-} from '../internal/iframeBridge';
+import { appendRelatedLinks, findImageMarkerIds, safeExternalHref } from '../internal/frame/contentHtml';
+import type { PaperContentEvent } from '../internal/frame/protocol';
+import { buildSrcDoc, createFrameToken } from '../internal/frame/srcDoc';
 import { handleLoadImage } from '../internal/loadImage';
 import { openPaperLink } from '../internal/openPaperLink';
-import { getPaperTone, resolvePaperColorContext, type PaperColorContext } from '../internal/paperColors';
+import { getPaperTone, resolveColorContextOf } from '../internal/paperColors';
 import { themeFromTone, type PaperContentTheme } from '../internal/contentTheme';
 import { usePaperStoreApi, usePaperStoreSelector, useStoreValue } from '../store/storeContext';
 import type { PaperStoreSnapshot } from '../store/createPaperStore';
@@ -58,21 +53,7 @@ function sameChildren(
 
 /** "hue|depth|saturation" of a paper's colour context, as a primitive selectors can return. */
 function colorKeyOf(snapshot: PaperStoreSnapshot, nodeId: PaperId): string {
-  const lineage = [];
-  const seen = new Set<PaperId>();
-  let id: PaperId | null = nodeId;
-  while (id !== null && !seen.has(id)) {
-    seen.add(id);
-    const paper = snapshot.state.paperMap.get(id);
-    if (!paper) break;
-    lineage.push(paper);
-    id = paper.parentId;
-  }
-  let color: PaperColorContext | null = null;
-  for (let i = lineage.length - 1; i >= 0; i -= 1) {
-    color = resolvePaperColorContext(lineage[i].hue, color, lineage[i].saturationScale);
-  }
-  const resolved = color ?? resolvePaperColorContext(undefined, null);
+  const resolved = resolveColorContextOf(snapshot.state.paperMap, nodeId);
   return `${resolved.hue}|${resolved.depth}|${resolved.saturationScale ?? ''}|${snapshot.rootId === nodeId ? 'root' : ''}`;
 }
 

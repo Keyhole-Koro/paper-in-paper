@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Removed (breaking)
+
+- The deprecated `__SYNC_PAPER_MAP` / `__SYNC_OPEN_STATE` / `__SYNC_UNPLACED` commands: use
+  `SET_PAPER_MAP` / `SET_OPEN_STATE` / `SET_UNPLACED`.
+
+### Changed
+
+- The content-frame bootstrap is a plain JavaScript file shipped as written, type-checked and
+  linted in CI against the frame message types. Content frames behave as before.
+- Internal: the content-frame code is split by concern (`internal/frame/`), the frame
+  connection is a plain object outside React with its own tests, and the command reducer's
+  larger cases are named functions.
+
 ## 0.4.0
 
 A robustness, performance and testing release. It changes the attention model and a few

@@ -20,4 +20,19 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // The frame bootstrap: a classic script that runs inside content frames (see srcDoc.ts).
+    files: ['src/lib/react/internal/frame/bootstrap.js'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      globals: globals.browser,
+    },
+    rules: {
+      strict: ['error', 'function'],
+      'no-var': 'error',
+      'prefer-const': 'error',
+    },
+  },
 ])

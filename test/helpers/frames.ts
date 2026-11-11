@@ -1,4 +1,15 @@
 import { act } from '@testing-library/react';
+import type { PaperContentTheme } from '../../src/lib/react/internal/contentTheme';
+import { buildSrcDoc, type SrcDocOptions } from '../../src/lib/react/internal/frame/srcDoc';
+
+export const testTheme: PaperContentTheme = {
+  surface: '#fff', surfaceAlt: '#eee', surfaceRaised: '#ddd', text: '#111', mutedText: '#666',
+  divider: '#ccc', linkBackground: '#f0f0f0', linkBackgroundHover: '#e0e0e0', linkBorder: '#bbb', linkText: '#222',
+};
+
+/** A content frame document with test defaults (nonce NONCE, secret SECRET1). */
+export const buildTestDoc = (options: Partial<SrcDocOptions> = {}) =>
+  buildSrcDoc({ html: '<p>hello</p>', theme: testTheme, fontSize: 14, nonce: 'NONCE', secret: 'SECRET1', ...options });
 
 export interface FakePort {
   onmessage: ((event: { data: unknown }) => void) | null;
@@ -43,7 +54,7 @@ export function fakeChannel(): [FakePort, FakePort] {
 
 /** The handshake secret built into a content frame's document. */
 export function secretOf(frame: HTMLIFrameElement): string {
-  return /var SECRET = '([^']*)'/.exec(frame.getAttribute('srcdoc') ?? '')?.[1] ?? '';
+  return /const SECRET = '([^']*)'/.exec(frame.getAttribute('srcdoc') ?? '')?.[1] ?? '';
 }
 
 /** The CSP nonce of a content frame's document. */

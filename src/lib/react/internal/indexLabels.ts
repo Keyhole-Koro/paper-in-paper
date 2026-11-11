@@ -1,6 +1,6 @@
 import type { CanvasLayout } from '../../core/layout';
-import type { Paper, PaperId, PaperMap } from '../../core/types';
-import { resolvePaperColorContext, type PaperColorContext } from './paperColors';
+import type { PaperId, PaperMap } from '../../core/types';
+import { resolveColorContextOf, type PaperColorContext } from './paperColors';
 
 /** An index label: a tab on the canvas's left edge standing in for an indexed paper. */
 export interface IndexLabelNode {
@@ -34,25 +34,6 @@ export function getIndexLabelFontSize(title: string): number {
   return 11;
 }
 
-function resolveColorContextForPaper(nodeId: PaperId, paperMap: PaperMap): PaperColorContext {
-  const lineage: Paper[] = [];
-  const seen = new Set<PaperId>();
-  let currentId: PaperId | null = nodeId;
-  while (currentId !== null && !seen.has(currentId)) {
-    seen.add(currentId);
-    const paper = paperMap.get(currentId);
-    if (!paper) break;
-    lineage.push(paper);
-    currentId = paper.parentId;
-  }
-
-  let inherited: PaperColorContext | null = null;
-  for (let index = lineage.length - 1; index >= 0; index -= 1) {
-    inherited = resolvePaperColorContext(lineage[index].hue, inherited, lineage[index].saturationScale);
-  }
-  return inherited ?? resolvePaperColorContext(undefined, null);
-}
-
 /** Tabs for every indexed paper in the layout, packed along the left edge without overlapping. */
 export function buildIndexLabels(layout: CanvasLayout, paperMap: PaperMap): IndexLabelNode[] {
   const desired: IndexLabelNode[] = [];
@@ -65,7 +46,7 @@ export function buildIndexLabels(layout: CanvasLayout, paperMap: PaperMap): Inde
       title: paper.title,
       centerY: entry.allocatedRect.y + entry.allocatedRect.height / 2,
       extent: getIndexLabelExtent(paper.title),
-      color: resolveColorContextForPaper(id, paperMap),
+      color: resolveColorContextOf(paperMap, id),
     });
   }
   desired.sort((a, b) => a.centerY - b.centerY);

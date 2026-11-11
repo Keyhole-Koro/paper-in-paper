@@ -1,4 +1,4 @@
-import { isFrameHello } from './iframeBridge';
+import { isFrameHello } from './protocol';
 
 type HelloHandler = (secret: string, port: MessagePort) => void;
 

@@ -1,3 +1,5 @@
+import type { Paper, PaperId, PaperMap } from '../../core/types';
+
 const DEFAULT_HUE = 220;
 
 export type PaperColorScheme = 'light' | 'dark';
@@ -52,6 +54,29 @@ export function resolvePaperColorContext(
   }
 
   return { hue: DEFAULT_HUE, depth: 0, saturationScale };
+}
+
+/**
+ * The colour context of a paper in the tree: the nearest hue up its parent chain, deepened once
+ * per level below it, with the nearest saturation scale. Cycle-safe; a broken chain counts from
+ * the last paper found.
+ */
+export function resolveColorContextOf(paperMap: PaperMap, nodeId: PaperId): PaperColorContext {
+  const lineage: Paper[] = [];
+  const seen = new Set<PaperId>();
+  let id: PaperId | null = nodeId;
+  while (id !== null && !seen.has(id)) {
+    seen.add(id);
+    const paper = paperMap.get(id);
+    if (!paper) break;
+    lineage.push(paper);
+    id = paper.parentId;
+  }
+  let color: PaperColorContext | null = null;
+  for (let i = lineage.length - 1; i >= 0; i -= 1) {
+    color = resolvePaperColorContext(lineage[i].hue, color, lineage[i].saturationScale);
+  }
+  return color ?? resolvePaperColorContext(undefined, null);
 }
 
 export function getPaperTone(

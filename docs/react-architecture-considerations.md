@@ -76,13 +76,18 @@ A separate drag store holds the session, the insert target and the pointer:
 whose `script-src` is a nonce made for that document. The bootstrap script runs in `<head>`
 and takes the DOM functions it needs from the prototypes before any content exists.
 
-A single window `message` listener (`frameRegistry`) handles only the `pip:hello` handshake:
-it compares `event.source` with each registered frame's *current* `contentWindow` (a frame
-gets a new window whenever it reloads) and hands the port to that frame's bridge, which
-checks the secret. Everything else travels over the port, so the bridge never has to trust a
-window message. After each hello, each `load` and each `leaving` (the bootstrap's
-`pagehide`), the bridge pings the port; no answer in time means the frame shows a document
-that is not ours, and the content is replaced.
+The bootstrap is plain JavaScript in `internal/frame/bootstrap.js`, shipped as text exactly as
+written (a `?raw` import) and type-checked through JSDoc against the same message types the
+canvas uses (`frame/protocol.ts`).
+
+A single window `message` listener (`frame/registry.ts`) handles only the `pip:hello`
+handshake: it compares `event.source` with each registered frame's *current* `contentWindow`
+(a frame gets a new window whenever it reloads) and hands the port to that frame's connection
+(`frame/connection.ts`), which checks the secret. Everything else travels over the port, so
+the connection never has to trust a window message. After each hello, each `load` and each
+`leaving` (the bootstrap's `pagehide`), the connection pings the port; no answer in time means
+the frame shows a document that is not ours, and the content is replaced. The connection is a
+plain object; `useIframeBridge` only ties it to the iframe element.
 
 The frame reports its content height; the canvas sets the iframe height so the paper's
 content box scrolls, not the frame. Children render in the paper's `childIds` order and are

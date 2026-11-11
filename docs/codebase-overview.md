@@ -19,7 +19,7 @@ src/lib/
     spaceManagement.ts       窮屈な部屋の解消（インデックス化 → 自動クローズ）を収束まで適用
     commands.ts              Command 型 + reduce + createInitialState
     paperMapBuilder.ts       静的ツリー用ビルダー
-    nanoid.ts                id 生成（非セキュアコンテキスト向けフォールバック付き）
+    createId.ts              id 生成（非セキュアコンテキスト向けフォールバック付き）
   react/
     PaperCanvas.tsx          公開コンポーネント。ストア生成、プロップ同期、コールバック、ハンドル
     store/
@@ -41,13 +41,19 @@ src/lib/
       FloatingLayer          ドラッグのゴースト
       PaperCanvasDebugPanel  デバッグ表示
     hooks/
-      useIframeBridge        iframe との接続（ハンドシェイク、専用ポート、生存確認）
+      useIframeBridge        iframe 要素と frame/connection をつなぐ（登録、load、開いている子の通知）
       useMediaQuery          prefers-reduced-motion / prefers-color-scheme
       useSiblingShare        兄弟間シェアのプレビュー（公開）
       useCanvasSelector      キャンバス外からの購読（公開）
     internal/
-      iframeBridge.ts        srcDoc（nonce の CSP 付き）、bootstrap スクリプト、イベント検証、リンク抽出
-      frameRegistry.ts       pip:hello を受け、送信元が現在の contentWindow のフレームへ渡す
+      frame/                 本文 iframe（React に依存しない）
+        bootstrap.js         iframe 内で動く唯一のスクリプト。書いたまま文字列として埋め込む（JSDoc で型検査）
+        srcDoc.ts            iframe の文書（nonce の CSP、bootstrap、スタイル、本文）とトークン
+        contentCss.ts        本文の既定スタイル
+        contentHtml.ts       本文 HTML の処理（エスケープ、http-equiv 除去、リンク・画像 id の抽出、外部リンク）
+        protocol.ts          iframe とキャンバスの間のメッセージの型と検証
+        connection.ts        1 つの iframe との接続（ハンドシェイク、専用ポート、生存確認、再読み込みループ）
+        registry.ts          pip:hello を受け、送信元が現在の contentWindow のフレームへ渡す
       childOrder.ts          子の DOM 順（childIds 順で固定）とレイアウト順
       openPaperLink.ts       data-paper-id リンクの解決（子は OPEN、それ以外は REVEAL）
       hitTest.ts             ドロップ先の判定
