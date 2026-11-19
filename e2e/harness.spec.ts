@@ -87,7 +87,7 @@ test('SVG links, also written with xlink:href, go to onOpenExternalLink instead 
   expect(visits).toEqual([]);
 });
 
-test('content scripts and inline handlers do not run; the bootstrap does',async ({ page }) => {
+test('content scripts and inline handlers do not run; the bootstrap does', async ({ page }) => {
   await load(page, fixture({
     root: `<script>document.body.dataset.script = 'ran'</script>
       <img src="data:," onerror="document.body.dataset.handler = 'ran'">
