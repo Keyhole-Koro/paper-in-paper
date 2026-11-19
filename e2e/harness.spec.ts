@@ -120,6 +120,26 @@ test('a navigation to a page that never finishes loading is caught too', async (
   await expect(page.locator('[data-paper-content-blocked="root"]')).toHaveText('Stopped.');
 });
 
+test('meta refreshes written to confuse the stripping are removed too: the content stays', async ({ page, context }) => {
+  const visits: string[] = [];
+  await context.route('https://evil.test/**', (route) => {
+    visits.push(route.request().url());
+    return route.fulfill({ contentType: 'text/html', body: '<h1>Please sign in</h1>' });
+  });
+  await load(page, fixture({
+    root: `<meta foo"bar http-equiv=refresh content="0;url=https://evil.test/quote">
+      <me<meta http-equiv>ta http-equiv=refresh content="0;url=https://evil.test/joined">
+      <p><a data-paper-id="a">open alpha</a></p>`,
+    labels: { contentBlocked: 'Stopped.' },
+  }));
+  // Longer than the canvas takes to notice a frame that left its page.
+  await page.waitForTimeout(2000);
+  await expect(page.locator('[data-paper-content-blocked="root"]')).toHaveCount(0);
+  await contentFrame(page, 'root').getByText('open alpha').click();
+  await expect(paper(page, 'a')).toBeVisible();
+  expect(visits).toEqual([]);
+});
+
 async function dragLink(page: Page, from: string, to: string, target: { x: number; y: number }) {
   const link = contentFrame(page, from).locator(`a[data-paper-id="${to}"]`).first();
   const box = (await link.boundingBox())!;
