@@ -64,7 +64,30 @@ test('content that clobbers DOM properties cannot break its links', async ({ pag
   await expect.poll(() => page.evaluate(() => window.__pipExternal)).toEqual(['https://example.com/x']);
 });
 
-test('content scripts and inline handlers do not run; the bootstrap does', async ({ page }) => {
+test('SVG links, also written with xlink:href, go to onOpenExternalLink instead of navigating the frame', async ({ page, context }) => {
+  const visits: string[] = [];
+  await context.route('https://example.com/**', (route) => {
+    visits.push(route.request().url());
+    return route.fulfill({ contentType: 'text/html', body: '<h1>elsewhere</h1>' });
+  });
+  await load(page, fixture({
+    root: `<svg width="200" height="60" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <a xlink:href="https://example.com/xlink"><text x="10" y="20">xlink out</text></a>
+        <a href="https://example.com/svg"><text x="10" y="50">svg out</text></a>
+      </svg>`,
+    labels: { contentBlocked: 'Stopped.' },
+  }));
+  await contentFrame(page, 'root').getByText('xlink out').click();
+  await contentFrame(page, 'root').getByText('svg out').click();
+  await expect.poll(() => page.evaluate(() => window.__pipExternal))
+    .toEqual(['https://example.com/xlink', 'https://example.com/svg']);
+  await page.waitForTimeout(500);
+  await expect(page.locator('[data-paper-content-blocked="root"]')).toHaveCount(0);
+  await expect(contentFrame(page, 'root').locator('h1')).toHaveText('Root');
+  expect(visits).toEqual([]);
+});
+
+test('content scripts and inline handlers do not run; the bootstrap does',async ({ page }) => {
   await load(page, fixture({
     root: `<script>document.body.dataset.script = 'ran'</script>
       <img src="data:," onerror="document.body.dataset.handler = 'ran'">

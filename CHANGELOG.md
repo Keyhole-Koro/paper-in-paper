@@ -22,6 +22,9 @@
   They used to get through and navigate the frame away until the canvas replaced it with the
   blocked notice. The stripping now reads each `<meta` as the HTML tokenizer does and repeats
   until nothing changes.
+- SVG links written with `xlink:href` went past the content frame's link handling and
+  navigated the frame (which the canvas then blocked). They now go to `onOpenExternalLink`
+  like other links.
 
 ## 0.4.0
 
