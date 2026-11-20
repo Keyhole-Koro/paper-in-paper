@@ -15,6 +15,17 @@
   connection is a plain object outside React with its own tests, and the command reducer's
   larger cases are named functions.
 
+### Security
+
+- `<meta http-equiv>` tags written to confuse the content stripping (a quote inside an
+  attribute name, or a tag that only forms once an inner one is removed) are removed too.
+  They used to get through and navigate the frame away until the canvas replaced it with the
+  blocked notice. The stripping now reads each `<meta` as the HTML tokenizer does and repeats
+  until nothing changes.
+- SVG links written with `xlink:href` went past the content frame's link handling and
+  navigated the frame (which the canvas then blocked). They now go to `onOpenExternalLink`
+  like other links.
+
 ## 0.4.0
 
 A robustness, performance and testing release. It changes the attention model and a few

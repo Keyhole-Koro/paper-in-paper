@@ -1,17 +1,7 @@
 import type { PaperCanvasConfig } from '../config/paperCanvasConfig';
-import type { PaperId, PaperMap } from './types';
-import { getVisibleChildIds } from './expansion';
-import {
-  deriveNodeVisibilityState,
-  type NodeVisibilityContext,
-  type NodeVisibilityState,
-} from './nodeVisibility';
+import type { NodeVisibilityState } from './nodeVisibility';
 
 export type NodeDisplayMode = 'expanded' | 'indexed-branch' | 'indexed-leaf';
-
-export interface NodeLayoutPolicyContext extends NodeVisibilityContext {
-  paperMap: PaperMap;
-}
 
 export interface NodeLayoutPolicy {
   mode: NodeDisplayMode;
@@ -84,14 +74,4 @@ export function deriveNodeLayoutPolicyFromVisibility(
     expandedCache = { headerHeight, policy: EXPANDED(headerHeight) };
   }
   return expandedCache.policy;
-}
-
-export function deriveNodeLayoutPolicy(
-  nodeId: PaperId,
-  context: NodeLayoutPolicyContext,
-  config: PaperCanvasConfig,
-): NodeLayoutPolicy {
-  const hasOpenChildren = getVisibleChildIds(context.paperMap, context.expansionMap, nodeId).length > 0;
-  const visibility = deriveNodeVisibilityState(nodeId, context);
-  return deriveNodeLayoutPolicyFromVisibility(hasOpenChildren, visibility, config);
 }

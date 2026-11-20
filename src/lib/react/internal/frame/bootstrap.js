@@ -20,6 +20,7 @@
   const closestFn = Element.prototype.closest;
   const queryAll = Element.prototype.querySelectorAll;
   const getAttr = Element.prototype.getAttribute;
+  const getAttrNS = Element.prototype.getAttributeNS;
   const setAttr = Element.prototype.setAttribute;
   const hasAttr = Element.prototype.hasAttribute;
   const removeAttr = Element.prototype.removeAttribute;
@@ -37,6 +38,7 @@
   /** @type {(value: string) => string} */
   const cssEscape = css && css.escape ? css.escape.bind(css) : (value) => String(value).replace(/["\\]/g, '\\$&');
   const DRAG_THRESHOLD = 5;
+  const XLINK = 'http://www.w3.org/1999/xlink';
 
   const channel = new MessageChannel();
   const port = channel.port1;
@@ -161,9 +163,13 @@
       openLink(link);
       return;
     }
-    const anchor = closest(e.target, 'a[href], area[href]');
+    // `*|href` also matches SVG links written with xlink:href, which `[href]` does not.
+    const anchor = closest(e.target, 'a[href], area[href], a[*|href]');
     if (!anchor) return;
-    const href = getAttr.call(anchor, 'href') || '';
+    // SVG uses href over xlink:href when it has both.
+    let href = getAttr.call(anchor, 'href');
+    if (href === null) href = getAttrNS.call(anchor, XLINK, 'href');
+    href = href || '';
     if (href.charAt(0) === '#') return;
     e.preventDefault();
     let resolved = href;

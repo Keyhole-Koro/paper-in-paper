@@ -103,6 +103,32 @@ describe('the bootstrap', () => {
     frame.close();
   });
 
+  it('hands out SVG links too, including ones written with xlink:href', async () => {
+    const frame = runFrame(`
+      <svg xmlns:xlink="http://www.w3.org/1999/xlink">
+        <a xlink:href="https://xlink.test/a"><text id="xlink">xlink</text></a>
+        <a href="https://svg.test/b" xlink:href="https://ignored.test/"><text id="both">both</text></a>
+        <a xlink:href="/relative"><text id="relative">relative</text></a>
+        <a xlink:href="#top"><text id="hash">top</text></a>
+      </svg>`);
+    const click = (id: string) => {
+      const event = new frame.window.MouseEvent('click', { bubbles: true, cancelable: true });
+      frame.document.getElementById(id)!.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(click('xlink')).toBe(true);
+    expect(click('both')).toBe(true);
+    expect(click('relative')).toBe(true);
+    expect(click('hash')).toBe(false);
+    await frame.settle();
+    expect(frame.events.filter((e) => e.type === 'openExternal')).toEqual([
+      { type: 'openExternal', href: 'https://xlink.test/a' },
+      { type: 'openExternal', href: 'https://svg.test/b' },
+      { type: 'openExternal', href: 'https://canvas.test/relative' },
+    ]);
+    frame.close();
+  });
+
   it('blocks native drag and drop, which would navigate the frame or steal the pointer', () => {
     const frame = runFrame('<a id="out" href="https://x.test/">x</a>');
     for (const type of ['dragstart', 'dragover', 'drop']) {

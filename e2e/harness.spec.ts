@@ -64,6 +64,29 @@ test('content that clobbers DOM properties cannot break its links', async ({ pag
   await expect.poll(() => page.evaluate(() => window.__pipExternal)).toEqual(['https://example.com/x']);
 });
 
+test('SVG links, also written with xlink:href, go to onOpenExternalLink instead of navigating the frame', async ({ page, context }) => {
+  const visits: string[] = [];
+  await context.route('https://example.com/**', (route) => {
+    visits.push(route.request().url());
+    return route.fulfill({ contentType: 'text/html', body: '<h1>elsewhere</h1>' });
+  });
+  await load(page, fixture({
+    root: `<svg width="200" height="60" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <a xlink:href="https://example.com/xlink"><text x="10" y="20">xlink out</text></a>
+        <a href="https://example.com/svg"><text x="10" y="50">svg out</text></a>
+      </svg>`,
+    labels: { contentBlocked: 'Stopped.' },
+  }));
+  await contentFrame(page, 'root').getByText('xlink out').click();
+  await contentFrame(page, 'root').getByText('svg out').click();
+  await expect.poll(() => page.evaluate(() => window.__pipExternal))
+    .toEqual(['https://example.com/xlink', 'https://example.com/svg']);
+  await page.waitForTimeout(500);
+  await expect(page.locator('[data-paper-content-blocked="root"]')).toHaveCount(0);
+  await expect(contentFrame(page, 'root').locator('h1')).toHaveText('Root');
+  expect(visits).toEqual([]);
+});
+
 test('content scripts and inline handlers do not run; the bootstrap does', async ({ page }) => {
   await load(page, fixture({
     root: `<script>document.body.dataset.script = 'ran'</script>
@@ -118,6 +141,26 @@ test('a navigation to a page that never finishes loading is caught too', async (
     document.head.appendChild(meta);
   });
   await expect(page.locator('[data-paper-content-blocked="root"]')).toHaveText('Stopped.');
+});
+
+test('meta refreshes written to confuse the stripping are removed too: the content stays', async ({ page, context }) => {
+  const visits: string[] = [];
+  await context.route('https://evil.test/**', (route) => {
+    visits.push(route.request().url());
+    return route.fulfill({ contentType: 'text/html', body: '<h1>Please sign in</h1>' });
+  });
+  await load(page, fixture({
+    root: `<meta foo"bar http-equiv=refresh content="0;url=https://evil.test/quote">
+      <me<meta http-equiv>ta http-equiv=refresh content="0;url=https://evil.test/joined">
+      <p><a data-paper-id="a">open alpha</a></p>`,
+    labels: { contentBlocked: 'Stopped.' },
+  }));
+  // Longer than the canvas takes to notice a frame that left its page.
+  await page.waitForTimeout(2000);
+  await expect(page.locator('[data-paper-content-blocked="root"]')).toHaveCount(0);
+  await contentFrame(page, 'root').getByText('open alpha').click();
+  await expect(paper(page, 'a')).toBeVisible();
+  expect(visits).toEqual([]);
 });
 
 async function dragLink(page: Page, from: string, to: string, target: { x: number; y: number }) {

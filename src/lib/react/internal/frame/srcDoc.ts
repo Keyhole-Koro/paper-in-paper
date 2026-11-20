@@ -1,4 +1,5 @@
 import BOOTSTRAP_SOURCE from './bootstrap.js?raw';
+import { randomBytes } from '../../../core/createId';
 import type { PaperContentTheme } from '../contentTheme';
 import type { PaperColorScheme } from '../paperColors';
 import { defaultContentCss, FRAME_RESET_CSS } from './contentCss';
@@ -9,15 +10,8 @@ const SECRET_PLACEHOLDER = '%%PIP_SECRET%%';
 
 /** A random URL-safe token for a frame's CSP nonce and handshake secret. */
 export function createFrameToken(): string {
-  const bytes = new Uint8Array(18);
-  const cryptoApi = globalThis.crypto;
-  if (typeof cryptoApi?.getRandomValues === 'function') {
-    cryptoApi.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
-  }
   let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
+  for (const byte of randomBytes(18)) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
